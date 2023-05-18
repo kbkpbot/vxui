@@ -22,16 +22,17 @@ vxui is a cross-platform desktop UI framework which use your browser as screen, 
 ## Features
 
 * Cross-platform. It should be able to running on Windows/Linux/MacOS;
-* You can use any frontend framework develop your UI;
+* Extensible. You can use any frontend framework develop your UI, all you need is just add some tags in your html files;
 * Light weight. vxui contain only a pure-V websocket server, no web server;
-* Powerful. vxui backend can communication with frondend bi-direction and realtime. 
+* Powerful. vxui backend can communication with frondend bi-direction and realtime;
+* Flexible. vxui provide websocket-based communication, you can totally define your own protocol, no longer limited by AJAX's request-response model.
 
 ## Inside vxui
 
 ![vxui](vxui.png)
 
 * frontend: It is your installed web browser. And a modified vesion of [htmx](https://htmx.org) with vxui_htmx.js are all you need.
-* backend: [v](https://github.com/vlang/v)
+* backend: [v](https://vlang.io/)
 * between frondend and backend, it is websocket.
 
 - When you start your App, it will first look for a free port on your OS, then the websocket server listen on this port;
@@ -42,6 +43,8 @@ vxui is a cross-platform desktop UI framework which use your browser as screen, 
 - By using htmx or webui, every event catch by the JS agent(mouse click, keyup, text change...), will be transfered to your backend;
   Currently, vxui will replace all AJAX request in your htmx files with websocket communication.
 
+## Example
+
 ```html
 <script src="./js/htmx.js"></script>
 <script src="./js/vxui_htmx.js"></script>
@@ -51,7 +54,7 @@ vxui is a cross-platform desktop UI framework which use your browser as screen, 
     Click Me
   </button>
 ```
-The `hx-post` and `hx-swap` attributes tell htmx:
+The `hx-post` and `hx-swap` attributes tell htmx & vxui-htmx:
 
 > "When a user clicks on this button, issue an websocket request to /clicked(`hx-post`), and replace the entire button with the response(`hx-swap`)"
 
@@ -64,7 +67,7 @@ And your websocket server will recieve this message:
 
 * install vxui
 ```sh
-	v install https://github.com/kbkpbot/vxui.git
+	v install --git https://github.com/kbkpbot/vxui.git
 ```
 * check examples
 
