@@ -1,7 +1,7 @@
 > :warning: **Notice**:
 >
 >
-> Currently, this is just a Proof of Concept demo. It should we can use only websocket develop desktop App.
+> Currently, this is just a Proof of Concept demo. It show we can use only websocket develop desktop App.
 
 # How to run
 
