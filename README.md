@@ -5,7 +5,7 @@
 >
 > * vxui it's not a web-server solution or a framework, but it's an lightweight portable lib to use installed web browser as a user interface.
 >
-> * Currently, vxui is in alpha stage.
+> * Currently, vxui is in it's alpha stage.
 
 
 * vxui = browser + htmx/webui + websocket + v *
@@ -42,6 +42,23 @@ vxui is a cross-platform desktop UI framework which use your browser as screen, 
 - By using htmx or webui, every event catch by the JS agent(mouse click, keyup, text change...), will be transfered to your backend;
   Currently, vxui will replace all AJAX request in your htmx files with websocket communication.
 
+```html
+<script src="./js/htmx.js"></script>
+<script src="./js/vxui_htmx.js"></script>
+<span hx-ext="vxui_htmx"/>
+  <!-- have a button POST a click via websocket -->
+  <button hx-post="/clicked" hx-swap="outerHTML">
+    Click Me
+  </button>
+```
+The `hx-post` and `hx-swap` attributes tell htmx:
+
+> "When a user clicks on this button, issue an websocket request to /clicked(`hx-post`), and replace the entire button with the response(`hx-swap`)"
+
+And your websocket server will recieve this message:
+```json
+{"verb":"post","path":"/clicked","elt":"BUTTON","parameters":{},"HEADERS":{"HX-Request":"true","HX-Trigger":null,"HX-Trigger-Name":null,"HX-Target":null,"HX-Current-URL":"file:///home/kbkpbot/.vmodules/vxui/static/ss.html"}}
+```
 
 ## Quick start
 
