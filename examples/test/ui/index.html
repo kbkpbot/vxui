@@ -1,47 +1,40 @@
 <html>
-<head>
-		<link rel="stylesheet" href="./stylesheet.css">
-        <title>&lt;/&gt; htmx Realtime Test Server</title>
-        <script src="./js/htmx.js"></script>
-        <script src="./js/vxui-htmx.js"></script>
-</head>
-<body>
-<span hx-ext="vxui-htmx"/>
-<h1>Echo Test</h1>
-
-<h3>Description</h3>
-
-<h3>Example HTML</h3>
-
-<div class="elastic container">
-
-    <form id="myform">
+  <head>
+    <link rel="stylesheet" href="./stylesheet.css" />
+    <title>&lt;/&gt; htmx Realtime Test Server</title>
+    <script src="./js/htmx.js"></script>
+    <script src="./js/vxui-htmx.js"></script>
+  </head>
+  <body>
+    <span hx-ext="vxui-htmx"/>
+    <h1>Echo Test</h1>
+    <h3>Description</h3>
+    <h3>Example HTML</h3>
+    <div class="elastic container">
+      <form id="myform">
         <h3>Send a Message</h3>
         <div>
-            <input type="text" name="message" style="width:500px;" value="This Is The Message" />
-            <input type="text" name="messagexx" style="width:500px;" value="This Is The Messagexx" />
-			<button hx-trigger="click, keyup[altKey&&shiftKey&&key=='D'] from:body"
-        hx-post="/doit" id="doit">Do It! (alt-shift-D)</button>
-            <input type="submit" value="Send" class="btn primary" id="submmit" hx-trigger="click" hx-post="/submit"/>
-        </div>
-		
-	<div hx-target="this" hx-swap="outerHTML">
-    <div><label>First Name</label>: Joe</div>
-    <div><label>Last Name</label>: Blow</div>
-    <div><label>Email</label>: joe@blow.com</div>
-    <!--<button hx-get="/contact/1/edit" class="btn btn-primary">-->
-	<button id="edit" hx-post="/edit" class="btn btn-primary">
-    Click To Edit
-    </button>
-	<button hx-post="/example"
-        hx-on="htmx:beforeRequest: event.detail.parameters.example = 'Hello Scripting!'">
-    Post Me!
-</button>
-    </form>
-
-    <br>
-    <h3>Receive a Message</h3>
-    <div id="idMessage"></div>
-</div>
-</body>
+		<input type="text" name="message" style="width:500px;" value="This Is The Message" /> 
+		<input type="text" name="messagexx" style="width:500px;" value="This Is The Messagexx" /> 
+		<button hx-trigger="click, keyup[altKey&amp;&amp;shiftKey&amp;&amp;key==&#39;D&#39;] from:body" hx-post="/doit"
+			id="doit">Do It! (alt-shift-D)</button> 
+		<input type="submit" value="Send" class="btn primary" id="submmit" hx-trigger="click" hx-post="/submit" />
+	</div>
+       
+	<div hx-target="this" hx-swap-oob="outerHTML">
+		<div><label>First Name</label>: Joe</div>
+		<div><label>Last Name</label>: Blow</div>
+		<div><label>Email</label>: joe@blow.com</div>
+		<!--<button hx-get="/contact/1/edit" class="btn btn-primary">-->
+		<button id="edit" hx-post="/edit" class="btn btn-primary">Click To Edit</button> 
+		<button hx-post="/example" hx-on="htmx:beforeRequest: event.detail.parameters.example = &#39;Hello Scripting!&#39;">Post
+		Me!</button>
+	</div>
+      </form>
+      <br />
+      <h3>Receive a Message</h3>
+      <div id="idMessage"></div>
+      <button onclick="alert(&#39;You clicked me!&#39;)">Click Me!</button>
+    </div>
+  </body>
 </html>

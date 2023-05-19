@@ -97,6 +97,8 @@ This extension adds support for vxui WebSockets to htmx.
             }
 
             var response = event.data;
+	    if (response == "pong")
+		return;
             console.log(response);
             if (!api.triggerEvent(socketElt, "htmx:wsBeforeMessage", {
                     message: response,
@@ -111,6 +113,8 @@ This extension adds support for vxui WebSockets to htmx.
 
             var settleInfo = api.makeSettleInfo(socketElt);
             var fragment = api.makeFragment(response);
+
+	    //console.log(fragment);
 
             if (fragment.children.length) {
                 var children = Array.from(fragment.children);
@@ -455,4 +459,4 @@ This extension adds support for vxui WebSockets to htmx.
     }
 })();
 // Please note: this `vxui_ws_port` will be modified by app running!
-const vxui_ws_port = 35283;
+const vxui_ws_port = 53342;

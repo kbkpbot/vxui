@@ -65,7 +65,7 @@ fn start_google_chrome(filename string) {
 		'--bwsi',
 		'--disable-sync',
 		'--disable-sync-preferences',
-		'--force-app-mode',
+		//'--force-app-mode',
 		//'--new-window',
 		//'--app="https://baidu.com"',
 		filename,
