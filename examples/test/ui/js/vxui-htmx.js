@@ -485,4 +485,4 @@ This extension adds support for vxui WebSockets to htmx.
     }
 })();
 // Please note: this `vxui_ws_port` will be modified by app running!
-const vxui_ws_port = 19399;
+const vxui_ws_port = 58206;

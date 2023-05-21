@@ -67,13 +67,13 @@ fn start_google_chrome(filename string) {
 		'--disable-sync-preferences',
 		'--force-app-mode',
 		'--new-window',
-		'--app="file://${filename}"',
+		'--app="file://${os.abs_path(filename)}"',
 	]
 	exec := '/usr/bin/google-chrome ' + cmdargs.join(' ')
 	if os.fork() == 0 {
 		os.execute(exec)
 		// we can't use execvp here, chrome just not hide address bar
-		//os.execvp('/usr/bin/google-chrome', cmdargs) or { panic(err) }
+		// os.execvp('/usr/bin/google-chrome', cmdargs) or { panic(err) }
 	}
 	return
 }

@@ -11,8 +11,8 @@ struct App {
 
 // define some const values here
 const (
-	default_first_page_html_file = os.abs_path('./ui/index.html')
-	default_js_file              = os.abs_path('./ui/js/vxui-htmx.js')
+	default_first_page_html_file = './ui/index.html'
+	default_js_file              = './ui/js/vxui-htmx.js'
 )
 
 // define handler for specific route
