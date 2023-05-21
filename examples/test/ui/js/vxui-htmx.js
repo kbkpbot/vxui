@@ -115,9 +115,35 @@ This extension adds support for vxui WebSockets to htmx.
             var fragment = api.makeFragment(response);
 
 	    //console.log(fragment);
+		/*
+						var xhr = new FakeXMLHttpRequest();
+						xhr.respond(200, { 'Content-Type': 'application/json' }, '{"key":"value"}');
+						console.log(xhr);
+						target = api.getTarget(child);
+						var elt_data = api.getInternalData(child)
+						console.log(elt_data);
+						var path = api.getAttributeValue(child, 'hx-' + verb);
+						var responseInfo = {
+							xhr: xhr,
+							target: target,
+							//requestConfig: requestConfig,
+							etc: {},
+							boosted: false,
+							pathInfo: {
+								requestPath: path,
+								finalRequestPath: path,
+								anchor: null
+							}
+						};
+						
+						console.log(responseInfo);
 
+						api.handleAjaxResponse(child, responseInfo);
+						
+*/
             if (fragment.children.length) {
                 var children = Array.from(fragment.children);
+				console.log(children);
                 for (var i = 0; i < children.length; i++) {
                     api.oobSwap(api.getAttributeValue(children[i], "hx-swap-oob") ||
                         "true", children[i], settleInfo);
@@ -459,4 +485,4 @@ This extension adds support for vxui WebSockets to htmx.
     }
 })();
 // Please note: this `vxui_ws_port` will be modified by app running!
-const vxui_ws_port = 53342;
+const vxui_ws_port = 19399;

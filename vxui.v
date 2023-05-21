@@ -50,7 +50,7 @@ struct Route {
 // start_google_chrome start google chrome and open the `filename`
 fn start_google_chrome(filename string) {
 	real_path := os.home_dir() + '/.vxui/ChromeProfile'
-	cmd := [
+	cmdargs := [
 		'--user-data-dir=${real_path}',
 		'--no-first-run',
 		'--disable-gpu',
@@ -65,13 +65,15 @@ fn start_google_chrome(filename string) {
 		'--bwsi',
 		'--disable-sync',
 		'--disable-sync-preferences',
-		//'--force-app-mode',
-		//'--new-window',
-		//'--app="https://baidu.com"',
-		filename,
+		'--force-app-mode',
+		'--new-window',
+		'--app="file://${filename}"',
 	]
+	exec := '/usr/bin/google-chrome ' + cmdargs.join(' ')
 	if os.fork() == 0 {
-		os.execvp('/usr/bin/google-chrome', cmd) or { panic(err) }
+		os.execute(exec)
+		// we can't use execvp here, chrome just not hide address bar
+		//os.execvp('/usr/bin/google-chrome', cmdargs) or { panic(err) }
 	}
 	return
 }

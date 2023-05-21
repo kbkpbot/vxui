@@ -111,6 +111,7 @@ return (function () {
             triggerEvent: triggerEvent,
             triggerErrorEvent: triggerErrorEvent,
             withExtensions: withExtensions,
+			handleAjaxResponse: handleAjaxResponse,
         }
 
         var VERBS = ['get', 'post', 'put', 'delete', 'patch'];
