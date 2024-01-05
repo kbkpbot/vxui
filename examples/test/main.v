@@ -16,7 +16,7 @@ const (
 )
 
 // define handler for specific route
-['/edit']
+@['/edit']
 fn (mut app App) test(message map[string]json2.Any) string {
 	app.logger.info("I'm test function!")
 	return '<div id="idMessage" hx-swap-oob="true">hello test</div>'
