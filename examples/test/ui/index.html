@@ -22,14 +22,12 @@
 		<input type="submit" value="Send" class="btn primary" id="submit" hx-trigger="click" hx-post="/submit" />
 	</div>
        
-	<div hx-target="this" hx-swap-oob="outerHTML">
-		<div><label>First Name</label>: Joe</div>
-		<div><label>Last Name</label>: Blow</div>
-		<div><label>Email</label>: joe@blow.com</div>
-		<!--<button hx-get="/contact/1/edit" class="btn btn-primary">-->
-		<button id="edit" hx-post="/edit" class="btn btn-primary">Click To Edit</button> 
-		<button hx-post="/example" hx-on="htmx:beforeRequest: event.detail.parameters.example = &#39;Hello Scripting!&#39;">Post
-		Me!</button>
+	<div id="outerHTML">
+		<div><label>First Name</label>: kbkpbot</div>
+		<div><label>Last Name</label>: kbkpbot</div>
+		<div><label>Email</label>: kbkpbot@gmail.com</div>
+		<!--<button hx-get="/contact/1/edit" class="btn btn-primary">Click To Edit</button> -->
+		<button id="edit" hx-post="/edit" class="btn btn-primary">Click To Edit</button>
 	</div>
       </form>
       <br />

@@ -9,7 +9,10 @@ struct App {
 	vxui.Context
 mut:
 	// add your custom vars below
-	cnt int
+	cnt        int
+	first_name string = 'kbkpbot'
+	last_name  string = 'kbkpbot'
+	email      string = 'kbkpbot@gmail.com'
 }
 
 // define some const values here
@@ -29,10 +32,62 @@ fn (mut app App) test(message map[string]json2.Any) string {
 // `submit` function will handle `/submit` path
 fn (mut app App) submit(message map[string]json2.Any) string {
 	app.logger.info("I'm submit function!")
+	mut tmp := message['parameters'] or { json2.Null{} }
+	parameters := tmp.as_map()
+	app.first_name = parameters['firstName'].str()
+	app.last_name = parameters['lastName'].str()
+	app.email = parameters['email'].str()
+	app.cnt++
+
+	// this will replace the div "idMessage" and div "outerHTML"
+	// please add `hx-swap-oob="true"`
+	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am submit</div>
+	
+	<div id="outerHTML" hx-swap-oob="true">
+		<div><label>First Name</label>: ${app.first_name}</div>
+		<div><label>Last Name</label>: ${app.last_name}</div>
+		<div><label>Email</label>: ${app.email}</div>
+		<button id="edit" hx-post="/edit" class="btn btn-primary">Click To Edit</button>
+	</div>
+	'
+}
+
+fn (mut app App) edit(message map[string]json2.Any) string {
+	app.logger.info("I'm edit function!")
 	tmp := message['parameters'] or { json2.Null{} }
 	app.logger.info(tmp.str())
 	app.cnt++
-	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am submit</div>'
+	return '<div id="outerHTML" hx-swap-oob="true">
+  <div>
+    <label>First Name</label>
+    <input type="text" name="firstName" value="${app.first_name}">
+  </div>
+  <div class="form-group">
+    <label>Last Name</label>
+    <input type="text" name="lastName" value="${app.last_name}">
+  </div>
+  <div class="form-group">
+    <label>Email Address</label>
+    <input type="email" name="email" value="${app.email}">
+  </div>
+  <button class="btn" id="submit" hx-post="/submit">Submit</button>
+  <button class="btn" id="cancel" hx-post="/cancel">Cancel</button>
+</div>'
+}
+
+fn (mut app App) cancel(message map[string]json2.Any) string {
+	app.logger.info("I'm cancel function!")
+	app.cnt++
+
+	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am submit</div>
+	
+	<div id="outerHTML" hx-swap-oob="true">
+		<div><label>First Name</label>: ${app.first_name}</div>
+		<div><label>Last Name</label>: ${app.last_name}</div>
+		<div><label>Email</label>: ${app.email}</div>
+		<button id="edit" hx-post="/edit" class="btn btn-primary">Click To Edit</button>
+	</div>
+	'
 }
 
 fn main() {
