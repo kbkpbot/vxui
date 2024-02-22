@@ -7,6 +7,9 @@ import x.json2
 // first, inherit from vxui.Context
 struct App {
 	vxui.Context
+mut:
+	// add your custom vars below
+	cnt int
 }
 
 // define some const values here
@@ -18,7 +21,8 @@ fn (mut app App) test(message map[string]json2.Any) string {
 	app.logger.info("I'm test/doit function!")
 	tmp := message['path'] or { json2.Null{} }
 	app.logger.info(tmp.str())
-	return '<div id="idMessage" hx-swap-oob="true">hello, I am test/doit</div>'
+	app.cnt++
+	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am test/doit</div>'
 }
 
 // if ommit the attr, the function name will act as a path
@@ -27,7 +31,8 @@ fn (mut app App) submit(message map[string]json2.Any) string {
 	app.logger.info("I'm submit function!")
 	tmp := message['parameters'] or { json2.Null{} }
 	app.logger.info(tmp.str())
-	return '<div id="idMessage" hx-swap-oob="true">hello, I am submit</div>'
+	app.cnt++
+	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am submit</div>'
 }
 
 fn main() {
