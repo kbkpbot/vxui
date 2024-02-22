@@ -32,15 +32,13 @@ enum Verb {
 	patch
 }
 
-const (
-	verb_strings = {
-		'get':    Verb.get
-		'post':   .post
-		'put':    .put
-		'delete': .delete
-		'patch':  .patch
-	}
-)
+const verb_strings = {
+	'get':    Verb.get
+	'post':   .post
+	'put':    .put
+	'delete': .delete
+	'patch':  .patch
+}
 
 struct Route {
 	verb []Verb
@@ -48,7 +46,7 @@ struct Route {
 }
 
 // start_google_chrome start google chrome and open the `filename`
-fn start_google_chrome(filename string) {
+fn start_google_chrome(filename string, vxui_ws_port u16) {
 	real_path := os.home_dir() + '/.vxui/ChromeProfile'
 	cmdargs := [
 		'--user-data-dir=${real_path}',
@@ -84,7 +82,7 @@ fn start_google_chrome(filename string) {
 		'--disable-sync-preferences',
 		'--force-app-mode',
 		'--new-window',
-		'--app="file://${os.abs_path(filename)}"',
+		'--app="file://${os.abs_path(filename)}?vxui_ws_port=${vxui_ws_port}"',
 	]
 	exec := '/usr/bin/google-chrome ' + cmdargs.join(' ')
 	if os.fork() == 0 {
@@ -111,19 +109,10 @@ fn get_free_port() u16 {
 	return u16(port)
 }
 
-// init vxui framework, it will modify the `js_filename` to the correct vxui_ws_port
-fn init[T](mut app T, js_filename string) ! {
+// init vxui framework
+fn init[T](mut app T) ! {
 	app.ws_port = get_free_port()
 	app.ws = startup_ws_server(mut app, .ip, app.ws_port) or { panic(err) }
-	vxui_htmx_string := os.read_file(js_filename) or { panic(err) }
-	pos := vxui_htmx_string.index('const vxui_ws_port =') or {
-		return error('Can\'t find `const vxui_ws_port =` in file ${js_filename}, please check!')
-	}
-
-	mut tmp_vxui_file := os.open_file(js_filename, 'w') or { panic(err) }
-	tmp_vxui_file.write_string(vxui_htmx_string[..pos]) or { panic(err) }
-	tmp_vxui_file.write_string('const vxui_ws_port = ${app.ws_port};\n') or { panic(err) }
-	tmp_vxui_file.close()
 }
 
 // startup_ws_server start the websocket server at `listen_port`
@@ -212,10 +201,10 @@ fn handle_message[T](mut app T, message map[string]json2.Any) !string {
 fn fire_call[T](mut app T, method_name string, message map[string]json2.Any) !string {
 	$for method in T.methods {
 		if method.name == method_name {
-			if method.return_type == 20 {
+			$if method.return_type is string {
 				return app.$method(message)
-			} else {
-				return error('[${method_name}] should return string.')
+			} $else {
+				return error('[${method_name}] should return string.(${method.return_type})')
 			}
 		}
 	}
@@ -270,11 +259,11 @@ fn generate_routes[T](app &T) !map[string]Route {
 	return routes
 }
 
-// run open the `html_filename` and modify the `js_filename`(vxui-htmx.js)
-pub fn run[T](mut app T, html_filename string, js_filename string) ! {
-	init(mut app, js_filename)!
+// run open the `html_filename`
+pub fn run[T](mut app T, html_filename string) ! {
+	init(mut app)!
 	app.routes = generate_routes(app)!
-	start_google_chrome(html_filename)
+	start_google_chrome(html_filename, app.ws_port)
 	mut ws_state := websocket.State.open
 	mut client_num := int(0)
 	mut close_timer := int(0)

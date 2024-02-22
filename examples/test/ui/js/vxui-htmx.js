@@ -71,7 +71,7 @@ This extension adds support for vxui WebSockets to htmx.
 
     /**
      * ensureWebSocket creates a new WebSocket on the designated element, using
-     * the element's "hx-ext=vxui_ws" attribute.
+     * the element's "hx-ext=vxui-htmx" attribute.
      * @param {HTMLElement} socketElt
      * @returns
      */
@@ -84,7 +84,19 @@ This extension adds support for vxui WebSockets to htmx.
             return;
         }
 
-        // Get the source straight from the element's value
+        // Get the port number from the url parameter
+        const url = location.search; //get url string
+        let theRequest = new Object();
+        if (url.indexOf("?") != -1) {
+            let str = url.substr(1);
+            strs = str.split("&");
+            for(let i = 0; i < strs.length; i ++) {
+                theRequest[strs[i].split("=")[0]]=unescape(strs[i].split("=")[1]);
+            }
+        }
+
+        let vxui_ws_port = theRequest['vxui_ws_port']
+
         var wssSource = "ws://localhost:" + vxui_ws_port + "/echo"
 
             var socketWrapper = createWebsocketWrapper(socketElt, function () {
@@ -97,8 +109,6 @@ This extension adds support for vxui WebSockets to htmx.
             }
 
             var response = event.data;
-	    if (response == "pong")
-		return;
             console.log(response);
             if (!api.triggerEvent(socketElt, "htmx:wsBeforeMessage", {
                     message: response,
@@ -114,36 +124,8 @@ This extension adds support for vxui WebSockets to htmx.
             var settleInfo = api.makeSettleInfo(socketElt);
             var fragment = api.makeFragment(response);
 
-	    //console.log(fragment);
-		/*
-						var xhr = new FakeXMLHttpRequest();
-						xhr.respond(200, { 'Content-Type': 'application/json' }, '{"key":"value"}');
-						console.log(xhr);
-						target = api.getTarget(child);
-						var elt_data = api.getInternalData(child)
-						console.log(elt_data);
-						var path = api.getAttributeValue(child, 'hx-' + verb);
-						var responseInfo = {
-							xhr: xhr,
-							target: target,
-							//requestConfig: requestConfig,
-							etc: {},
-							boosted: false,
-							pathInfo: {
-								requestPath: path,
-								finalRequestPath: path,
-								anchor: null
-							}
-						};
-						
-						console.log(responseInfo);
-
-						api.handleAjaxResponse(child, responseInfo);
-						
-*/
             if (fragment.children.length) {
                 var children = Array.from(fragment.children);
-				console.log(children);
                 for (var i = 0; i < children.length; i++) {
                     api.oobSwap(api.getAttributeValue(children[i], "hx-swap-oob") ||
                         "true", children[i], settleInfo);
@@ -484,5 +466,3 @@ This extension adds support for vxui WebSockets to htmx.
         }
     }
 })();
-// Please note: this `vxui_ws_port` will be modified by app running!
-const vxui_ws_port = 58206;

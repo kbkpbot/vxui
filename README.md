@@ -36,7 +36,6 @@ vxui is a cross-platform desktop UI framework which use your browser as screen, 
 * between frondend and backend, it is websocket.
 
 - When you start your App, it will first look for a free port on your OS, then the websocket server listen on this port;
-- At the same time, this port number will be written to a JS agent file;
 - The App will use command line spawn a process, start the web server, which will open your UI's first html file;
   Every your UI html file should include a JS agent file.
 - The JS agent in your html file will use the port communication with backend websocket server;

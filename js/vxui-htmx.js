@@ -71,7 +71,7 @@ This extension adds support for vxui WebSockets to htmx.
 
     /**
      * ensureWebSocket creates a new WebSocket on the designated element, using
-     * the element's "hx-ext=vxui_ws" attribute.
+     * the element's "hx-ext=vxui-htmx" attribute.
      * @param {HTMLElement} socketElt
      * @returns
      */
@@ -84,7 +84,19 @@ This extension adds support for vxui WebSockets to htmx.
             return;
         }
 
-        // Get the source straight from the element's value
+        // Get the port number from the url parameter
+        const url = location.search; //get url string
+        let theRequest = new Object();
+        if (url.indexOf("?") != -1) {
+            let str = url.substr(1);
+            strs = str.split("&");
+            for(let i = 0; i < strs.length; i ++) {
+                theRequest[strs[i].split("=")[0]]=unescape(strs[i].split("=")[1]);
+            }
+        }
+
+        let vxui_ws_port = theRequest['vxui_ws_port']
+
         var wssSource = "ws://localhost:" + vxui_ws_port + "/echo"
 
             var socketWrapper = createWebsocketWrapper(socketElt, function () {
@@ -454,5 +466,3 @@ This extension adds support for vxui WebSockets to htmx.
         }
     }
 })();
-// Please note: this `vxui_ws_port` will be modified by app running!
-const vxui_ws_port = 1234;
