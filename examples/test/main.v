@@ -16,6 +16,8 @@ const default_first_page_html_file = './ui/index.html'
 @['/doit']
 fn (mut app App) test(message map[string]json2.Any) string {
 	app.logger.info("I'm test/doit function!")
+	tmp := message['path'] or { json2.Null{} }
+	app.logger.info(tmp.str())
 	return '<div id="idMessage" hx-swap-oob="true">hello, I am test/doit</div>'
 }
 
@@ -23,6 +25,8 @@ fn (mut app App) test(message map[string]json2.Any) string {
 // `submit` function will handle `/submit` path
 fn (mut app App) submit(message map[string]json2.Any) string {
 	app.logger.info("I'm submit function!")
+	tmp := message['parameters'] or { json2.Null{} }
+	app.logger.info(tmp.str())
 	return '<div id="idMessage" hx-swap-oob="true">hello, I am submit</div>'
 }
 
