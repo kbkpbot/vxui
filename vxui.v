@@ -18,9 +18,7 @@ mut:
 	ws      websocket.Server
 	routes  map[string]Route
 pub mut:
-	logger &log.Logger = &log.Logger(&log.Log{
-	level: .debug
-})
+	logger &log.Logger = &log.Logger(&log.Log{})
 }
 
 enum Verb {
@@ -183,10 +181,10 @@ fn handle_message[T](mut app T, message map[string]json2.Any) !string {
 	} else {
 		verb_str = tmp.str().to_lower()
 	}
-	if verb_str !in vxui.verb_strings.keys() {
+	if verb_str !in verb_strings.keys() {
 		return error('Unknown verb [${verb}]')
 	} else {
-		verb = vxui.verb_strings[verb_str]
+		verb = verb_strings[verb_str]
 	}
 
 	for key, val in app.routes {
@@ -228,8 +226,8 @@ fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 				path = x
 			}
 		} else {
-			if x.to_lower() in vxui.verb_strings.keys() {
-				verbs << vxui.verb_strings[x.to_lower()]
+			if x.to_lower() in verb_strings.keys() {
+				verbs << verb_strings[x.to_lower()]
 			} else {
 				return error('[${name}]:Unknown verb: ${x}')
 			}

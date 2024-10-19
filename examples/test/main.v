@@ -34,9 +34,16 @@ fn (mut app App) submit(message map[string]json2.Any) string {
 	app.logger.info("I'm submit function!")
 	mut tmp := message['parameters'] or { json2.Null{} }
 	parameters := tmp.as_map()
-	app.first_name = parameters['firstName'].str()
-	app.last_name = parameters['lastName'].str()
-	app.email = parameters['email'].str()
+	if first_name := parameters['firstName'] {
+		app.first_name = first_name.str()
+	}
+	if last_name := parameters['lastName'] {
+		app.last_name = last_name.str()
+	}
+
+	if email := parameters['email'] {
+		app.email = email.str()
+	}
 	app.cnt++
 
 	// this will replace the div "idMessage" and div "outerHTML"
@@ -98,6 +105,7 @@ fn main() {
 
 	// run the vxui to start the web browser and open the `html_filename`
 	mut app := App{}
+	app.logger.set_level(.debug)
 	app.logger.info('vxui example: startup ${html_filename}')
 	vxui.run(mut app, html_filename)!
 }
