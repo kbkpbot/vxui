@@ -6,6 +6,11 @@ This extension adds support for vxui WebSockets to htmx.
 
 (function () {
 
+	if (htmx.version && !htmx.version.startsWith("1.")) {
+		console.warn("WARNING: You are using an htmx 1 extension with htmx " + htmx.version +
+			".  It is recommended that you move to the version of this extension found on https://htmx.org/extensions")
+	}
+
     /** @type {import("../htmx").HtmxInternalApi} */
     var api;
     var vxui_ws;
@@ -40,12 +45,13 @@ This extension adds support for vxui WebSockets to htmx.
          * @param {Event} evt
          */
         onEvent: function (name, evt) {
+						var parent = evt.target || evt.detail.elt;
 
             switch (name) {
                 // Try to close the socket when elements are removed
             case "htmx:beforeCleanupElement":
 
-                var internalData = api.getInternalData(evt.target)
+                var internalData = api.getInternalData(parent)
 
                     if (internalData.webSocket) {
                         internalData.webSocket.close();
@@ -53,11 +59,10 @@ This extension adds support for vxui WebSockets to htmx.
                     return;
 
                 // Try to create websockets when elements are processed
-            case "htmx:afterProcessNode":
-                var parent = evt.target;
+            case "htmx:beforeProcessNode":
 
                 forEach(queryAttributeOnThisOrChildren(parent, "hx-ext"), function (child) {
-                    ensureWebSocket(child);
+                    ensureWebSocket(child)
                 });
 
                 forEach(VERBS, function (verb) {
@@ -109,7 +114,6 @@ This extension adds support for vxui WebSockets to htmx.
             }
 
             var response = event.data;
-            console.log(response);
             if (!api.triggerEvent(socketElt, "htmx:wsBeforeMessage", {
                     message: response,
                     socketWrapper: socketWrapper.publicInterface
@@ -127,16 +131,12 @@ This extension adds support for vxui WebSockets to htmx.
             if (fragment.children.length) {
                 var children = Array.from(fragment.children);
                 for (var i = 0; i < children.length; i++) {
-                    api.oobSwap(api.getAttributeValue(children[i], "hx-swap-oob") ||
-                        "true", children[i], settleInfo);
+                    api.oobSwap(api.getAttributeValue(children[i], "hx-swap-oob") || "true", children[i], settleInfo);
                 }
             }
 
             api.settleImmediately(settleInfo.tasks);
-            api.triggerEvent(socketElt, "htmx:wsAfterMessage", {
-                message: response,
-                socketWrapper: socketWrapper.publicInterface
-            })
+            api.triggerEvent(socketElt, "htmx:wsAfterMessage", { message: response, socketWrapper: socketWrapper.publicInterface })
         });
 
         // Put the WebSocket into the HTML Element's custom data.
@@ -187,7 +187,7 @@ This extension adds support for vxui WebSockets to htmx.
                 if (!this.socket) {
                     api.triggerErrorEvent()
                 }
-                if (sendElt && api.triggerEvent(sendElt, 'htmx:wsBeforeSend', {
+                if (!sendElt || api.triggerEvent(sendElt, 'htmx:wsBeforeSend', {
                         message: message,
                         socketWrapper: this.publicInterface
                     })) {
@@ -201,10 +201,7 @@ This extension adds support for vxui WebSockets to htmx.
 
             send: function (message, sendElt) {
                 if (this.socket.readyState !== this.socket.OPEN) {
-                    this.messageQueue.push({
-                        message: message,
-                        sendElt: sendElt
-                    });
+                    this.messageQueue.push({ message: message, sendElt: sendElt });
                 } else {
                     this.sendImmediately(message, sendElt);
                 }
@@ -235,28 +232,20 @@ This extension adds support for vxui WebSockets to htmx.
                 // The event.type detail is added for interface conformance with the
                 // other two lifecycle events (open and close) so a single handler method
                 // can handle them polymorphically, if required.
-                api.triggerEvent(socketElt, "htmx:wsConnecting", {
-                    event: {
-                        type: 'connecting'
-                    }
-                });
+                api.triggerEvent(socketElt, "htmx:wsConnecting", { event: { type: 'connecting' } });
 
                 this.socket = socket;
 
                 socket.onopen = function (e) {
                     wrapper.retryCount = 0;
-                    api.triggerEvent(socketElt, "htmx:wsOpen", {
-                        event: e,
-                        socketWrapper: wrapper.publicInterface
-                    });
+                    api.triggerEvent(socketElt, "htmx:wsOpen", { event: e, socketWrapper: wrapper.publicInterface });
                     wrapper.handleQueuedMessages();
                 }
 
                 socket.onclose = function (e) {
                     // If socket should not be connected, stop further attempts to establish connection
                     // If Abnormal Closure/Service Restart/Try Again Later, then set a timer to reconnect after a pause.
-                    if (!maybeCloseWebSocketSource(socketElt) &&
-                        [1006, 1012, 1013].indexOf(e.code) >= 0) {
+                    if (!maybeCloseWebSocketSource(socketElt) && [1006, 1012, 1013].indexOf(e.code) >= 0) {
                         var delay = getWebSocketReconnectDelay(wrapper.retryCount);
                         setTimeout(function () {
                             wrapper.retryCount += 1;
@@ -266,17 +255,11 @@ This extension adds support for vxui WebSockets to htmx.
 
                     // Notify client code that connection has been closed. Client code can inspect `event` field
                     // to determine whether closure has been valid or abnormal
-                    api.triggerEvent(socketElt, "htmx:wsClose", {
-                        event: e,
-                        socketWrapper: wrapper.publicInterface
-                    })
+                    api.triggerEvent(socketElt, "htmx:wsClose", { event: e, socketWrapper: wrapper.publicInterface })
                 };
 
                 socket.onerror = function (e) {
-                    api.triggerErrorEvent(socketElt, "htmx:wsError", {
-                        error: e,
-                        socketWrapper: wrapper
-                    });
+                    api.triggerErrorEvent(socketElt, "htmx:wsError", { error: e, socketWrapper: wrapper });
                     maybeCloseWebSocketSource(socketElt);
                 };
 
@@ -304,6 +287,29 @@ This extension adds support for vxui WebSockets to htmx.
         return wrapper;
     }
 
+	/**
+	 * ensureWebSocketSend attaches trigger handles to elements with
+	 * "ws-send" attribute
+	 * @param {HTMLElement} elt
+	 */
+	function ensureWebSocketSend(elt) {
+		var legacyAttribute = api.getAttributeValue(elt, "hx-ws");
+		if (legacyAttribute && legacyAttribute !== 'send') {
+			return;
+		}
+
+		var webSocketParent = api.getClosestMatch(elt, hasWebSocket)
+		processWebSocketSend(webSocketParent, elt);
+	}
+
+	/**
+	 * hasWebSocket function checks if a node has webSocket instance attached
+	 * @param {HTMLElement} node
+	 * @returns {boolean}
+	 */
+	function hasWebSocket(node) {
+		return api.getInternalData(node).webSocket != null;
+	}
     /**
      * processWebSocketSend adds event listeners to the <form> element so that
      * messages can be sent to the WebSocket server when the form is submitted.
@@ -371,7 +377,7 @@ This extension adds support for vxui WebSockets to htmx.
 
                 socketWrapper.send(body, elt);
 
-                if (api.shouldCancel(evt, elt)) {
+                if (evt && api.shouldCancel(evt, elt)) {
                     evt.preventDefault();
                 }
             });
@@ -445,8 +451,7 @@ This extension adds support for vxui WebSockets to htmx.
         }
 
         // Search all child nodes that match the requested attribute
-        elt.querySelectorAll("[" + attributeName + "], [data-" + attributeName +
-            "], [data-hx-ws], [hx-ws]").forEach(function (node) {
+        elt.querySelectorAll("[" + attributeName + "], [data-" + attributeName + "], [data-hx-ws], [hx-ws]").forEach(function (node) {
             result.push(node)
         })
 

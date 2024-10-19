@@ -18,7 +18,7 @@ mut:
 	ws      websocket.Server
 	routes  map[string]Route
 pub mut:
-	logger &log.Logger = &log.Logger(&log.Log{})
+	logger &log.Log = &log.Log{}
 }
 
 enum Verb {

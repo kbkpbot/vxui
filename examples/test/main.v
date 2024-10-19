@@ -106,6 +106,8 @@ fn main() {
 	// run the vxui to start the web browser and open the `html_filename`
 	mut app := App{}
 	app.logger.set_level(.debug)
+	app.logger.set_short_tag(true)
+	app.logger.set_custom_time_format('HH:mm:ss')
 	app.logger.info('vxui example: startup ${html_filename}')
 	vxui.run(mut app, html_filename)!
 }
