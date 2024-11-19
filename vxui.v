@@ -137,8 +137,12 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 				raw_message := json2.fast_raw_decode(msg.payload.bytestr())!
 				message := raw_message.as_map()
 				app.logger.debug('${message}')
-				response := handle_message(mut app, message)!
-				ws.write(response.bytes(), msg.opcode)!
+				if rpc_id := message['rpcID'] {
+					response := handle_message(mut app, message)!
+					json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response)}}'
+					println('json_response = ${json_response}')
+					ws.write(json_response.bytes(), msg.opcode)!
+				}
 			}
 		}
 	})

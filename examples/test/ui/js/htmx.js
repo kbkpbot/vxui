@@ -2576,7 +2576,6 @@ var htmx = (function() {
    * @returns {boolean}
    */
   function processVerbs(elt, nodeData, triggerSpecs) {
-	return true;
     let explicitAction = false
     forEach(VERBS, function(verb) {
       if (hasAttribute(elt, 'hx-' + verb)) {
