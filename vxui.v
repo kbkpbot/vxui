@@ -18,6 +18,7 @@ mut:
 	ws      websocket.Server
 	routes  map[string]Route
 pub mut:
+	close_timer int = 50	// close app after `close_timer` no browser
 	logger &log.Log = &log.Log{}
 }
 
@@ -134,13 +135,12 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 				ws.write_string('pong')!
 			}
 			else {
-				raw_message := json2.fast_raw_decode(msg.payload.bytestr())!
+				raw_message := json2.decode[json2.Any](msg.payload.bytestr())!
 				message := raw_message.as_map()
 				app.logger.debug('${message}')
 				if rpc_id := message['rpcID'] {
 					response := handle_message(mut app, message)!
 					json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response)}}'
-					println('json_response = ${json_response}')
 					ws.write(json_response.bytes(), msg.opcode)!
 				}
 			}
@@ -174,7 +174,7 @@ fn handle_message[T](mut app T, message map[string]json2.Any) !string {
 		path = tmp.str()
 	}
 	if !path.starts_with('/') {
-		return error('Can\'t parse path [${path}]')
+		return error("Can't parse path [${path}]")
 	}
 
 	tmp = message['verb'] or { json2.Null{} }
@@ -210,7 +210,7 @@ fn fire_call[T](mut app T, method_name string, message map[string]json2.Any) !st
 			}
 		}
 	}
-	return error('Can\'t find method [${method_name}]')
+	return error("Can't find method [${method_name}]")
 }
 
 // Parsing function attributes for verbs and path.
@@ -225,7 +225,7 @@ fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 	for x in attrs {
 		if x.starts_with('/') {
 			if path != '' {
-				return error('[${name}]:Can\'t assign multiply path for a route.')
+				return error("[${name}]:Can't assign multiply path for a route.")
 			} else {
 				path = x
 			}
@@ -286,10 +286,10 @@ pub fn run[T](mut app T, html_filename string) ! {
 		} else {
 			close_timer = 0
 		}
-		if close_timer > 50 {
+		if close_timer > app.close_timer {
 			break
 		}
-		time.sleep(10 * time.millisecond)
+		time.sleep(1 * time.millisecond)
 	}
 	app.ws.free()
 }

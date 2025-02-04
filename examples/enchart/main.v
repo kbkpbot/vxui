@@ -56,7 +56,11 @@ fn main() {
 
 	// run the vxui to start the web browser and open the `html_filename`
 	mut app := App{}
+	// if we have no client, just wait for 1000ms, and quit
+	// because when page change, it have a small time gap between close old page and open new page
+	app.close_timer = 1000
 	app.logger.set_level(.debug)
+	app.logger.set_output_stream(os.stderr())
 	app.logger.set_short_tag(true)
 	app.logger.set_custom_time_format('HH:mm:ss')
 	app.logger.info('vxui example: startup ${html_filename}')
