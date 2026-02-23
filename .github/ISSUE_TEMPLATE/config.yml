@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/kbkpbot/vxui/discussions
+    about: Please ask and answer questions here
+  - name: Security vulnerability
+    url: mailto:kbkpbot@gmail.com
+    about: Please report security vulnerabilities directly via email
