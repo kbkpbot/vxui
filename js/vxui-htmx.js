@@ -35,22 +35,38 @@ sock.onmessage = function(e) {
 	};
 };
 
+// Generate a unique RPC ID using timestamp + random + counter
+let rpcCounter = 0;
+function generateRpcID() {
+	const timestamp = Date.now().toString(36);
+	const random = Math.random().toString(36).substring(2, 8);
+	const counter = (rpcCounter++).toString(36);
+	return `${timestamp}-${random}-${counter}`;
+}
+
 ah.proxy({
 	// Before send request, replace it with websocket request
 	onRequest: (config, handler) => {
 		var toSend = {};
-		var rpcID; // Find a unique ID
-		do {
-			rpcID=Math.floor(Math.random() * 100000);
-		} while(handlers[rpcID]);	// while collisions
-		handlers[rpcID]=handler;	// Save handler, where rpcID is the key.
-		configs[rpcID]=config;
+
+		// Generate a unique RPC ID
+		var rpcID = generateRpcID();
+
+		// Handle collision (extremely unlikely but possible)
+		while(handlers[rpcID]) {
+			rpcID = generateRpcID();
+		}
+
+		handlers[rpcID] = handler;	// Save handler, where rpcID is the key.
+		configs[rpcID] = config;
+
 		toSend['rpcID'] = rpcID;
 		toSend['body'] = createObjFromPairedArrayValues(decodeURI(config.body).split('&'));
 		toSend['verb'] = config.method;
 		toSend['path'] = config.url;
-		//toSend['parameters'] = Object.assign({}, config.parameters);
 		toSend['headers'] = config.headers;
+		toSend['timestamp'] = Date.now(); // Add timestamp for debugging
+
 		sock.send(JSON.stringify(toSend));
 	}
 });
