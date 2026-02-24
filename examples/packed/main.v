@@ -23,7 +23,7 @@ fn (mut app App) click(message map[string]json2.Any) string {
 
 fn main() {
 	mut app := App{}
-	app.close_timer = 5000
+	app.config.close_timer_ms = 5000
 	app.logger.set_level(.debug)
 	app.logger.set_output_stream(os.stderr())
 
