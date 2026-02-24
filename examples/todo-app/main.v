@@ -8,6 +8,7 @@ import x.json2
 struct TodoItem {
 	id        int
 	text      string
+mut:
 	completed bool
 }
 
@@ -26,7 +27,7 @@ fn (mut app App) index(message map[string]json2.Any) string {
 }
 
 // add adds a new todo item
-@['/add', 'post']
+@['/add']
 fn (mut app App) add(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 	text := params['text'] or { json2.Null{} }.str().trim_space()
@@ -47,7 +48,7 @@ fn (mut app App) add(message map[string]json2.Any) string {
 }
 
 // toggle marks a todo as complete/incomplete
-@['/toggle', 'post']
+@['/toggle']
 fn (mut app App) toggle(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 	id := params['id'] or { json2.Null{} }.str().int()
@@ -63,7 +64,7 @@ fn (mut app App) toggle(message map[string]json2.Any) string {
 }
 
 // delete removes a todo item
-@['/delete', 'post']
+@['/delete']
 fn (mut app App) delete(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 	id := params['id'] or { json2.Null{} }.str().int()
@@ -80,7 +81,7 @@ fn (mut app App) delete(message map[string]json2.Any) string {
 }
 
 // clear_completed removes all completed items
-@['/clear', 'post']
+@['/clear']
 fn (mut app App) clear_completed(message map[string]json2.Any) string {
 	mut new_todos := []TodoItem{}
 	for item in app.todos {

@@ -383,11 +383,11 @@ pub:
 	id            string
 	token         string
 	connected     time.Time
-	last_ping     time.Time
 	request_count int
 	last_request  time.Time
 pub mut:
 	connection ?&websocket.Client
+	last_ping     time.Time
 }
 
 // =============================================================================
@@ -582,7 +582,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 						response: Response{}
 					}
 
-					middleware_passed := true
+					mut middleware_passed := true
 					for middleware in app.middlewares {
 						result := middleware(mut ctx)
 						if result != .continue_ {
@@ -1050,7 +1050,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 				new_mtimes := scan_file_mtimes(watch_dirs)
 				if has_files_changed(file_mtimes, new_mtimes) {
 					app.logger.info('Files changed, triggering hot reload')
-					file_mtimes = new_mtimes
+					file_mtimes = new_mtimes.clone()
 					app.trigger_hot_reload() or {
 						app.logger.warn('Hot reload failed: ${err}')
 					}

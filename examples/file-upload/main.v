@@ -4,6 +4,7 @@ import vxui
 import os
 import x.json2
 import encoding.base64
+import time
 
 // FileInfo represents uploaded file metadata
 struct FileInfo {
@@ -24,7 +25,7 @@ mut:
 
 // init_upload_dir creates the upload directory
 fn (mut app App) init_upload_dir() {
-	app.upload_dir = os.join_path(os.temp_dir(), 'vxui_uploads_${os.now_unix()}')
+	app.upload_dir = os.join_path(os.temp_dir(), 'vxui_uploads_${time.now().unix()}')
 	os.mkdir_all(app.upload_dir) or {}
 }
 
@@ -35,7 +36,7 @@ fn (mut app App) index(message map[string]json2.Any) string {
 }
 
 // upload handles file upload
-@['/upload', 'post']
+@['/upload']
 fn (mut app App) upload(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 
@@ -54,9 +55,7 @@ fn (mut app App) upload(message map[string]json2.Any) string {
 		data = data.split(',')[1]
 	}
 
-	decoded := base64.decode_str(data) or {
-		return '<div id="message" class="error">Failed to decode file data</div>'
-	}
+	decoded := base64.decode_str(data)
 
 	// Save to disk
 	file_path := os.join_path(app.upload_dir, filename)
@@ -79,7 +78,7 @@ fn (mut app App) upload(message map[string]json2.Any) string {
 }
 
 // delete removes a file
-@['/delete', 'post']
+@['/delete']
 fn (mut app App) delete(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 	filename := params['filename'] or { json2.Null{} }.str()
@@ -149,10 +148,14 @@ fn (mut app App) render_file_list() string {
 
 	html += '</ul>'
 
-	// Stats
+	// Stats - calculate total size
+	mut total_size := 0
+	for file in app.files {
+		total_size += file.size
+	}
 	html += '<div id="stats" hx-swap-oob="true" class="stats">
 		<span>${app.files.len} files</span>
-		<span>Total: ${format_size(app.files.map(it.size).sum())}</span>
+		<span>Total: ${format_size(total_size)}</span>
 	</div>'
 
 	return html
