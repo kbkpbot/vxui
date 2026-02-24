@@ -18,27 +18,27 @@ mut:
 	radio_value   string = 'radio1'
 	slider_value  int    = 50
 	toggle        bool   = true
-	
+
 	// Progress
 	progress int
-	
+
 	// Tabs
 	active_tab string = 'tab1'
-	
+
 	// Table data
 	items []Item
-	
+
 	// Notifications
 	notifications []Notification
-	
+
 	// Cards
 	card_flipped map[string]bool
 }
 
 struct Item {
-	id    int
-	name  string
-	value int
+	id     int
+	name   string
+	value  int
 	status string
 }
 
@@ -59,7 +59,7 @@ fn main() {
 	app.logger.set_level(.debug)
 	app.logger.set_output_stream(os.stderr())
 	app.logger.set_short_tag(true)
-	
+
 	// Initialize sample data
 	app.items = [
 		Item{1, 'Alpha', 100, 'active'},
@@ -199,12 +199,24 @@ fn (mut app App) tabs_switch(message map[string]json2.Any) string {
 fn (app App) render_tabs() string {
 	mut html := '<div id="tabs-container" hx-swap-oob="true">
 		<div class="tabs">
-			<button class="tab ${if app.active_tab == 'tab1' { 'active' } else { '' }}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab1"}\'>Tab 1</button>
-			<button class="tab ${if app.active_tab == 'tab2' { 'active' } else { '' }}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab2"}\'>Tab 2</button>
-			<button class="tab ${if app.active_tab == 'tab3' { 'active' } else { '' }}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab3"}\'>Tab 3</button>
+			<button class="tab ${if app.active_tab == 'tab1' {
+		'active'
+	} else {
+		''
+	}}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab1"}\'>Tab 1</button>
+			<button class="tab ${if app.active_tab == 'tab2' {
+		'active'
+	} else {
+		''
+	}}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab2"}\'>Tab 2</button>
+			<button class="tab ${if app.active_tab == 'tab3' {
+		'active'
+	} else {
+		''
+	}}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab3"}\'>Tab 3</button>
 		</div>
 		<div class="tab-content">'
-	
+
 	match app.active_tab {
 		'tab1' {
 			html += '<h3>Tab 1 Content</h3><p>This is the first tab panel.</p>'
@@ -219,7 +231,7 @@ fn (app App) render_tabs() string {
 			html += '<p>Select a tab</p>'
 		}
 	}
-	
+
 	html += '</div></div>'
 	return html
 }
@@ -252,7 +264,7 @@ fn (mut app App) table_delete(message map[string]json2.Any) string {
 	params := get_params(message)
 	id_val := params['id'] or { json2.Null{} }
 	id := id_val.int()
-	
+
 	mut new_items := []Item{}
 	for item in app.items {
 		if item.id != id {
@@ -276,7 +288,7 @@ fn (app App) render_table() string {
 			</tr>
 		</thead>
 		<tbody>'
-	
+
 	for item in app.items {
 		status_class := match item.status {
 			'active' { 'status-active' }
@@ -291,7 +303,7 @@ fn (app App) render_table() string {
 			<td><button class="btn-small btn-danger" hx-post="/table/delete" hx-vals=\'{"id":${item.id}}\' hx-target="#data-table" hx-swap="outerHTML">Delete</button></td>
 		</tr>'
 	}
-	
+
 	html += '</tbody></table>'
 	return html
 }
@@ -332,7 +344,11 @@ fn (mut app App) modal_close(message map[string]json2.Any) string {
 
 fn (mut app App) notify(message string, type_ string) {
 	id := if app.notifications.len > 0 { app.notifications.last().id + 1 } else { 1 }
-	app.notifications << Notification{id: id, message: message, type_: type_}
+	app.notifications << Notification{
+		id:      id
+		message: message
+		type_:   type_
+	}
 	// Keep only last 5 notifications
 	if app.notifications.len > 5 {
 		app.notifications = app.notifications[1..]
@@ -372,13 +388,13 @@ fn (mut app App) card_flip(message map[string]json2.Any) string {
 	params := get_params(message)
 	id_val := params['id'] or { json2.Any('1') }
 	id := id_val.str()
-	
+
 	// Toggle flip state
 	is_flipped := app.card_flipped[id] or { false }
 	app.card_flipped[id] = !is_flipped
-	
+
 	flipped_class := if !is_flipped { 'flipped' } else { '' }
-	
+
 	return '<div id="card-${id}" hx-swap-oob="true" class="card ${flipped_class}" hx-post="/card/flip" hx-vals=\'{"id":"${id}"}\'>
 		<div class="card-inner">
 			<div class="card-front">

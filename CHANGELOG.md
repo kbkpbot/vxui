@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-02-24
+
+### Added
+
+- **Element Plus Example**: Vue 3 + Element Plus integration demo
+  - Demonstrates professional UI components (Button, Form, Table, Dialog, DatePicker, etc.)
+  - Backend-driven notifications via `send_js_async()` for instant response
+  - Shows vxui working with modern Vue 3 ecosystem
+- **Gallery Example**: Comprehensive desktop UI controls demo
+  - Buttons, forms, inputs, sliders, toggles
+  - Progress bars, tabs, tables, cards
+  - Modals, notifications
+  - Dark mode toggle
+
+### Fixed
+
+- Added `hx-ext="vxui-ws"` to Element Plus example HTML body
+- Added `rpcID` and `token` to WebSocket messages for backend routing
+- Fixed `get_params()` to use `as_map()` method
+- Added `hx-swap="none"` to buttons that don't need response body updates
+- Added `hx-target` to prevent button text disappearing on swap
+- Added `notranslate` meta tag to all examples to prevent Chrome translation popup
+- Various htmx attribute fixes in gallery example
+
+### Changed
+
+- Optimized Element Plus notifications to use async JS execution
+  - Created `send_js_async()` for fire-and-forget JS commands
+  - Instant UI response instead of 2-3 second delay
+
 ## [0.5.0] - 2026-02-24
 
 ### Added

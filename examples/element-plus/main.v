@@ -11,12 +11,12 @@ struct App {
 	vxui.Context
 mut:
 	// Form state
-	input_text  string
-	select_val  string
-	switch_val  bool
-	slider_val  int = 50
-	rate_val    int = 3
-	color_val   string = '#409EFF'
+	input_text string
+	select_val string
+	switch_val bool
+	slider_val int    = 50
+	rate_val   int    = 3
+	color_val  string = '#409EFF'
 	// Counter
 	click_count int
 }
@@ -78,9 +78,10 @@ fn (mut app App) button_click(message map[string]json2.Any) string {
 	params := get_params(message)
 	type_val := params['type'] or { json2.Any('unknown') }
 	app.click_count++
-	
+
 	msg_type := map_button_type(type_val.str())
-	app.show_message('Button "${type_val.str()}" clicked! (Count: ${app.click_count})', msg_type)
+	app.show_message('Button "${type_val.str()}" clicked! (Count: ${app.click_count})',
+		msg_type)
 	app.logger.info('Button clicked: ${type_val.str()}, count: ${app.click_count}')
 	return ''
 }
@@ -165,7 +166,13 @@ fn (mut app App) form_rate(message map[string]json2.Any) string {
 	if val := params['value'] {
 		app.rate_val = int(val.int())
 		stars := '★'.repeat(app.rate_val) + '☆'.repeat(5 - app.rate_val)
-		msg_type := if app.rate_val >= 4 { 'success' } else if app.rate_val >= 2 { 'warning' } else { 'error' }
+		msg_type := if app.rate_val >= 4 {
+			'success'
+		} else if app.rate_val >= 2 {
+			'warning'
+		} else {
+			'error'
+		}
 		app.show_message('Rating: ${stars} (${app.rate_val}/5)', msg_type)
 		app.logger.info('Rate changed: ${app.rate_val}')
 	}
@@ -255,7 +262,8 @@ fn (mut app App) message_show(message map[string]json2.Any) string {
 
 @['/dialog/confirm']
 fn (mut app App) dialog_confirm(message map[string]json2.Any) string {
-	app.show_notification('Dialog Confirmed', 'Your action was recorded by the backend!', 'success')
+	app.show_notification('Dialog Confirmed', 'Your action was recorded by the backend!',
+		'success')
 	app.logger.info('Dialog confirmed')
 	return ''
 }

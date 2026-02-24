@@ -193,6 +193,21 @@ See [`examples/enchart/`](examples/enchart/) for:
 - Real-time data streaming
 - JSON API endpoints
 
+### Gallery Demo
+
+See [`examples/gallery/`](examples/gallery/) for a comprehensive UI controls demo:
+- Buttons, forms, inputs
+- Progress bars, tabs, tables
+- Cards, modals, notifications
+- Dark mode toggle
+
+### Element Plus Integration
+
+See [`examples/element-plus/`](examples/element-plus/) for Vue 3 + Element Plus integration:
+- Professional UI components (Button, Form, Table, Dialog, etc.)
+- Backend-driven notifications via `run_js()`
+- Demonstrates vxui with modern Vue 3 ecosystem
+
 Run examples:
 
 ```bash
