@@ -21,8 +21,8 @@ mut:
 fn main() {
 	mut app := App{}
 	app.config.close_timer_ms = 10000 // 10 seconds for CDN loading
-	app.window.width = 1400
-	app.window.height = 900
+	app.config.window.width = 1400
+	app.config.window.height = 900
 	app.logger.set_level(.debug)
 	vxui.run(mut app, './ui/index.html')!
 }
