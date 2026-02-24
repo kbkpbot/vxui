@@ -186,7 +186,7 @@ fn main() {
 
 	mut app := App{}
 	app.init_upload_dir()
-	app.config.close_timer_ms = 10000
+	app.config.close_timer_ms = 1000
 	app.config.window = vxui.WindowConfig{
 		width:  700
 		height: 600

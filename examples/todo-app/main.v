@@ -154,7 +154,7 @@ fn main() {
 	}
 
 	mut app := App{}
-	app.config.close_timer_ms = 10000
+	app.config.close_timer_ms = 1000
 	app.config.window = vxui.WindowConfig{
 		width:  500
 		height: 600

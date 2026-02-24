@@ -107,7 +107,7 @@ fn main() {
 	mut app := App{}
 	// if we have no client, just wait for 5000 cycles (5 seconds), and quit
 	// because when page change, it have a small time gap between close old page and open new page
-	app.config.close_timer_ms = 5000
+	app.config.close_timer_ms = 1000
 	app.logger.set_level(.debug)
 	app.logger.set_output_stream(os.stderr())
 	app.logger.set_short_tag(true)
