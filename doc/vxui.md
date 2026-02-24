@@ -12,8 +12,11 @@
 - [get_free_port](#get_free_port)
 - [handle_message](#handle_message)
 - [is_valid_email](#is_valid_email)
+- [new_packed_app](#new_packed_app)
 - [parse_attrs](#parse_attrs)
 - [run](#run)
+- [run_embedded](#run_embedded)
+- [run_packed](#run_packed)
 - [sanitize_path](#sanitize_path)
 - [start_browser](#start_browser)
 - [start_browser_with_token](#start_browser_with_token)
@@ -35,6 +38,18 @@
   - [set_resizable](#set_resizable)
   - [get_port](#get_port)
   - [get_token](#get_token)
+- [EmbeddedFile](#EmbeddedFile)
+- [PackedApp](#PackedApp)
+  - [add_file](#add_file)
+  - [add_file_string](#add_file_string)
+  - [extract_to](#extract_to)
+  - [extract_to_temp](#extract_to_temp)
+  - [get_file](#get_file)
+  - [get_file_content](#get_file_content)
+  - [has_file](#has_file)
+  - [list_files](#list_files)
+  - [total_size](#total_size)
+  - [cleanup](#cleanup)
 - [Route](#Route)
 - [WindowConfig](#WindowConfig)
 
@@ -128,6 +143,15 @@ is_valid_email validates email format (basic check)
 
 [[Return to contents]](#Contents)
 
+## new_packed_app
+```v
+fn new_packed_app() PackedApp
+```
+
+new_packed_app creates a new PackedApp instance
+
+[[Return to contents]](#Contents)
+
 ## parse_attrs
 ```v
 fn parse_attrs(name string, attrs []string) !([]Verb, string)
@@ -143,6 +167,24 @@ fn run[T](mut app T, html_filename string) !
 ```
 
 run opens the `html_filename` in browser and starts the event loop
+
+[[Return to contents]](#Contents)
+
+## run_embedded
+```v
+fn run_embedded[T](mut app T, html_data []u8, filename string) !
+```
+
+run_embedded is a convenience function for running with embedded HTML Usage: vxui.run_embedded(mut app, $embed_file('ui/index.html'), 'index.html')!
+
+[[Return to contents]](#Contents)
+
+## run_packed
+```v
+fn run_packed[T](mut app T, mut packed PackedApp, entry_file string) !
+```
+
+run_packed runs the app with packed (embedded) resources This allows distributing a single executable with all frontend files embedded
 
 [[Return to contents]](#Contents)
 
@@ -386,6 +428,121 @@ get_token returns the security token
 
 [[Return to contents]](#Contents)
 
+## EmbeddedFile
+```v
+struct EmbeddedFile {
+pub:
+	data []u8
+	size int
+}
+```
+
+EmbeddedFile represents an embedded file
+
+[[Return to contents]](#Contents)
+
+## PackedApp
+```v
+struct PackedApp {
+pub mut:
+	files map[string]EmbeddedFile
+}
+```
+
+PackedApp holds embedded frontend resources
+
+[[Return to contents]](#Contents)
+
+## add_file
+```v
+fn (mut p PackedApp) add_file(path string, data []u8)
+```
+
+add_file adds an embedded file to the packed app Accepts both []u8 and EmbedFileData (from $embed_file)
+
+[[Return to contents]](#Contents)
+
+## add_file_string
+```v
+fn (mut p PackedApp) add_file_string(path string, content string)
+```
+
+add_file_string adds an embedded file from string
+
+[[Return to contents]](#Contents)
+
+## extract_to
+```v
+fn (p PackedApp) extract_to(dir string) !
+```
+
+extract_to extracts all files to a directory
+
+[[Return to contents]](#Contents)
+
+## extract_to_temp
+```v
+fn (p PackedApp) extract_to_temp() !string
+```
+
+extract_to_temp extracts all files to a temp directory and returns the path
+
+[[Return to contents]](#Contents)
+
+## get_file
+```v
+fn (p PackedApp) get_file(path string) !EmbeddedFile
+```
+
+get_file retrieves a file by path
+
+[[Return to contents]](#Contents)
+
+## get_file_content
+```v
+fn (p PackedApp) get_file_content(path string) !string
+```
+
+get_file_content retrieves file content as string
+
+[[Return to contents]](#Contents)
+
+## has_file
+```v
+fn (p PackedApp) has_file(path string) bool
+```
+
+has_file checks if a file exists
+
+[[Return to contents]](#Contents)
+
+## list_files
+```v
+fn (p PackedApp) list_files() []string
+```
+
+list_files returns all file paths
+
+[[Return to contents]](#Contents)
+
+## total_size
+```v
+fn (p PackedApp) total_size() int
+```
+
+total_size returns total size of all embedded files
+
+[[Return to contents]](#Contents)
+
+## cleanup
+```v
+fn (p PackedApp) cleanup(dir string)
+```
+
+cleanup removes extracted files
+
+[[Return to contents]](#Contents)
+
 ## Route
 ```v
 struct Route {
@@ -419,4 +576,4 @@ WindowConfig holds window configuration
 
 [[Return to contents]](#Contents)
 
-#### Powered by vdoc. Generated on: 24 Feb 2026 10:35:10
+#### Powered by vdoc. Generated on: 24 Feb 2026 10:49:48

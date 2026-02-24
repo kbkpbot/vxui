@@ -41,6 +41,7 @@
 - **🎯 htmx Integration** — Seamless integration with official htmx (no modifications required)
 - **🔧 Backend-to-Frontend** — Execute JavaScript from backend with `run_js()`
 - **👥 Multi-Client Support** — Optional support for multiple browser clients
+- **🚀 Single Executable** — Embed frontend files into binary for easy distribution
 
 ## 📋 Table of Contents
 
@@ -250,6 +251,46 @@ fn main() {
     vxui.run(mut app, './ui/index.html')!
 }
 ```
+
+### Single Executable Distribution
+
+Embed frontend files into the binary for easy distribution:
+
+```v
+module main
+
+import vxui
+
+// Embed frontend files at compile time
+const index_html = $embed_file('ui/index.html')
+const app_js = $embed_file('ui/app.js')
+const style_css = $embed_file('ui/style.css')
+
+struct App {
+    vxui.Context
+}
+
+fn main() {
+    mut app := App{}
+    
+    // Create packed app with embedded files
+    mut packed := vxui.new_packed_app()
+    packed.add_file_string('index.html', index_html.to_string())
+    packed.add_file_string('app.js', app_js.to_string())
+    packed.add_file_string('style.css', style_css.to_string())
+    
+    // Run with packed resources
+    vxui.run_packed(mut app, mut packed, 'index.html')!
+}
+```
+
+Build single executable:
+```bash
+v -prod main.v           # Production build (~1.4 MB)
+v -prod -compress main.v # Compressed build (smaller)
+```
+
+Result: A single `.exe` file containing all frontend assets!
 
 ## 🔒 Security
 

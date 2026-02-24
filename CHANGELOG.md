@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-24
+
+### Added
+
+- **Packed App Support**: Embed frontend files into single executable
+  - `PackedApp` struct for managing embedded files
+  - `$embed_file` integration with V's compile-time embedding
+  - `run_packed()` - Run app with packed resources
+  - `run_embedded()` - Quick method for single HTML file
+  - Automatic extraction to temp directory with cleanup
+- **Config struct**: Centralized configuration options
+  - `close_timer`, `ws_ping_interval`
+  - `token`, `require_auth`
+  - `multi_client`, `max_clients`
+  - `js_timeout_default`, `js_poll_interval`
+  - `window` settings integration
+- **Comprehensive test coverage**: 50+ test cases
+  - Tests for new structs (Client, WindowConfig, Config, PackedApp)
+  - Tests for all public APIs
+  - Error handling tests
+
+### Fixed
+
+- Channel leak in `run_js()` timeout handling - properly close channels
+- Temp directory path validation in browser launcher
+
+### Examples
+
+- Added `examples/packed/` - Complete packed app example
+  - Demonstrates `$embed_file` usage
+  - Build single executable with `v -prod main.v`
+
 ## [0.2.0] - 2026-02-24
 
 ### Added
