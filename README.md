@@ -182,21 +182,28 @@ v run main.v
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────┐      WebSocket      ┌─────────────────┐
-│   Browser       │ ◄─────────────────► │   V Backend     │
-│  (HTML/CSS/JS)  │    (No HTTP!)       │  (WebSocket     │
-│                 │                     │   Server)       │
-└─────────────────┘                     └─────────────────┘
-       │                                          │
-       │ htmx events                              │ Method calls
-       ▼                                          ▼
-┌─────────────────┐                     ┌─────────────────┐
-│  vxui-ws.js    │                     │   Route Handler │
-│  (Converts      │                     │   (Your code!)  │
-│   htmx to WS)   │                     │                 │
-└─────────────────┘                     └─────────────────┘
-```
+```mermaid
+flowchart LR
+    subgraph Frontend["Browser"]
+        HTML["HTML/CSS"]
+        HTMX["htmx attributes"]
+        WS["vxui-ws.js"]
+    end
+    
+    subgraph Backend["V Backend"]
+        WSS["WebSocket Server"]
+        Router["Router"]
+        Handler["Route Handler"]
+    end
+    
+    HTML --> HTMX
+    HTMX -->|"hx-post, hx-get, etc."| WS
+    WS <-->|"WebSocket (No HTTP!)"| WSS
+    WSS --> Router
+    Router --> Handler
+    Handler -->|"HTML fragments"| WSS
+    WSS -->|"Response"| WS
+    WS -->|"DOM Update"| HTML
 
 ### How it works
 
