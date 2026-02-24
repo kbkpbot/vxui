@@ -36,19 +36,11 @@
     .header h1 {
       font-size: 2.5em;
       font-weight: 300;
-      background: linear-gradient(90deg, #00d2ff, #3a7bd5, #00d2ff);
-      background-size: 200% auto;
+      background: linear-gradient(90deg, #00d2ff, #3a7bd5);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      animation: gradient 3s ease infinite;
       margin-bottom: 10px;
-    }
-    
-    @keyframes gradient {
-      0% { background-position: 0% center; }
-      50% { background-position: 100% center; }
-      100% { background-position: 0% center; }
     }
     
     .header p {
@@ -144,12 +136,6 @@
       height: 8px;
       background: #4ade80;
       border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(1.2); }
     }
     
     #chart {
