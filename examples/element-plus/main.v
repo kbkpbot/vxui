@@ -2,6 +2,9 @@ module main
 
 import vxui
 import x.json2
+import time
+import rand
+import net.websocket
 
 // App inherits from vxui.Context
 struct App {
@@ -27,20 +30,43 @@ fn main() {
 	vxui.run(mut app, './ui/index.html')!
 }
 
-// Helper: show Element Plus message via run_js
-fn (mut app App) show_message(msg string, msg_type string) {
-	js_code := "ElementPlus.ElMessage({ message: '${msg}', type: '${msg_type}' })"
-	app.run_js(js_code, 1000) or {
-		app.logger.error('Failed to run_js: ${err}')
+// Helper: send JS command asynchronously (fire and forget)
+fn (mut app App) send_js_async(js_code string) {
+	// Get first client's connection
+	app.mu.rlock()
+	mut client_conn := &websocket.Client(unsafe { nil })
+	for _, c in app.clients {
+		client_conn = c.connection or { unsafe { nil } }
+		break
+	}
+	app.mu.runlock()
+
+	if client_conn == unsafe { nil } {
+		app.logger.error('No client connection for send_js_async')
+		return
+	}
+
+	js_id := '${time.now().unix_milli()}-${rand.u32()}'
+
+	mut cmd := map[string]json2.Any{}
+	cmd['cmd'] = json2.Any('run_js')
+	cmd['js_id'] = json2.Any(js_id)
+	cmd['script'] = json2.Any(js_code)
+	client_conn.write(json2.encode(cmd).bytes(), .text_frame) or {
+		app.logger.error('Failed to send JS: ${err}')
 	}
 }
 
-// Helper: show Element Plus notification via run_js
+// Helper: show Element Plus message (async)
+fn (mut app App) show_message(msg string, msg_type string) {
+	js_code := "window.ElementPlus.ElMessage({ message: '${msg}', type: '${msg_type}' })"
+	app.send_js_async(js_code)
+}
+
+// Helper: show Element Plus notification (async)
 fn (mut app App) show_notification(title string, msg string, msg_type string) {
-	js_code := "ElementPlus.ElNotification({ title: '${title}', message: '${msg}', type: '${msg_type}' })"
-	app.run_js(js_code, 1000) or {
-		app.logger.error('Failed to run_js: ${err}')
-	}
+	js_code := "window.ElementPlus.ElNotification({ title: '${title}', message: '${msg}', type: '${msg_type}' })"
+	app.send_js_async(js_code)
 }
 
 // =============================================================================

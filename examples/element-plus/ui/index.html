@@ -63,7 +63,7 @@
         }
     </style>
 </head>
-<body>
+<body hx-ext="vxui-ws">
     <div id="app">
         <div class="header-title">
             <h1>Element Plus Demo</h1>
@@ -328,20 +328,28 @@
 
                 // WebSocket send helper
                 let rpcCounter = 0
+                const getToken = () => {
+                    const params = new URLSearchParams(window.location.search)
+                    return params.get('vxui_token') || ''
+                }
                 const wsSend = (path, data = {}) => {
-                    const socket = window.vxuiSocket
-                    if (socket && socket.readyState === WebSocket.OPEN) {
-                        rpcCounter++
-                        const msg = {
-                            rpcID: rpcCounter,
-                            verb: 'post',
-                            path: path,
-                            parameters: data,
-                            token: window.vxuiToken || '',
-                            headers: { 'HX-Request': 'true' },
-                            timestamp: Date.now()
+                    const ws = window.vxuiWs
+                    if (ws && ws.isAuthenticated()) {
+                        const socket = ws.getSocket()
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            rpcCounter++
+                            const msg = {
+                                rpcID: rpcCounter,
+                                verb: 'post',
+                                path: path,
+                                parameters: data,
+                                token: getToken(),
+                                headers: { 'HX-Request': 'true' },
+                                timestamp: Date.now()
+                            }
+                            socket.send(JSON.stringify(msg))
+                            console.log('Sent:', msg)
                         }
-                        socket.send(JSON.stringify(msg))
                     }
                 }
 
