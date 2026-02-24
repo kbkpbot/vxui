@@ -7,8 +7,9 @@ Designed for vxui framework - a desktop UI framework using browser as display la
 Features:
 - Token authentication
 - Automatic reconnection
-- JavaScript execution from backend
+- JavaScript execution from backend with sandbox security
 - Multi-client support
+- Heartbeat/ping-pong mechanism
 
 Usage:
   <script src="htmx.js"></script>
@@ -35,12 +36,32 @@ Usage:
     var isAuthenticated = false
     var clientId = null
     var token = null
+    var heartbeatInterval = null
+    var lastPongTime = null
 
     // Configuration
     var config = {
         reconnectDelay: 'full-jitter',
         connectTimeout: 5000,
-        debug: true
+        heartbeatInterval: 30000,  // 30 seconds
+        pongTimeout: 60000,        // 60 seconds without pong = stale connection
+        debug: false,
+        // UI notification settings
+        showConnectionStatus: true,  // Show connection status overlay
+        statusPosition: 'top-right'  // Position: 'top-right', 'top-left', 'bottom-right', 'bottom-left'
+    }
+
+    // Connection status element
+    var statusElement = null
+
+    // JavaScript Sandbox Configuration (received from backend)
+    var jsSandbox = {
+        enabled: true,
+        timeout_ms: 5000,
+        max_result_size: 1048576,  // 1MB
+        allow_eval: false,
+        allowed_apis: ['document.*', 'window.location.*', 'console.*', 'localStorage.*', 'sessionStorage.*'],
+        forbidden_patterns: ['eval(', 'Function(', 'setTimeout(', 'setInterval(', 'XMLHttpRequest', 'fetch(', 'WebSocket', 'import(']
     }
 
     /**
@@ -114,6 +135,139 @@ Usage:
         return 1000
     }
 
+    // =============================================================================
+    // Connection Status UI
+    // =============================================================================
+
+    /**
+     * Get position styles for status element
+     */
+    function getStatusPositionStyles() {
+        var positions = {
+            'top-right': 'top: 20px; right: 20px;',
+            'top-left': 'top: 20px; left: 20px;',
+            'bottom-right': 'bottom: 20px; right: 20px;',
+            'bottom-left': 'bottom: 20px; left: 20px;'
+        }
+        return positions[config.statusPosition] || positions['top-right']
+    }
+
+    /**
+     * Create the status indicator element
+     */
+    function createStatusElement() {
+        if (statusElement) {
+            return statusElement
+        }
+
+        statusElement = document.createElement('div')
+        statusElement.id = 'vxui-connection-status'
+        statusElement.style.cssText = [
+            'position: fixed;',
+            getStatusPositionStyles(),
+            'padding: 12px 20px;',
+            'border-radius: 8px;',
+            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+            'font-size: 14px;',
+            'font-weight: 500;',
+            'z-index: 99999;',
+            'transition: all 0.3s ease;',
+            'opacity: 0;',
+            'transform: translateY(-10px);',
+            'pointer-events: none;',
+            'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);'
+        ].join(' ')
+
+        document.body.appendChild(statusElement)
+        return statusElement
+    }
+
+    /**
+     * Show connection status with message and type
+     * @param {string} message - Status message
+     * @param {string} type - 'connecting', 'connected', 'disconnected', 'error'
+     */
+    function showStatus(message, type) {
+        if (!config.showConnectionStatus) {
+            return
+        }
+
+        var el = createStatusElement()
+        if (!el) return
+
+        var styles = {
+            connecting: {
+                bg: 'background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);',
+                color: 'color: #333;'
+            },
+            connected: {
+                bg: 'background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);',
+                color: 'color: white;'
+            },
+            disconnected: {
+                bg: 'background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);',
+                color: 'color: white;'
+            },
+            error: {
+                bg: 'background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);',
+                color: 'color: white;'
+            }
+        }
+
+        var style = styles[type] || styles.disconnected
+        
+        // Add spinner for connecting state
+        var spinnerHtml = type === 'connecting' 
+            ? '<span style="display: inline-block; width: 14px; height: 14px; margin-right: 8px; border: 2px solid #333; border-top-color: transparent; border-radius: 50%; animation: vxui-spin 1s linear infinite;"></span>'
+            : ''
+
+        el.innerHTML = spinnerHtml + message
+        el.style.cssText = [
+            'position: fixed;',
+            getStatusPositionStyles(),
+            'padding: 12px 20px;',
+            'border-radius: 8px;',
+            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+            'font-size: 14px;',
+            'font-weight: 500;',
+            'z-index: 99999;',
+            'transition: all 0.3s ease;',
+            style.bg,
+            style.color,
+            'opacity: 1;',
+            'transform: translateY(0);',
+            'pointer-events: auto;',
+            'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);'
+        ].join(' ')
+
+        // Add keyframe animation for spinner if not exists
+        if (!document.getElementById('vxui-spin-style')) {
+            var styleEl = document.createElement('style')
+            styleEl.id = 'vxui-spin-style'
+            styleEl.textContent = '@keyframes vxui-spin { to { transform: rotate(360deg); } }'
+            document.head.appendChild(styleEl)
+        }
+    }
+
+    /**
+     * Hide the status indicator
+     */
+    function hideStatus() {
+        if (statusElement) {
+            statusElement.style.opacity = '0'
+            statusElement.style.transform = 'translateY(-10px)'
+        }
+    }
+
+    /**
+     * Show status briefly then hide (for success messages)
+     */
+    function flashStatus(message, type, duration) {
+        duration = duration || 2000
+        showStatus(message, type)
+        setTimeout(hideStatus, duration)
+    }
+
     /**
      * Convert parameters to plain object
      */
@@ -145,6 +299,98 @@ Usage:
     }
 
     /**
+     * Validate JavaScript code against sandbox rules
+     */
+    function validateJsCode(script) {
+        if (!jsSandbox.enabled) {
+            return { valid: true }
+        }
+
+        var scriptLower = script.toLowerCase()
+        
+        // Check forbidden patterns
+        for (var i = 0; i < jsSandbox.forbidden_patterns.length; i++) {
+            var pattern = jsSandbox.forbidden_patterns[i].toLowerCase()
+            if (scriptLower.indexOf(pattern) !== -1) {
+                return { 
+                    valid: false, 
+                    error: 'Forbidden pattern found: ' + jsSandbox.forbidden_patterns[i] 
+                }
+            }
+        }
+
+        return { valid: true }
+    }
+
+    /**
+     * Execute JavaScript safely using Function constructor instead of eval
+     */
+    function executeJsSafely(script) {
+        var result = ''
+        var error = null
+
+        // Validate against sandbox rules
+        var validation = validateJsCode(script)
+        if (!validation.valid) {
+            return { result: '', error: validation.error }
+        }
+
+        try {
+            // Use Function constructor for slightly better isolation than eval
+            // This is still not fully secure but better than direct eval
+            var fn
+            if (jsSandbox.allow_eval) {
+                // Only use eval if explicitly allowed
+                fn = new Function('return (' + script + ')')
+            } else {
+                // Wrap in a controlled context
+                fn = new Function(
+                    'document', 
+                    'console', 
+                    'localStorage', 
+                    'sessionStorage',
+                    'location',
+                    '"use strict"; return (' + script + ')'
+                )
+            }
+            
+            result = fn.call(
+                null, 
+                document, 
+                console, 
+                localStorage, 
+                sessionStorage,
+                window.location
+            )
+            
+            if (result === undefined || result === null) {
+                result = ''
+            } else if (typeof result === 'object') {
+                try {
+                    result = JSON.stringify(result)
+                } catch (e) {
+                    result = String(result)
+                }
+            } else {
+                result = String(result)
+            }
+
+            // Check result size
+            if (jsSandbox.enabled && result.length > jsSandbox.max_result_size) {
+                return { 
+                    result: '', 
+                    error: 'Result exceeds maximum size (' + result.length + ' > ' + jsSandbox.max_result_size + ')' 
+                }
+            }
+        } catch (e) {
+            error = e.message || String(e)
+            log('JS execution error:', error)
+        }
+
+        return { result: result, error: error }
+    }
+
+    /**
      * Send authentication message
      */
     function sendAuth() {
@@ -165,6 +411,49 @@ Usage:
     }
 
     /**
+     * Start heartbeat mechanism
+     */
+    function startHeartbeat() {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+        }
+        
+        lastPongTime = Date.now()
+        
+        heartbeatInterval = setInterval(function() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return
+            }
+
+            // Check if connection is stale (no pong for too long)
+            if (lastPongTime && (Date.now() - lastPongTime > config.pongTimeout)) {
+                log('Connection stale, no pong received for', config.pongTimeout, 'ms')
+                socket.close(1006, 'Connection stale')
+                return
+            }
+
+            // Send ping
+            var pingMsg = {
+                cmd: 'ping',
+                client_id: clientId,
+                timestamp: Date.now()
+            }
+            socket.send(JSON.stringify(pingMsg))
+            log('Sent heartbeat ping')
+        }, config.heartbeatInterval)
+    }
+
+    /**
+     * Stop heartbeat mechanism
+     */
+    function stopHeartbeat() {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+            heartbeatInterval = null
+        }
+    }
+
+    /**
      * Handle incoming command messages
      */
     function handleCommand(msg) {
@@ -172,46 +461,94 @@ Usage:
             case 'auth_ok':
                 isAuthenticated = true
                 clientId = msg.client_id
+                
+                // Update sandbox config from server
+                if (msg.js_sandbox) {
+                    try {
+                        var serverSandbox = JSON.parse(msg.js_sandbox)
+                        jsSandbox.enabled = serverSandbox.enabled !== false
+                        jsSandbox.timeout_ms = serverSandbox.timeout_ms || 5000
+                        jsSandbox.max_result_size = serverSandbox.max_result_size || 1048576
+                        jsSandbox.allow_eval = serverSandbox.allow_eval === true
+                        if (serverSandbox.allowed_apis) {
+                            jsSandbox.allowed_apis = serverSandbox.allowed_apis
+                        }
+                        if (serverSandbox.forbidden_patterns) {
+                            jsSandbox.forbidden_patterns = serverSandbox.forbidden_patterns
+                        }
+                        log('Updated JS sandbox config from server:', jsSandbox)
+                    } catch (e) {
+                        log('Failed to parse js_sandbox config:', e)
+                    }
+                }
+                
                 log('Authentication successful, client_id:', clientId)
+                startHeartbeat()
                 processQueue()
+                
+                // Show connected status briefly
+                flashStatus('Connected', 'connected', 1500)
+                
                 api.triggerEvent(document.body, 'vxui:authenticated', { clientId: clientId })
                 break
             
             case 'run_js':
-                executeJs(msg.js_id, msg.script)
+                var execution = executeJsSafely(msg.script)
+                var response = {
+                    cmd: 'js_result',
+                    js_id: msg.js_id,
+                    result: execution.result,
+                    error: execution.error
+                }
+                socket.send(JSON.stringify(response))
+                break
+            
+            case 'ping':
+                // Respond to server ping
+                var pongResponse = {
+                    cmd: 'pong',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                }
+                socket.send(JSON.stringify(pongResponse))
+                log('Sent pong response')
+                break
+            
+            case 'pong':
+                // Server acknowledged our ping
+                lastPongTime = Date.now()
+                log('Received pong from server')
+                break
+            
+            case 'reload':
+                // Hot reload - refresh the page
+                log('Received reload command, refreshing page...')
+                showStatus('Reloading...', 'connecting')
+                setTimeout(function() {
+                    location.reload()
+                }, 300)
                 break
         }
     }
 
     /**
-     * Execute JavaScript and return result
+     * Notify server that client is closing
      */
-    function executeJs(jsId, script) {
-        var result = ''
-        var error = null
-        
-        try {
-            result = eval(script)
-            if (result === undefined) {
-                result = ''
+    function notifyClose() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            var closeMsg = {
+                cmd: 'client_close',
+                client_id: clientId
             }
-            if (typeof result === 'object') {
-                result = JSON.stringify(result)
-            }
-            result = String(result)
-        } catch (e) {
-            error = e.message
-            log('JS execution error:', error)
+            socket.send(JSON.stringify(closeMsg))
+            log('Sent client_close notification')
         }
-
-        var response = {
-            cmd: 'js_result',
-            js_id: jsId,
-            result: result,
-            error: error
-        }
-        socket.send(JSON.stringify(response))
     }
+
+    // Register beforeunload to notify server on window close
+    window.addEventListener('beforeunload', function() {
+        notifyClose()
+    })
 
     /**
      * Initialize WebSocket connection
@@ -232,6 +569,9 @@ Usage:
         try {
             socket = new WebSocket(wsUrl)
 
+            // Show connecting status
+            showStatus('Connecting...', 'connecting')
+
             socket.onopen = function(e) {
                 log('WebSocket connected')
                 isConnecting = false
@@ -250,6 +590,10 @@ Usage:
                 isAuthenticated = false
                 socket = null
                 socketWrapper = null
+                stopHeartbeat()
+
+                // Show disconnected status
+                showStatus('Disconnected - Reconnecting...', 'disconnected')
 
                 api.triggerEvent(document.body, 'vxui:wsClose', { code: e.code, reason: e.reason })
 
@@ -259,6 +603,7 @@ Usage:
                     log('Reconnecting in', delay, 'ms')
                     setTimeout(function() {
                         retryCount++
+                        showStatus('Reconnecting (attempt ' + retryCount + ')...', 'connecting')
                         initWebSocket()
                     }, delay)
                 }
@@ -267,6 +612,9 @@ Usage:
             socket.onerror = function(e) {
                 log('WebSocket error', e)
                 isConnecting = false
+
+                // Show error status
+                showStatus('Connection Error', 'error')
 
                 api.triggerErrorEvent(document.body, 'vxui:wsError', { error: e })
 
@@ -541,6 +889,7 @@ Usage:
         isAuthenticated: function() { return isAuthenticated },
         getClientId: function() { return clientId },
         reconnect: function() {
+            stopHeartbeat()
             if (socket) {
                 socket.close()
             }
@@ -549,8 +898,46 @@ Usage:
         setDebug: function(enabled) {
             config.debug = enabled
         },
+        getSandboxConfig: function() { return jsSandbox },
+        setSandboxConfig: function(newConfig) {
+            Object.assign(jsSandbox, newConfig)
+        },
         runJs: function(script) {
-            return eval(script)
+            var result = executeJsSafely(script)
+            return result.error ? { error: result.error } : { result: result.result }
+        },
+        // Heartbeat controls
+        getHeartbeatInterval: function() { return config.heartbeatInterval },
+        setHeartbeatInterval: function(ms) { 
+            config.heartbeatInterval = ms
+            if (isAuthenticated) {
+                startHeartbeat()
+            }
+        },
+        // Connection status UI controls
+        showStatus: showStatus,
+        hideStatus: hideStatus,
+        setShowConnectionStatus: function(enabled) {
+            config.showConnectionStatus = enabled
+            if (!enabled) {
+                hideStatus()
+            }
+        },
+        setStatusPosition: function(position) {
+            config.statusPosition = position
+            if (statusElement) {
+                statusElement.style.cssText = statusElement.style.cssText.replace(
+                    /(top|bottom):\s*\d+px;\s*(left|right):\s*\d+px;/,
+                    getStatusPositionStyles()
+                )
+            }
+        },
+        getConnectionState: function() {
+            if (!socket) return 'disconnected'
+            if (socket.readyState === WebSocket.CONNECTING) return 'connecting'
+            if (socket.readyState === WebSocket.OPEN) return isAuthenticated ? 'authenticated' : 'connected'
+            if (socket.readyState === WebSocket.CLOSING) return 'closing'
+            return 'closed'
         }
     }
 

@@ -519,8 +519,36 @@ Usage:
                 lastPongTime = Date.now()
                 log('Received pong from server')
                 break
+            
+            case 'reload':
+                // Hot reload - refresh the page
+                log('Received reload command, refreshing page...')
+                showStatus('Reloading...', 'connecting')
+                setTimeout(function() {
+                    location.reload()
+                }, 300)
+                break
         }
     }
+
+    /**
+     * Notify server that client is closing
+     */
+    function notifyClose() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            var closeMsg = {
+                cmd: 'client_close',
+                client_id: clientId
+            }
+            socket.send(JSON.stringify(closeMsg))
+            log('Sent client_close notification')
+        }
+    }
+
+    // Register beforeunload to notify server on window close
+    window.addEventListener('beforeunload', function() {
+        notifyClose()
+    })
 
     /**
      * Initialize WebSocket connection

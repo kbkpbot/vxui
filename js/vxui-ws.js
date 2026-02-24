@@ -532,6 +532,25 @@ Usage:
     }
 
     /**
+     * Notify server that client is closing
+     */
+    function notifyClose() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            var closeMsg = {
+                cmd: 'client_close',
+                client_id: clientId
+            }
+            socket.send(JSON.stringify(closeMsg))
+            log('Sent client_close notification')
+        }
+    }
+
+    // Register beforeunload to notify server on window close
+    window.addEventListener('beforeunload', function() {
+        notifyClose()
+    })
+
+    /**
      * Initialize WebSocket connection
      */
     function initWebSocket() {
