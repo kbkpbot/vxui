@@ -18,6 +18,7 @@
 		<input type="text" name="message" style="width:500px;" value="This Is The Message" /> 
 		<input type="text" name="messagexx" style="width:500px;" value="This Is The Messagexx" /> 
 		<button hx-trigger="click, keyup[altKey&amp;&amp;shiftKey&amp;&amp;key==&#39;D&#39;] from:body" hx-post="/doit"
+			hx-swap="none"
 			id="doit">Do It! (alt-shift-D)</button> 
 		<input type="submit" value="Send" class="btn primary" id="submit" hx-trigger="click" hx-post="/submit" />
 	</div>
