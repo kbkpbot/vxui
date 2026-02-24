@@ -1025,46 +1025,121 @@ pub fn run[T](mut app T, html_filename string) ! {
 		file_mtimes = scan_file_mtimes(watch_dirs)
 	}
 
-	mut ws_state := websocket.State.open
-	mut last_client_time := time.now()
-	mut last_hot_reload_check := time.now()
-	mut had_clients := false // Track if we ever had clients
+		mut ws_state := websocket.State.open
 
-	for {
-		ws_state = app.ws.get_state()
+		mut last_client_time := time.now()
 
-		app.mu.rlock()
-		client_count := app.clients.len
-		app.mu.runlock()
+		mut last_hot_reload_check := time.now()
 
-		if ws_state == .closed {
-			app.logger.info('WebSocket server closed')
-			break
-		}
+		mut last_ping_time := time.now()
 
-		if client_count == 0 {
-			// If we had clients before and now none, exit immediately
-			if had_clients {
-				app.logger.info('All clients disconnected, shutting down')
+		mut had_clients := false  // Track if we ever had clients
+
+	
+
+		for {
+
+			ws_state = app.ws.get_state()
+
+	
+
+			app.mu.rlock()
+
+			client_count := app.clients.len
+
+			app.mu.runlock()
+
+	
+
+			if ws_state == .closed {
+
+				app.logger.info('WebSocket server closed')
+
 				break
-			}
-			// Never had clients, wait for timeout
-			elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
-			if elapsed_ms > app.config.close_timer_ms {
-				app.logger.info('No clients connected for ${app.config.close_timer_ms}ms, shutting down')
-				break
-			}
-		} else {
-			had_clients = true
-			last_client_time = time.now()
-		}
 
-		app.check_client_timeouts()
+			}
 
-		// Hot reload check
-		if app.config.dev.enabled && app.config.dev.hot_reload && client_count > 0 {
-			now := time.now()
-			if now.unix_milli() - last_hot_reload_check.unix_milli() >= app.config.dev.watch_ms {
+	
+
+			if client_count == 0 {
+
+				// If we had clients before and now none, exit immediately
+
+				if had_clients {
+
+					app.logger.info('All clients disconnected, shutting down')
+
+					break
+
+				}
+
+				// Never had clients, wait for timeout
+
+				elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
+
+				if elapsed_ms > app.config.close_timer_ms {
+
+					app.logger.info('No clients connected for ${app.config.close_timer_ms}ms, shutting down')
+
+					break
+
+				}
+
+			} else {
+
+				had_clients = true
+
+				last_client_time = time.now()
+
+			}
+
+	
+
+			app.check_client_timeouts()
+
+	
+
+					// Heartbeat: send ping to all clients periodically
+
+	
+
+					now := time.now()
+
+	
+
+					if client_count > 0 && now.unix_milli() - last_ping_time.unix_milli() >= app.config.ws_ping_interval_ms {
+
+	
+
+						last_ping_time = now
+
+	
+
+						app.ping_all_clients()
+
+	
+
+						app.logger.debug('Sent heartbeat ping to all clients')
+
+	
+
+					}
+
+	
+
+			
+
+	
+
+					// Hot reload check
+
+	
+
+					if app.config.dev.enabled && app.config.dev.hot_reload && client_count > 0 {
+
+	
+
+						if now.unix_milli() - last_hot_reload_check.unix_milli() >= app.config.dev.watch_ms {
 				last_hot_reload_check = now
 				new_mtimes := scan_file_mtimes(watch_dirs)
 				if has_files_changed(file_mtimes, new_mtimes) {
