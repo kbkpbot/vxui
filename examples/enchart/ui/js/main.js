@@ -4,13 +4,14 @@ function created() {
 	mainChart = echarts.init(document.getElementById('chart'));
 	mainChart.setOption(chartOption);
 
-	// Listen for htmx afterRequest event to handle chart data
-	document.body.addEventListener('htmx:afterRequest', function(evt) {
-		if (evt.detail.pathInfo.requestPath === '/get') {
-			var xhr = evt.detail.xhr;
-			if (xhr && xhr.response) {
+	// Listen for htmx afterSwap event to handle chart data
+	document.body.addEventListener('htmx:afterSwap', function(evt) {
+		var target = evt.detail.target;
+		if (target && target.id === 'data') {
+			var responseText = target.textContent || target.innerText;
+			if (responseText) {
 				try {
-					var it = JSON.parse(xhr.response);
+					var it = JSON.parse(responseText);
 					if (it.get === 'hashtable') {
 						renderChart(mainChart, it.dat.time_axis, {
 							"key": it.dat.key,
