@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Manager - vxui</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+            width: 100%;
+            max-width: 700px;
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 26px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            opacity: 0.7;
+            font-size: 14px;
+        }
+
+        .upload-section {
+            padding: 25px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+
+        .drop-zone {
+            border: 3px dashed #ccc;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #667eea;
+            background: #f0f3ff;
+        }
+
+        .drop-zone.dragover {
+            transform: scale(1.02);
+        }
+
+        .drop-zone-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .drop-zone-text {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .drop-zone-text small {
+            display: block;
+            margin-top: 8px;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 25px;
+            background: #f0f0f0;
+            font-size: 13px;
+            color: #666;
+        }
+
+        #file-list {
+            list-style: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #file-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s;
+        }
+
+        #file-list li:hover {
+            background-color: #fafafa;
+        }
+
+        #file-list li.empty {
+            justify-content: center;
+            color: #aaa;
+            font-style: italic;
+            padding: 30px;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            display: block;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .file-meta, .file-time {
+            display: inline-block;
+            font-size: 12px;
+            color: #888;
+            margin-right: 15px;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .file-actions button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-actions button:not(.delete) {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .file-actions button:not(.delete):hover {
+            background: #bbdefb;
+        }
+
+        .file-actions button.delete {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .file-actions button.delete:hover {
+            background: #ffcdd2;
+        }
+
+        #message {
+            padding: 15px 25px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        #message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        #message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        #download-area {
+            display: none;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            margin-top: 15px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+    <script src="./js/htmx.js"></script>
+    <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+    <div class="container">
+        <header>
+            <h1>File Manager</h1>
+            <p>Upload and manage files with vxui</p>
+        </header>
+
+        <div class="upload-section">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📁</div>
+                <div class="drop-zone-text">
+                    Drop files here or click to upload
+                    <small>Maximum file size: 10MB</small>
+                </div>
+                <input type="file" class="file-input" id="fileInput" multiple>
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-bar-fill" id="progressFill"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="stats" class="stats">
+            <span>0 files</span>
+            <span>Total: 0 B</span>
+        </div>
+
+        <ul id="file-list">
+            <li class="empty">No files uploaded yet</li>
+        </ul>
+
+        <div id="message"></div>
+        <div id="download-area"></div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+
+        // Click to upload
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Drag and drop handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+
+            progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+
+            let processed = 0;
+            const total = files.length;
+
+            Array.from(files).forEach((file, index) => {
+                if (file.size > 10 * 1024 * 1024) {
+                    alert(`File "${file.name}" is too large (max 10MB)`);
+                    processed++;
+                    updateProgress(processed, total);
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    // Send to backend via htmx
+                    const formData = new FormData();
+                    formData.append('filename', file.name);
+                    formData.append('filedata', e.target.result);
+                    formData.append('mimetype', file.type || 'application/octet-stream');
+
+                    // Use htmx to send
+                    htmx.trigger(document.body, 'upload-file', {
+                        filename: file.name,
+                        filedata: e.target.result,
+                        mimetype: file.type || 'application/octet-stream'
+                    });
+
+                    processed++;
+                    updateProgress(processed, total);
+
+                    if (processed === total) {
+                        setTimeout(() => {
+                            progressBar.style.display = 'none';
+                        }, 500);
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function updateProgress(processed, total) {
+            const percent = (processed / total) * 100;
+            progressFill.style.width = percent + '%';
+        }
+
+        // Listen for custom upload event and send via WebSocket
+        document.body.addEventListener('upload-file', (e) => {
+            const params = e.detail;
+            
+            // Create form and submit via htmx
+            fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    parameters: {
+                        filename: params.filename,
+                        filedata: params.filedata,
+                        mimetype: params.mimetype
+                    }
+                })
+            }).then(response => response.text())
+              .then(html => {
+                  // Parse and update DOM
+                  const parser = new DOMParser();
+                  const doc = parser.parseFromString(html, 'text/html');
+                  
+                  // Update file list
+                  const fileList = doc.getElementById('file-list');
+                  if (fileList) {
+                      document.getElementById('file-list').innerHTML = fileList.innerHTML;
+                  }
+                  
+                  // Update message
+                  const message = doc.getElementById('message');
+                  if (message) {
+                      document.getElementById('message').innerHTML = message.innerHTML;
+                      document.getElementById('message').className = message.className;
+                  }
+                  
+                  // Update stats
+                  const stats = doc.getElementById('stats');
+                  if (stats) {
+                      document.getElementById('stats').innerHTML = stats.innerHTML;
+                  }
+              });
+        });
+    </script>
+</body>
+</html>

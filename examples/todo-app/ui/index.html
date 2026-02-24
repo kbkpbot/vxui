@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App - vxui</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 500px;
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        .input-section {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .input-section form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-section input[type="text"] {
+            flex: 1;
+            padding: 14px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .input-section input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        .input-section button {
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .input-section button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .input-section button:active {
+            transform: translateY(0);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            font-size: 13px;
+            color: #666;
+            border-bottom: 1px solid #eee;
+        }
+
+        #todo-list {
+            list-style: none;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        #todo-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s;
+        }
+
+        #todo-list li:hover {
+            background-color: #fafafa;
+        }
+
+        #todo-list li.completed .todo-text {
+            text-decoration: line-through;
+            color: #aaa;
+        }
+
+        #todo-list li.empty {
+            justify-content: center;
+            color: #aaa;
+            font-style: italic;
+            padding: 40px 20px;
+        }
+
+        .todo-text {
+            flex: 1;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .todo-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .todo-actions button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .todo-actions button:not(.delete) {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .todo-actions button:not(.delete):hover {
+            background: #c8e6c9;
+        }
+
+        .todo-actions button.delete {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .todo-actions button.delete:hover {
+            background: #ffcdd2;
+        }
+
+        #clear-btn {
+            padding: 15px 20px;
+            text-align: center;
+            border-top: 1px solid #eee;
+        }
+
+        #clear-btn button {
+            padding: 10px 20px;
+            background: #f5f5f5;
+            color: #666;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        #clear-btn button:hover {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .error {
+            padding: 12px 20px;
+            background: #ffebee;
+            color: #c62828;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .error-hidden {
+            display: none;
+        }
+
+        /* Loading indicator */
+        .htmx-request .todo-actions button {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+    <script src="./js/htmx.js"></script>
+    <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+    <div class="container">
+        <header>
+            <h1>Todo App</h1>
+            <p>Built with vxui + htmx</p>
+        </header>
+
+        <div class="input-section">
+            <form hx-post="/add" hx-target="#todo-list" hx-swap="outerHTML">
+                <input type="text" id="todo-input" name="text" placeholder="What needs to be done?" autofocus required>
+                <button type="submit">Add</button>
+            </form>
+        </div>
+
+        <div id="stats" class="stats">
+            <span>0 items left</span>
+            <span>0 completed</span>
+        </div>
+
+        <ul id="todo-list">
+            <li class="empty">No todos yet! Add one above.</li>
+        </ul>
+
+        <div id="clear-btn"></div>
+
+        <div id="error" class="error-hidden"></div>
+    </div>
+
+    <script>
+        // Focus input after htmx swaps
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.target.id === 'todo-list') {
+                document.getElementById('todo-input').focus();
+            }
+        });
+    </script>
+</body>
+</html>

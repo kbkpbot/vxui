@@ -305,8 +305,8 @@ pub mut:
 pub struct RequestConfig {
 pub mut:
 	timeout_ms     int = 30000 // Request timeout in milliseconds
-	retry_count    int = 0     // Number of retries on failure
-	retry_delay_ms int = 1000  // Delay between retries
+	retry_count    int        // Number of retries on failure
+	retry_delay_ms int = 1000 // Delay between retries
 }
 
 // LogConfig holds logging settings
@@ -326,6 +326,9 @@ pub mut:
 	// Application settings
 	app_name string = 'vxui-app'
 
+	// Development settings
+	dev DevConfig // Development mode settings
+
 	// Connection settings
 	close_timer_ms      int = 5000  // Close app after N ms with no browser
 	ws_ping_interval_ms int = 30000 // WebSocket ping interval
@@ -333,11 +336,11 @@ pub mut:
 	reconnect           ReconnectConfig // Reconnection settings
 
 	// Security settings
-	token        string = ''   // Security token (auto-generated if empty)
+	token        string // Security token (auto-generated if empty)
 	require_auth bool   = true // Require token authentication
 
 	// Client settings
-	multi_client bool = false // Allow multiple browser clients
+	multi_client bool // Allow multiple browser clients
 	max_clients  int  = 10    // Maximum concurrent clients (0 = unlimited)
 	rate_limit   RateLimitConfig // Rate limiting settings
 
@@ -357,6 +360,17 @@ pub mut:
 
 	// Logging settings
 	log LogConfig
+}
+
+// DevConfig holds development mode settings
+pub struct DevConfig {
+pub mut:
+	enabled       bool        // Enable development mode
+	hot_reload    bool = true // Enable hot reload (refresh browser on file change)
+	watch_dirs    []string    // Directories to watch for changes (default: html file dir)
+	watch_ms      int = 500   // File watch interval in milliseconds
+	auto_devtools bool = true // Auto-open DevTools in dev mode
+	show_errors   bool = true // Show error overlay in browser
 }
 
 // =============================================================================
@@ -972,6 +986,12 @@ pub fn run[T](mut app T, html_filename string) ! {
 	app.token = app.config.token
 	app.multi_client = app.config.multi_client
 
+	// Apply dev mode settings
+	if app.config.dev.enabled {
+		app.config.browser.devtools = app.config.dev.auto_devtools
+		app.logger.info('Development mode enabled')
+	}
+
 	start_browser_with_config(html_filename, app.ws_port, app.config.token, app.config.window,
 		app.config.browser)!
 
@@ -981,8 +1001,22 @@ pub fn run[T](mut app T, html_filename string) ! {
 	app.trigger_event(EventType.after_start, '', 'Application started', {}, none, none,
 		none)
 
+	// Hot reload: track file modification times
+	mut file_mtimes := map[string]time.Time{}
+	mut watch_dirs := app.config.dev.watch_dirs.clone()
+	if watch_dirs.len == 0 {
+		// Default to the directory containing the HTML file
+		watch_dirs << os.dir(os.abs_path(html_filename))
+	}
+
+	if app.config.dev.enabled && app.config.dev.hot_reload {
+		app.logger.info('Hot reload watching: ${watch_dirs}')
+		file_mtimes = scan_file_mtimes(watch_dirs)
+	}
+
 	mut ws_state := websocket.State.open
 	mut last_client_time := time.now()
+	mut last_hot_reload_check := time.now()
 
 	for {
 		ws_state = app.ws.get_state()
@@ -1007,6 +1041,22 @@ pub fn run[T](mut app T, html_filename string) ! {
 		}
 
 		app.check_client_timeouts()
+
+		// Hot reload check
+		if app.config.dev.enabled && app.config.dev.hot_reload && client_count > 0 {
+			now := time.now()
+			if now.unix_milli() - last_hot_reload_check.unix_milli() >= app.config.dev.watch_ms {
+				last_hot_reload_check = now
+				new_mtimes := scan_file_mtimes(watch_dirs)
+				if has_files_changed(file_mtimes, new_mtimes) {
+					app.logger.info('Files changed, triggering hot reload')
+					file_mtimes = new_mtimes
+					app.trigger_hot_reload() or {
+						app.logger.warn('Hot reload failed: ${err}')
+					}
+				}
+			}
+		}
 
 		time.sleep(10 * time.millisecond)
 	}
@@ -1412,4 +1462,75 @@ pub fn (ctx Context) get_token() string {
 // get_config returns the current configuration
 pub fn (ctx Context) get_config() Config {
 	return ctx.config
+}
+
+// =============================================================================
+// Hot Reload Support
+// =============================================================================
+
+// trigger_hot_reload sends a reload command to all connected clients
+pub fn (mut ctx Context) trigger_hot_reload() ! {
+	ctx.mu.rlock()
+	mut connections := []&websocket.Client{}
+	for _, client in ctx.clients {
+		if conn := client.connection {
+			connections << conn
+		}
+	}
+	ctx.mu.runlock()
+
+	mut cmd := map[string]json2.Any{}
+	cmd['cmd'] = json2.Any('reload')
+	cmd['timestamp'] = json2.Any(time.now().unix_milli())
+	msg := json2.encode(cmd)
+
+	for mut conn in connections {
+		conn.write(msg.bytes(), .text_frame)!
+	}
+}
+
+// scan_file_mtimes scans directories and returns file modification times
+fn scan_file_mtimes(dirs []string) map[string]time.Time {
+	mut mtimes := map[string]time.Time{}
+	for dir in dirs {
+		scan_dir_mtimes(dir, mut mtimes)
+	}
+	return mtimes
+}
+
+// scan_dir_mtimes recursively scans a directory for file modification times
+fn scan_dir_mtimes(dir string, mut mtimes map[string]time.Time) {
+	files := os.ls(dir) or { return }
+	for file in files {
+		path := os.join_path(dir, file)
+		if os.is_dir(path) {
+			// Skip hidden directories and common ignore patterns
+			if !file.starts_with('.') && file != 'node_modules' && file != 'dist' && file != 'build' {
+				scan_dir_mtimes(path, mut mtimes)
+			}
+		} else {
+			// Only watch relevant file types
+			ext := file.all_after_last('.').to_lower()
+			if ext in ['html', 'htm', 'css', 'js', 'ts', 'vue', 'svelte', 'json', 'svg', 'png', 'jpg', 'gif'] {
+				info := os.stat(path) or { continue }
+				mtimes[path] = time.unix(info.mtime)
+			}
+		}
+	}
+}
+
+// has_files_changed compares two mtimes maps and returns true if any file changed
+fn has_files_changed(old map[string]time.Time, new map[string]time.Time) bool {
+	// Check for new or modified files
+	for path, new_time in new {
+		old_time := old[path] or { return true } // New file
+		if new_time.unix_milli() != old_time.unix_milli() {
+			return true
+		}
+	}
+	// Check for deleted files (only if old had more files)
+	if old.len > new.len {
+		return true
+	}
+	return false
 }

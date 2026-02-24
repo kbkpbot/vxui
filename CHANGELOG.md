@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-02-24
+
+### Added
+
+- **Error Chain Support**: Structured error handling with cause tracking
+  - `VxuiErrorDetail.cause` field for underlying errors
+  - `with_cause()` method to chain errors
+  - `with_detail()` method to add context details
+  - `full_message()` for complete error chain display
+- **Safari Browser Support**: macOS Safari detection and launch
+  - `BrowserType` enum for browser identification
+  - `detect_browser_type()` function
+  - `is_app_mode_supported()` helper
+- **Connection Status UI**: Visual feedback for WebSocket state
+  - Auto-show connecting/connected/disconnected/error states
+  - Configurable position (top-right, top-left, bottom-right, bottom-left)
+  - New `vxuiWs` APIs: `showStatus()`, `hideStatus()`, `getConnectionState()`
+
+### Changed
+
+- **API Unification**: Consolidated configuration in `Context.config`
+  - Removed redundant fields: `window`, `browser`, `js_sandbox`, `js_poll_ms`, `close_timer_ms`
+  - Added deprecation warnings for `token` and `multi_client` (backward compatible)
+  - All setters now update `config` struct
+
+### Fixed
+
+- `validate_js_code()` now respects `sandbox.enabled` flag
+
+### Tests
+
+- Added route matching tests (multi-verb, case handling)
+- Added security tests (HTML/JS/attr escape, email validation)
+- Added JS sandbox tests
+- Added request building tests
+- Added config integration tests
+
+## [0.4.0] - 2026-02-24
+
+### Added
+
+- **Middleware System**: Request/response processing pipeline
+  - `Middleware` type and `MiddlewareContext` struct
+  - `use()` method to add middleware
+  - `use_logger()` built-in logging middleware
+  - `use_auth()` authentication middleware helper
+- **Event System**: Lifecycle hooks for app events
+  - `EventType` enum: before_start, after_start, client_connecting, etc.
+  - `on_event()` to register handlers
+  - `EventData` struct with full context
+- **Typed Errors**: Structured error handling
+  - `VxuiError` enum with 20+ error codes
+  - `VxuiErrorDetail` struct with code, message, details
+  - Error-specific handling throughout codebase
+- **Rate Limiting**: Request rate control
+  - `RateLimitConfig` with max_requests, window_ms, block_duration
+  - Per-client rate tracking with `RateCounter`
+- **Request/Response Types**: Type-safe message handling
+  - `Request` struct with verb, path, parameters, headers, body
+  - `Response` struct with status, headers, body
+- **Unified Configuration**: `Config` struct consolidating all settings
+  - Application, connection, security, client, JS, request, window, browser, logging
+  - `run_with_config()` for full configuration control
+- **Backoff Strategies**: Reconnection delay algorithms
+  - `BackoffStrategy` enum: constant, linear, exponential, full_jitter
+  - Configurable via `ReconnectConfig`
+
+### Changed
+
+- Major codebase refactoring with improved architecture
+- Better separation of concerns
+
 ## [0.3.0] - 2026-02-24
 
 ### Added

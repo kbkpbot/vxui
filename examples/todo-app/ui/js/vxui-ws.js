@@ -519,15 +519,6 @@ Usage:
                 lastPongTime = Date.now()
                 log('Received pong from server')
                 break
-            
-            case 'reload':
-                // Hot reload - refresh the page
-                log('Received reload command, refreshing page...')
-                showStatus('Reloading...', 'connecting')
-                setTimeout(function() {
-                    location.reload()
-                }, 300)
-                break
         }
     }
 

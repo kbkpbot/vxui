@@ -99,7 +99,6 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 	browser_type := detect_browser_type(browser_path)
 	browser_name := os.base(browser_path)
 	is_safari := browser_type == .safari
-	is_firefox := browser_type == .firefox
 	is_chrome_based := is_app_mode_supported(browser_type)
 
 	// Safari requires special handling on macOS
