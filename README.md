@@ -31,6 +31,37 @@
 
 ---
 
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td align="center"><b>Gallery Demo</b></td>
+    <td align="center"><b>Element Plus</b></td>
+  </tr>
+  <tr>
+    <td><img src="gallery.png" alt="Gallery" width="400"></td>
+    <td><img src="element-plus.png" alt="Element Plus" width="400"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Real-time Charts</b></td>
+    <td align="center"><b>Todo App</b></td>
+  </tr>
+  <tr>
+    <td><img src="enchart.png" alt="Enchart" width="400"></td>
+    <td><img src="todo.png" alt="Todo App" width="400"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>File Upload</b></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><img src="file-upload.png" alt="File Upload" width="400"></td>
+    <td></td>
+  </tr>
+</table>
+
+---
+
 ## 🚀 Features
 
 - **⚡ WebSocket-Powered** — Real-time bidirectional communication without HTTP overhead
