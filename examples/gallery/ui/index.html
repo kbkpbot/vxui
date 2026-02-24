@@ -511,11 +511,10 @@
                     <h3>Button Styles</h3>
                     <div class="btn-group">
                         <button class="btn" hx-post="/button/click">Default</button>
-                        <button class="btn btn-primary" hx-post="/button/primary">Primary</button>
-                        <button class="btn btn-success" hx-post="/button/click">Success</button>
-                        <button class="btn btn-warning" hx-post="/button/click">Warning</button>
-                        <button class="btn btn-danger" hx-post="/button/danger">Danger</button>
-                    </div>
+                                    <button class="btn btn-primary" hx-post="/button/primary" hx-swap="none">Primary</button>
+                                    <button class="btn btn-success" hx-post="/button/click" hx-swap="none">Success</button>
+                                    <button class="btn btn-warning" hx-post="/button/click" hx-swap="none">Warning</button>
+                                    <button class="btn btn-danger" hx-post="/button/danger" hx-swap="none">Danger</button>                    </div>
                     <span id="btn-result" class="result">Click a button</span>
                 </div>
                 <div>
@@ -723,7 +722,7 @@ Line 3</textarea>
                 <button class="btn btn-success" hx-post="/notify/show" hx-vals='{"type":"success"}' hx-target="#notifications">Success</button>
                 <button class="btn btn-warning" hx-post="/notify/show" hx-vals='{"type":"warning"}' hx-target="#notifications">Warning</button>
                 <button class="btn btn-danger" hx-post="/notify/show" hx-vals='{"type":"error"}' hx-target="#notifications">Error</button>
-                <button class="btn" hx-post="/notify/clear">Clear All</button>
+                <button class="btn" hx-post="/notify/clear" hx-target="#notifications">Clear All</button>
             </div>
         </div>
 
