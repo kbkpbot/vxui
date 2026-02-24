@@ -35,10 +35,12 @@
 
 - **⚡ WebSocket-Powered** — Real-time bidirectional communication without HTTP overhead
 - **🎨 Use Your Browser** — Leverage modern web technologies for beautiful UIs
-- **🔒 Secure by Default** — Built-in XSS protection and path traversal prevention
+- **🔒 Secure by Default** — Token-based authentication, XSS protection, and path traversal prevention
 - **🌐 Cross-Platform** — Linux, macOS, and Windows support with auto browser detection
 - **📦 Lightweight** — Pure V implementation, no external dependencies
-- **🎯 htmx Integration** — Seamless integration with htmx for dynamic HTML updates
+- **🎯 htmx Integration** — Seamless integration with official htmx (no modifications required)
+- **🔧 Backend-to-Frontend** — Execute JavaScript from backend with `run_js()`
+- **👥 Multi-Client Support** — Optional support for multiple browser clients
 
 ## 📋 Table of Contents
 
@@ -46,9 +48,11 @@
 - [Motivation](#-motivation)
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
+- [Features](#-features)
 - [Architecture](#-architecture)
 - [Examples](#-examples)
 - [Security](#-security)
+- [Browser Support](#-browser-support)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -128,8 +132,7 @@ fn main() {
 <html>
 <head>
     <script src="./js/htmx.js"></script>
-    <script src="./js/ajaxhook.js"></script>
-    <script src="./js/vxui-htmx.js"></script>
+    <script src="./js/vxui-ws.js"></script>
 </head>
 <body>
     <h1>Hello vxui!</h1>
@@ -159,7 +162,7 @@ v run main.v
        │ htmx events                              │ Method calls
        ▼                                          ▼
 ┌─────────────────┐                     ┌─────────────────┐
-│  vxui-htmx.js   │                     │   Route Handler │
+│  vxui-ws.js    │                     │   Route Handler │
 │  (Intercepts    │                     │   (Your code!)  │
 │   AJAX calls)   │                     │                 │
 └─────────────────┘                     └─────────────────┘
@@ -169,7 +172,7 @@ v run main.v
 
 1. **Start** — vxui finds a free port and starts a WebSocket server
 2. **Launch** — Detects and launches your system browser with the HTML file
-3. **Connect** — Browser connects to WebSocket server via `vxui-htmx.js`
+3. **Connect** — Browser connects to WebSocket server via `vxui-ws.js`
 4. **Interact** — User actions trigger WebSocket messages instead of HTTP requests
 5. **Respond** — V handlers return HTML fragments for dynamic updates
 
@@ -196,13 +199,83 @@ cd examples/test
 v run main.v
 ```
 
+## ✨ Features
+
+### Execute JavaScript from Backend
+
+Use `run_js()` to execute JavaScript in the browser and get results:
+
+```v
+// Execute on first connected client
+result := app.run_js('document.title', 5000)!  // 5 second timeout
+println('Page title: ${result}')
+
+// Execute on specific client
+result := app.run_js_client(client_id, 'alert("Hello!")', 3000)!
+```
+
+### Multi-Client Support
+
+Enable multiple browser connections:
+
+```v
+fn main() {
+    mut app := App{}
+    app.multi_client = true  // Allow multiple clients
+    vxui.run(mut app, './ui/index.html')!
+}
+
+// In your handlers:
+fn (mut app App) broadcast_msg(msg map[string]json2.Any) string {
+    // Get all connected clients
+    clients := app.get_clients()
+    
+    // Broadcast to all
+    app.broadcast('<div hx-swap-oob="true">Server update</div>')!
+    
+    return '<div>Sent to ${clients.len} clients</div>'
+}
+```
+
+### Window Management
+
+Control browser window size and position:
+
+```v
+fn main() {
+    mut app := App{}
+    app.set_window_size(1200, 800)
+    app.set_window_position(-1, -1)  // -1 = center
+    app.set_window_title('My Application')
+    vxui.run(mut app, './ui/index.html')!
+}
+```
+
 ## 🔒 Security
 
 vxui includes several security features:
 
+- **Token Authentication** — Auto-generated security token for client verification
 - **XSS Protection** — Built-in HTML/JS escaping functions
 - **Path Traversal Prevention** — Input sanitization
 - **No External Network** — WebSocket only binds to localhost
+
+### Token Authentication
+
+Every connection requires token verification:
+
+```v
+fn main() {
+    mut app := App{}
+    // Token is auto-generated, or set manually:
+    // app.token = 'my-secret-token'
+    
+    // Get token for debugging
+    println('Token: ${app.get_token()}')
+    
+    vxui.run(mut app, './ui/index.html')!
+}
+```
 
 ### Safe Output Example
 
@@ -259,7 +332,6 @@ This project is licensed under the [MIT License](LICENSE).
 
 - [V Language](https://vlang.io/) — The amazing language powering vxui
 - [htmx](https://htmx.org/) — The frontend library for dynamic HTML
-- [ajaxhook](https://github.com/wendux/ajax-hook) — AJAX interception library
 
 ## ⚠️ Alpha Notice
 

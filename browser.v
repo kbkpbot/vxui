@@ -114,6 +114,11 @@ fn get_browser_args(browser_name string) []string {
 
 // start_browser starts the browser and open the `filename`
 pub fn start_browser(filename string, vxui_ws_port u16) ! {
+	start_browser_with_token(filename, vxui_ws_port, '', WindowConfig{})!
+}
+
+// start_browser_with_token starts the browser with security token and window config
+pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string, window WindowConfig) ! {
 	// Sanitize the filename
 	safe_filename := sanitize_path(filename)!
 	abs_path := os.abs_path(safe_filename)
@@ -130,19 +135,41 @@ pub fn start_browser(filename string, vxui_ws_port u16) ! {
 	profile_path := os.join_path(os.home_dir(), '.vxui', 'browser_profile')
 	os.mkdir_all(profile_path) or { return error('Failed to create profile directory: ${err}') }
 
+	// Build URL with parameters
+	mut url_params := 'vxui_ws_port=${vxui_ws_port}'
+	if token != '' {
+		url_params += '&vxui_token=${token}'
+	}
+	if window.width > 0 {
+		url_params += '&vxui_width=${window.width}'
+	}
+	if window.height > 0 {
+		url_params += '&vxui_height=${window.height}'
+	}
+
 	// Build command arguments
 	mut cmd_args := browser.args.clone()
 	cmd_args << '--user-data-dir=${profile_path}'
 
-	// Add app-mode argument for Chrome/Chromium/Edge
+	// Add window size for Chrome-based browsers
 	is_firefox := browser.path.to_lower().contains('firefox')
 	if !is_firefox {
+		if window.width > 0 && window.height > 0 {
+			cmd_args << '--window-size=${window.width},${window.height}'
+		}
+		if window.x >= 0 && window.y >= 0 {
+			cmd_args << '--window-position=${window.x},${window.y}'
+		}
 		cmd_args << '--force-app-mode'
 		cmd_args << '--new-window'
-		cmd_args << '--app=file://${abs_path}?vxui_ws_port=${vxui_ws_port}'
+		cmd_args << '--app=file://${abs_path}?${url_params}'
 	} else {
 		// Firefox uses different approach
-		cmd_args << 'file://${abs_path}?vxui_ws_port=${vxui_ws_port}'
+		if window.width > 0 && window.height > 0 {
+			cmd_args << '--width=${window.width}'
+			cmd_args << '--height=${window.height}'
+		}
+		cmd_args << 'file://${abs_path}?${url_params}'
 	}
 
 	// Start browser process
