@@ -4,6 +4,105 @@ import os
 
 // BrowserConfig is defined in vxui.v, this file contains browser-related functions
 
+// ScreenSize holds screen dimensions
+struct ScreenSize {
+	width  int
+	height int
+}
+
+// get_screen_size returns the primary screen resolution
+fn get_screen_size() ScreenSize {
+	// Default fallback
+	default_size := ScreenSize{1920, 1080}
+
+	$if linux {
+		// Try xrandr first
+		if os.exists('/usr/bin/xrandr') {
+			result := os.execute('xrandr --query 2>/dev/null | grep " connected" | head -1')
+			if result.exit_code == 0 {
+				// Parse: "eDP-1 connected primary 1920x1080+0+0"
+				parts := result.output.split(' ')
+				for part in parts {
+					if part.contains('x') && part.contains('+') {
+						// Format: 1920x1080+0+0
+						dim_part := part.all_before('+')
+						dims := dim_part.split('x')
+						if dims.len == 2 {
+							w := dims[0].int()
+							h := dims[1].int()
+							if w > 0 && h > 0 {
+								return ScreenSize{w, h}
+							}
+						}
+					}
+				}
+			}
+		}
+		// Try xdpyinfo as fallback
+		if os.exists('/usr/bin/xdpyinfo') {
+			result := os.execute('xdpyinfo 2>/dev/null | grep dimensions')
+			if result.exit_code == 0 {
+				// Parse: "  dimensions:    1920x1080 pixels (507x285 millimeters)"
+				parts := result.output.split('x')
+				if parts.len >= 2 {
+					w_str := parts[0].trim_space().split(' ').last()
+					h_str := parts[1].all_before(' ').trim_space()
+					w := w_str.int()
+					h := h_str.int()
+					if w > 0 && h > 0 {
+						return ScreenSize{w, h}
+					}
+				}
+			}
+		}
+	} $else $if macos {
+		// macOS: use system_profiler or defaults
+		result := os.execute('system_profiler SPDisplaysDataType 2>/dev/null | grep Resolution')
+		if result.exit_code == 0 {
+			// Parse: "    Resolution: 1920 x 1080"
+			parts := result.output.split('x')
+			if parts.len >= 2 {
+				w_str := parts[0].trim_space().split(' ').last()
+				h_str := parts[1].trim_space()
+				w := w_str.int()
+				h := h_str.int()
+				if w > 0 && h > 0 {
+					return ScreenSize{w, h}
+				}
+			}
+		}
+	} $else $if windows {
+		// Windows: use wmic
+		result := os.execute('wmic desktopmonitor get screenheight,screenwidth 2>nul')
+		if result.exit_code == 0 {
+			lines := result.output.split('\n')
+			for line in lines {
+				if line.trim_space().len > 0 && !line.contains('ScreenHeight') {
+					parts := line.split(' ').filter(it.len > 0)
+					if parts.len >= 2 {
+						w := parts[0].int()
+						h := parts[1].int()
+						if w > 0 && h > 0 {
+							return ScreenSize{w, h}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return default_size
+}
+
+// calculate_center_position calculates window position to center on screen
+fn calculate_center_position(window_width int, window_height int) (int, int) {
+	screen := get_screen_size()
+	x := (screen.width - window_width) / 2
+	y := (screen.height - window_height) / 2
+	// Ensure positive values
+	return if x > 0 { x } else { 100 }, if y > 0 { y } else { 100 }
+}
+
 // get_browser_args returns browser-specific arguments
 fn get_browser_args(browser_name string, config BrowserConfig) []string {
 	base_args := [
@@ -134,12 +233,20 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 
 	// Add window size for Chrome-based browsers
 	if is_chrome_based {
+		win_width := if window.width > 0 { window.width } else { 800 }
+		win_height := if window.height > 0 { window.height } else { 600 }
+
 		if window.width > 0 && window.height > 0 {
 			cmd_args << '--window-size=${window.width},${window.height}'
 		}
-		if window.x >= 0 && window.y >= 0 {
-			cmd_args << '--window-position=${window.x},${window.y}'
+
+		// Handle window position: -1 means center
+		mut pos_x := window.x
+		mut pos_y := window.y
+		if window.x < 0 || window.y < 0 {
+			pos_x, pos_y = calculate_center_position(win_width, win_height)
 		}
+		cmd_args << '--window-position=${pos_x},${pos_y}'
 
 		// Headless mode for testing
 		if browser_config.headless {
