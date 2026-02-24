@@ -30,6 +30,9 @@ mut:
 	
 	// Notifications
 	notifications []Notification
+	
+	// Cards
+	card_flipped map[string]bool
 }
 
 struct Item {
@@ -369,7 +372,14 @@ fn (mut app App) card_flip(message map[string]json2.Any) string {
 	params := get_params(message)
 	id_val := params['id'] or { json2.Any('1') }
 	id := id_val.str()
-	return '<div id="card-${id}" hx-swap-oob="true" class="card flipped">
+	
+	// Toggle flip state
+	is_flipped := app.card_flipped[id] or { false }
+	app.card_flipped[id] = !is_flipped
+	
+	flipped_class := if !is_flipped { 'flipped' } else { '' }
+	
+	return '<div id="card-${id}" hx-swap-oob="true" class="card ${flipped_class}" hx-post="/card/flip" hx-vals=\'{"id":"${id}"}\'>
 		<div class="card-inner">
 			<div class="card-front">
 				<h4>Card ${id}</h4>
@@ -377,7 +387,7 @@ fn (mut app App) card_flip(message map[string]json2.Any) string {
 			</div>
 			<div class="card-back">
 				<h4>Back Side</h4>
-				<p>This is the back!</p>
+				<p>Click to flip back</p>
 			</div>
 		</div>
 	</div>'
