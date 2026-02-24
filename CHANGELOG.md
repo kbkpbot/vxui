@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-24
+
+### Added
+
+- **Hot Reload**: Automatic browser refresh on file changes
+  - `DevConfig` struct for development mode settings
+  - File watching with configurable `watch_ms` interval
+  - `trigger_hot_reload()` method
+  - Frontend `reload` command handling
+- **Immediate Shutdown**: Detect browser window close
+  - Frontend `beforeunload` event sends `client_close` notification
+  - Backend tracks `had_clients` flag
+  - Exit immediately when all clients disconnect (no timeout wait)
+- **New Examples**:
+  - `examples/todo-app`: Full CRUD example with beautiful UI
+  - `examples/file-upload`: File upload/download with drag-drop support
+
+### Fixed
+
+- All examples updated to use `config.close_timer_ms`
+- Fixed enchart example to use `vxui-ws.js` for proper authentication
+- Fixed various mutability issues in examples and core
+- Reduced `close_timer_ms` to 1000ms for faster startup timeout
+
 ## [0.4.1] - 2026-02-24
 
 ### Added

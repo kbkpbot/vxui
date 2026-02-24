@@ -305,7 +305,7 @@ pub mut:
 pub struct RequestConfig {
 pub mut:
 	timeout_ms     int = 30000 // Request timeout in milliseconds
-	retry_count    int        // Number of retries on failure
+	retry_count    int // Number of retries on failure
 	retry_delay_ms int = 1000 // Delay between retries
 }
 
@@ -337,11 +337,11 @@ pub mut:
 
 	// Security settings
 	token        string // Security token (auto-generated if empty)
-	require_auth bool   = true // Require token authentication
+	require_auth bool = true // Require token authentication
 
 	// Client settings
 	multi_client bool // Allow multiple browser clients
-	max_clients  int  = 10    // Maximum concurrent clients (0 = unlimited)
+	max_clients  int = 10 // Maximum concurrent clients (0 = unlimited)
 	rate_limit   RateLimitConfig // Rate limiting settings
 
 	// JavaScript execution settings
@@ -365,10 +365,10 @@ pub mut:
 // DevConfig holds development mode settings
 pub struct DevConfig {
 pub mut:
-	enabled       bool        // Enable development mode
+	enabled       bool // Enable development mode
 	hot_reload    bool = true // Enable hot reload (refresh browser on file change)
-	watch_dirs    []string    // Directories to watch for changes (default: html file dir)
-	watch_ms      int = 500   // File watch interval in milliseconds
+	watch_dirs    []string // Directories to watch for changes (default: html file dir)
+	watch_ms      int  = 500  // File watch interval in milliseconds
 	auto_devtools bool = true // Auto-open DevTools in dev mode
 	show_errors   bool = true // Show error overlay in browser
 }
@@ -387,7 +387,7 @@ pub:
 	last_request  time.Time
 pub mut:
 	connection ?&websocket.Client
-	last_ping     time.Time
+	last_ping  time.Time
 }
 
 // =============================================================================
@@ -1028,7 +1028,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 	mut ws_state := websocket.State.open
 	mut last_client_time := time.now()
 	mut last_hot_reload_check := time.now()
-	mut had_clients := false  // Track if we ever had clients
+	mut had_clients := false // Track if we ever had clients
 
 	for {
 		ws_state = app.ws.get_state()
@@ -1070,9 +1070,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 				if has_files_changed(file_mtimes, new_mtimes) {
 					app.logger.info('Files changed, triggering hot reload')
 					file_mtimes = new_mtimes.clone()
-					app.trigger_hot_reload() or {
-						app.logger.warn('Hot reload failed: ${err}')
-					}
+					app.trigger_hot_reload() or { app.logger.warn('Hot reload failed: ${err}') }
 				}
 			}
 		}
@@ -1530,7 +1528,8 @@ fn scan_dir_mtimes(dir string, mut mtimes map[string]time.Time) {
 		} else {
 			// Only watch relevant file types
 			ext := file.all_after_last('.').to_lower()
-			if ext in ['html', 'htm', 'css', 'js', 'ts', 'vue', 'svelte', 'json', 'svg', 'png', 'jpg', 'gif'] {
+			if ext in ['html', 'htm', 'css', 'js', 'ts', 'vue', 'svelte', 'json', 'svg', 'png',
+				'jpg', 'gif'] {
 				info := os.stat(path) or { continue }
 				mtimes[path] = time.unix(info.mtime)
 			}

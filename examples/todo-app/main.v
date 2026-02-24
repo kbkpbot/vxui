@@ -6,8 +6,8 @@ import x.json2
 
 // TodoItem represents a single todo item
 struct TodoItem {
-	id        int
-	text      string
+	id   int
+	text string
 mut:
 	completed bool
 }
@@ -16,7 +16,7 @@ mut:
 struct App {
 	vxui.Context
 mut:
-	todos  []TodoItem
+	todos   []TodoItem
 	next_id int = 1
 }
 
