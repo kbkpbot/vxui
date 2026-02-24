@@ -5,6 +5,7 @@ module vxui
 // vxui is a cross-platform desktop UI framework which use your browser as screen, and use V lang as backend. It reply on Websocket, no http/https, no web server!
 import net
 import net.websocket
+import os
 import time
 import log
 import x.json2
@@ -298,6 +299,49 @@ pub fn run[T](mut app T, html_filename string) ! {
 	// Cleanup
 	app.ws.free()
 	app.logger.info('vxui shutdown complete')
+}
+
+// run_packed runs the app with packed (embedded) resources
+// This allows distributing a single executable with all frontend files embedded
+pub fn run_packed[T](mut app T, mut packed PackedApp, entry_file string) ! {
+	// Extract embedded files to temp directory
+	temp_dir := packed.extract_to_temp()!
+	app.logger.info('Extracted packed files to: ${temp_dir}')
+	
+	// Get entry file path
+	entry_path := os.join_path(temp_dir, entry_file)
+	
+	// Run with extracted files
+	run(mut app, entry_path) or {
+		// Cleanup on error
+		packed.cleanup(temp_dir)
+		return err
+	}
+	
+	// Cleanup after normal exit
+	packed.cleanup(temp_dir)
+}
+
+// run_embedded is a convenience function for running with embedded HTML
+// Usage: vxui.run_embedded(mut app, $embed_file('ui/index.html'), 'index.html')!
+pub fn run_embedded[T](mut app T, html_data []u8, filename string) ! {
+	// Create temp directory
+	temp_dir := os.join_path(os.temp_dir(), 'vxui_${os.now_unix()}')
+	os.mkdir_all(temp_dir)!
+	
+	// Write embedded HTML to temp file
+	html_path := os.join_path(temp_dir, filename)
+	os.write_file(html_path, html_data.bytestr())!
+	
+	// Run with temp file
+	run(mut app, html_path) or {
+		// Cleanup on error
+		os.rmdir_all(temp_dir) or {}
+		return err
+	}
+	
+	// Cleanup after normal exit
+	os.rmdir_all(temp_dir) or {}
 }
 
 // run_js executes JavaScript in the frontend and returns the result

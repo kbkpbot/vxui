@@ -278,6 +278,61 @@ fn test_generate_id() {
 	}
 }
 
+// Test PackedApp struct
+fn test_packed_app_new() {
+	packed := new_packed_app()
+	assert packed.files.len == 0
+	assert packed.total_size() == 0
+}
+
+fn test_packed_app_add_file() {
+	mut packed := new_packed_app()
+	packed.add_file('test.html', 'Hello World'.bytes())
+	
+	assert packed.files.len == 1
+	assert packed.has_file('test.html')
+	assert packed.total_size() == 11
+}
+
+fn test_packed_app_add_file_string() {
+	mut packed := new_packed_app()
+	packed.add_file_string('index.html', '<html></html>')
+	
+	assert packed.files.len == 1
+	assert packed.has_file('index.html')
+	
+	content := packed.get_file_content('index.html')!
+	assert content == '<html></html>'
+}
+
+fn test_packed_app_get_file() {
+	mut packed := new_packed_app()
+	packed.add_file('style.css', 'body { color: red; }'.bytes())
+	
+	file := packed.get_file('style.css')!
+	assert file.size == 20
+	
+	// Test non-existent file
+	packed.get_file('nonexistent.css') or {
+		assert err.msg().contains('not found')
+		return
+	}
+	assert false
+}
+
+fn test_packed_app_list_files() {
+	mut packed := new_packed_app()
+	packed.add_file_string('a.html', 'a')
+	packed.add_file_string('b.css', 'b')
+	packed.add_file_string('c.js', 'c')
+	
+	files := packed.list_files()
+	assert files.len == 3
+	assert 'a.html' in files
+	assert 'b.css' in files
+	assert 'c.js' in files
+}
+
 // === New Feature Tests (v0.2.0) ===
 
 // Test Client struct

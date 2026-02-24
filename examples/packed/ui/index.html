@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Packed App Demo</title>
+    <script src="./js/htmx.js"></script>
+    <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+    <h1>Packed App Demo</h1>
+    <p>This app is packed into a single executable!</p>
+    <button hx-post="/click" hx-swap="none">Click Me</button>
+    <div id="result">Click the button to start</div>
+</body>
+</html>

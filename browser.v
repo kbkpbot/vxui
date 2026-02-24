@@ -119,9 +119,15 @@ pub fn start_browser(filename string, vxui_ws_port u16) ! {
 
 // start_browser_with_token starts the browser with security token and window config
 pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string, window WindowConfig) ! {
-	// Sanitize the filename
-	safe_filename := sanitize_path(filename)!
-	abs_path := os.abs_path(safe_filename)
+	// Check if it's an absolute path to temp directory (for packed apps)
+	mut abs_path := os.abs_path(filename)
+	is_temp := abs_path.starts_with(os.temp_dir())
+	
+	// Sanitize the filename (skip for temp directory)
+	if !is_temp {
+		safe_filename := sanitize_path(filename)!
+		abs_path = os.abs_path(safe_filename)
+	}
 
 	// Ensure the file exists
 	if !os.exists(abs_path) {
