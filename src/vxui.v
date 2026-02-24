@@ -410,17 +410,24 @@ pub struct Route {
 }
 
 // Context is the main struct of vxui
+// ClientRemoveMsg is a message for the client removal channel
+struct ClientRemoveMsg {
+	client_id string
+	from_msg  string // for debugging: 'client_close' or 'on_close'
+}
+
 pub struct Context {
 mut:
-	ws_port        u16
-	ws             websocket.Server
-	routes         map[string]Route
-	clients        map[string]Client
-	mu             sync.RwMutex
-	js_callbacks   map[string]chan string
-	event_handlers map[EventType][]EventHandler
-	middlewares    []Middleware
-	rate_counters  map[string]RateCounter
+	ws_port             u16
+	ws                  websocket.Server
+	routes              map[string]Route
+	clients             map[string]Client
+	mu                  sync.RwMutex
+	js_callbacks        map[string]chan string
+	event_handlers      map[EventType][]EventHandler
+	middlewares         []Middleware
+	rate_counters       map[string]RateCounter
+	client_remove_chan  chan ClientRemoveMsg // channel for serialized client removal
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}
@@ -460,6 +467,7 @@ fn init[T](mut app T) ! {
 	app.event_handlers = map[EventType][]EventHandler{}
 	app.middlewares = []Middleware{}
 	app.rate_counters = map[string]RateCounter{}
+	app.client_remove_chan = chan ClientRemoveMsg{cap: 100}
 
 	// Setup logger
 	app.logger.set_level(app.config.log.level)
@@ -548,14 +556,9 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 						return
 					}
 					if cmd.str() == 'client_close' {
-						// Client is closing, remove it immediately
+						// Client is closing, send removal request to channel
 						client_id := message['client_id'] or { json2.Any('') }.str()
-						app.mu.lock()
-						app.clients.delete(client_id)
-						app.mu.unlock()
-						app.logger.info('Client closed: ${client_id}')
-						app.trigger_event(EventType.client_disconnected, client_id, 'Client closed',
-							message, none, none, none)
+						app.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
 						return
 					}
 				}
@@ -634,7 +637,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 	s.on_close(fn [mut app] [T](mut ws websocket.Client, code int, reason string) ! {
 		app.logger.info('Client disconnected: code=${code}, reason=${reason}')
 
-		app.mu.lock()
+		app.mu.rlock()
 		mut client_id_to_remove := ''
 		for id, client in app.clients {
 			if client.connection or { unsafe { nil } } == ws {
@@ -642,14 +645,12 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 				break
 			}
 		}
-		// Only delete if client still exists (may have been removed by client_close message)
-		if client_id_to_remove != '' && client_id_to_remove in app.clients {
-			app.clients.delete(client_id_to_remove)
-			app.logger.info('Removed client: ${client_id_to_remove}')
-			app.trigger_event(EventType.client_disconnected, client_id_to_remove, 'Client disconnected',
-				{}, none, none, none)
+		app.mu.runlock()
+
+		// Send removal request to channel (serialized processing)
+		if client_id_to_remove != '' {
+			app.client_remove_chan <- ClientRemoveMsg{client_id_to_remove, 'on_close'}
 		}
-		app.mu.unlock()
 	})
 
 	start_server_in_thread_and_wait_till_it_is_ready_to_accept_connections(mut s)
@@ -997,6 +998,9 @@ pub fn run[T](mut app T, html_filename string) ! {
 	// Sync backward compatibility fields
 	app.token = app.config.token
 	app.multi_client = app.config.multi_client
+
+	// Start client removal handler goroutine (serializes removal to prevent races)
+	spawn app.process_client_removals()
 
 	// Apply dev mode settings
 	if app.config.dev.enabled {
@@ -1451,6 +1455,24 @@ pub fn (mut ctx Context) ping_all_clients() {
 
 	for mut conn in connections {
 		conn.write(msg.bytes(), .text_frame) or {}
+	}
+}
+
+// process_client_removals handles client removal requests from the channel
+// This should be run in a separate goroutine to serialize removal operations
+pub fn (mut ctx Context) process_client_removals() {
+	for {
+		msg := <-ctx.client_remove_chan or { break }
+		ctx.mu.lock()
+		if msg.client_id in ctx.clients {
+			ctx.clients.delete(msg.client_id)
+			ctx.logger.info('Client removed (${msg.from_msg}): ${msg.client_id}')
+			ctx.trigger_event(EventType.client_disconnected, msg.client_id, 'Client disconnected',
+				{}, none, none, none)
+		} else {
+			ctx.logger.debug('Client already removed (${msg.from_msg}): ${msg.client_id}')
+		}
+		ctx.mu.unlock()
 	}
 }
 
