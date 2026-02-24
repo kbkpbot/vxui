@@ -1,40 +1,117 @@
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <meta name="google" content="notranslate">
-    <link rel="stylesheet" href="./stylesheet.css" />
-    <title>&lt;/&gt; htmx Realtime Test Server</title>
-    <script src="./js/htmx.js"></script>
-    <script src="./js/vxui-ws.js"></script>
-  </head>
-  <body hx-ext="vxui-ws">
-    <h1>Echo Test</h1>
-    <h3>Description</h3>
-    <h3>Example HTML</h3>
-    <div class="elastic container">
-      <form id="myform">
-        <h3>Send a Message</h3>
-        <div>
-		<input type="text" name="message" style="width:500px;" value="This Is The Message" /> 
-		<input type="text" name="messagexx" style="width:500px;" value="This Is The Messagexx" /> 
-		<button hx-trigger="click, keyup[altKey&amp;&amp;shiftKey&amp;&amp;key==&#39;D&#39;] from:body" hx-post="/doit"
-			hx-swap="none"
-			id="doit">Do It! (alt-shift-D)</button> 
-		<input type="submit" value="Send" class="btn primary" id="submit" hx-trigger="click" hx-post="/submit" />
-	</div>
-       
-	<div id="outerHTML">
-		<div><label>First Name</label>: kbkpbot</div>
-		<div><label>Last Name</label>: kbkpbot</div>
-		<div><label>Email</label>: kbkpbot@gmail.com</div>
-		<!--<button hx-get="/contact/1/edit" class="btn btn-primary">Click To Edit</button> -->
-		<button id="edit" hx-post="/edit" class="btn btn-primary">Click To Edit</button>
-	</div>
-      </form>
-      <br />
-      <h3>Receive a Message</h3>
-      <div id="idMessage"></div>
-      <button onclick="alert(&#39;You clicked me!&#39;)">Click Me!</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="google" content="notranslate">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vxui Test Server</title>
+  <link rel="stylesheet" href="./stylesheet.css" />
+  <script src="./js/htmx.js"></script>
+  <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+  <div class="dashboard">
+    <!-- Header -->
+    <div class="header">
+      <h1>Echo Test</h1>
+      <p>Real-time Form Interaction Demo</p>
     </div>
-  </body>
+
+    <!-- Main Content Grid -->
+    <div class="content-grid">
+      <!-- Send Message Section -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">📤</span>
+          <h2>Send a Message</h2>
+        </div>
+        <form id="myform" class="form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Message</label>
+              <input type="text" name="message" value="This Is The Message" />
+            </div>
+            <div class="form-group">
+              <label>Extra Field</label>
+              <input type="text" name="messagexx" value="This Is The Messagexx" />
+            </div>
+          </div>
+          <div class="button-row">
+            <button type="button" class="btn btn-primary" 
+              hx-trigger="click, keyup[altKey&&shiftKey&&key=='D'] from:body" 
+              hx-post="/doit"
+              hx-swap="none"
+              id="doit">
+              <span class="btn-icon">⚡</span> Do It!
+              <span class="shortcut">Alt+Shift+D</span>
+            </button>
+            <input type="button" value="Send" class="btn btn-success" id="submit" 
+              hx-trigger="click" hx-post="/submit" />
+          </div>
+        </form>
+      </div>
+
+      <!-- Contact Card Section -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">👤</span>
+          <h2>Contact Info</h2>
+        </div>
+        <div id="outerHTML" class="contact-info">
+          <div class="info-row">
+            <span class="info-label">First Name</span>
+            <span class="info-value">kbkpbot</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Last Name</span>
+            <span class="info-value">kbkpbot</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Email</span>
+            <span class="info-value">kbkpbot@gmail.com</span>
+          </div>
+          <div class="button-row">
+            <button id="edit" hx-post="/edit" class="btn btn-primary">
+              <span class="btn-icon">✏️</span> Edit
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Receive Message Section -->
+      <div class="card full-width">
+        <div class="card-header">
+          <span class="card-icon">📥</span>
+          <h2>Receive a Message</h2>
+          <div class="status-badge">
+            <span class="status-dot"></span>
+            <span>Ready</span>
+          </div>
+        </div>
+        <div id="idMessage" class="message-box">
+          <span class="placeholder-text">Messages will appear here...</span>
+        </div>
+      </div>
+
+      <!-- Simple Button Test -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🖱️</span>
+          <h2>Button Test</h2>
+        </div>
+        <div class="button-test">
+          <button class="btn btn-outline" onclick="alert('You clicked me!')">
+            Click Me!
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      Powered by <a href="https://github.com/kbkpbot/vxui" target="_blank">vxui</a> + 
+      <a href="https://htmx.org" target="_blank">htmx</a>
+    </div>
+  </div>
+</body>
 </html>
