@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="google" content="notranslate">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Element Plus Demo - vxui</title>
+    <!-- Element Plus CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        #app {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .demo-card {
+            margin-bottom: 20px;
+        }
+        .demo-card .el-card__header {
+            background: linear-gradient(90deg, #409eff, #67c23a);
+            color: white;
+            font-weight: bold;
+        }
+        .demo-section {
+            margin-bottom: 30px;
+        }
+        .demo-row {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .demo-label {
+            min-width: 100px;
+            color: #606266;
+        }
+        .result-box {
+            background: #f5f7fa;
+            padding: 10px 15px;
+            border-radius: 4px;
+            min-height: 32px;
+            display: inline-block;
+        }
+        .header-title {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header-title h1 {
+            font-size: 2.5em;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .header-title p {
+            margin-top: 10px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header-title">
+            <h1>Element Plus Demo</h1>
+            <p>Vue 3 + Element Plus + vxui WebSocket</p>
+        </div>
+
+        <el-row :gutter="20">
+            <!-- Buttons -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Button 按钮</span>
+                    </template>
+                    <div class="demo-section">
+                        <div class="demo-row">
+                            <el-button @click="handleClick('default')">Default</el-button>
+                            <el-button type="primary" @click="handleClick('primary')">Primary</el-button>
+                            <el-button type="success" @click="handleClick('success')">Success</el-button>
+                            <el-button type="warning" @click="handleClick('warning')">Warning</el-button>
+                            <el-button type="danger" @click="handleClick('danger')">Danger</el-button>
+                        </div>
+                        <div class="demo-row">
+                            <span class="demo-label">Plain:</span>
+                            <el-button plain @click="handleClick('plain')">Plain</el-button>
+                            <el-button type="primary" plain @click="handleClick('primary-plain')">Primary Plain</el-button>
+                        </div>
+                        <div class="demo-row">
+                            <span class="demo-label">Round:</span>
+                            <el-button round @click="handleClick('round')">Round</el-button>
+                            <el-button type="primary" round @click="handleClick('primary-round')">Primary Round</el-button>
+                        </div>
+                        <div class="demo-row">
+                            <span class="demo-label">Loading:</span>
+                            <el-button type="primary" :loading="loading" @click="handleLoading">Click to Load</el-button>
+                        </div>
+                    </div>
+                    <div class="result-box" id="button-result">{{ buttonResult }}</div>
+                </el-card>
+            </el-col>
+
+            <!-- Form -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Form 表单</span>
+                    </template>
+                    <el-form :model="form" label-width="80px" style="max-width: 400px;">
+                        <el-form-item label="Input">
+                            <el-input v-model="form.input" placeholder="请输入内容" @input="handleInput"></el-input>
+                        </el-form-item>
+                        <el-form-item label="Select">
+                            <el-select v-model="form.select" placeholder="请选择" @change="handleSelect">
+                                <el-option label="选项一" value="option1"></el-option>
+                                <el-option label="选项二" value="option2"></el-option>
+                                <el-option label="选项三" value="option3"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="Switch">
+                            <el-switch v-model="form.switch" @change="handleSwitch"></el-switch>
+                        </el-form-item>
+                        <el-form-item label="Slider">
+                            <el-slider v-model="form.slider" @change="handleSlider"></el-slider>
+                        </el-form-item>
+                        <el-form-item label="Rate">
+                            <el-rate v-model="form.rate" @change="handleRate"></el-rate>
+                        </el-form-item>
+                        <el-form-item label="Color">
+                            <el-color-picker v-model="form.color" @change="handleColor"></el-color-picker>
+                        </el-form-item>
+                    </el-form>
+                </el-card>
+            </el-col>
+
+            <!-- Tags & Progress -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Tag 标签 & Progress 进度条</span>
+                    </template>
+                    <div class="demo-section">
+                        <div class="demo-row">
+                            <span class="demo-label">Tags:</span>
+                            <el-tag>Default</el-tag>
+                            <el-tag type="success">Success</el-tag>
+                            <el-tag type="warning">Warning</el-tag>
+                            <el-tag type="danger">Danger</el-tag>
+                            <el-tag type="info">Info</el-tag>
+                        </div>
+                        <div class="demo-row">
+                            <span class="demo-label">Closable:</span>
+                            <el-tag v-for="tag in tags" :key="tag" closable @close="handleTagClose(tag)">{{ tag }}</el-tag>
+                        </div>
+                        <div class="demo-row" style="margin-top: 20px;">
+                            <span class="demo-label">Progress:</span>
+                        </div>
+                        <el-progress :percentage="progress" :status="progressStatus"></el-progress>
+                        <div class="demo-row" style="margin-top: 15px;">
+                            <el-button type="primary" size="small" @click="startProgress">Start</el-button>
+                            <el-button size="small" @click="resetProgress">Reset</el-button>
+                        </div>
+                    </div>
+                </el-card>
+            </el-col>
+
+            <!-- Data Display -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Table 表格</span>
+                    </template>
+                    <el-table :data="tableData" style="width: 100%" size="small">
+                        <el-table-column prop="id" label="ID" width="60"></el-table-column>
+                        <el-table-column prop="name" label="Name"></el-table-column>
+                        <el-table-column prop="status" label="Status">
+                            <template #default="scope">
+                                <el-tag :type="scope.row.status === 'Active' ? 'success' : 'info'" size="small">{{ scope.row.status }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="Action" width="100">
+                            <template #default="scope">
+                                <el-button type="primary" size="small" link @click="handleTableAction(scope.row)">Edit</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <div class="demo-row" style="margin-top: 15px;">
+                        <el-button type="primary" @click="addTableRow">Add Row</el-button>
+                        <el-button @click="clearTable">Clear</el-button>
+                    </div>
+                </el-card>
+            </el-col>
+
+            <!-- Notification & Message -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Message 消息提示</span>
+                    </template>
+                    <div class="demo-row">
+                        <el-button @click="showMessage('info')">Info</el-button>
+                        <el-button type="success" @click="showMessage('success')">Success</el-button>
+                        <el-button type="warning" @click="showMessage('warning')">Warning</el-button>
+                        <el-button type="danger" @click="showMessage('error')">Error</el-button>
+                    </div>
+                </el-card>
+            </el-col>
+
+            <!-- Dialog -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Dialog 对话框</span>
+                    </template>
+                    <el-button type="primary" @click="dialogVisible = true">Open Dialog</el-button>
+                    <el-dialog v-model="dialogVisible" title="Dialog Title" width="30%">
+                        <span>This is a dialog message.</span>
+                        <template #footer>
+                            <el-button @click="dialogVisible = false">Cancel</el-button>
+                            <el-button type="primary" @click="confirmDialog">Confirm</el-button>
+                        </template>
+                    </el-dialog>
+                </el-card>
+            </el-col>
+
+            <!-- DatePicker -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Date Picker 日期选择器</span>
+                    </template>
+                    <div class="demo-row">
+                        <span class="demo-label">Date:</span>
+                        <el-date-picker v-model="dateValue" type="date" placeholder="Pick a date" @change="handleDate"></el-date-picker>
+                    </div>
+                    <div class="demo-row">
+                        <span class="demo-label">DateTime:</span>
+                        <el-date-picker v-model="dateTimeValue" type="datetime" placeholder="Pick a datetime" @change="handleDateTime"></el-date-picker>
+                    </div>
+                    <div class="demo-row">
+                        <span class="demo-label">DateRange:</span>
+                        <el-date-picker v-model="dateRange" type="daterange" start-placeholder="Start" end-placeholder="End" @change="handleDateRange"></el-date-picker>
+                    </div>
+                </el-card>
+            </el-col>
+
+            <!-- Badge & Avatar -->
+            <el-col :span="12">
+                <el-card class="demo-card">
+                    <template #header>
+                        <span>Badge 徽章 & Avatar 头像</span>
+                    </template>
+                    <div class="demo-row">
+                        <el-badge :value="badgeCount" class="item">
+                            <el-button size="small">Comments</el-button>
+                        </el-badge>
+                        <el-button size="small" @click="badgeCount++">Add Badge</el-button>
+                        <el-button size="small" @click="badgeCount = 0">Reset</el-button>
+                    </div>
+                    <div class="demo-row" style="margin-top: 20px;">
+                        <span class="demo-label">Avatars:</span>
+                        <el-avatar icon="el-icon-user-solid"></el-avatar>
+                        <el-avatar>U</el-avatar>
+                        <el-avatar src="https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png"></el-avatar>
+                    </div>
+                </el-card>
+            </el-col>
+        </el-row>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/htmx.js"></script>
+    <script src="js/vxui-ws.js"></script>
+    <!-- Vue 3 -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+    <!-- Element Plus -->
+    <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+    <!-- Element Plus Icons -->
+    <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue"></script>
+
+    <script>
+        const { createApp, ref, reactive, computed } = Vue
+
+        const app = createApp({
+            setup() {
+                // Button state
+                const buttonResult = ref('Click a button...')
+                const loading = ref(false)
+
+                // Form state
+                const form = reactive({
+                    input: '',
+                    select: '',
+                    switch: false,
+                    slider: 50,
+                    rate: 3,
+                    color: '#409EFF'
+                })
+
+                // Tags
+                const tags = ref(['Tag 1', 'Tag 2', 'Tag 3'])
+
+                // Progress
+                const progress = ref(0)
+                const progressStatus = ref('')
+
+                // Table
+                const tableData = ref([
+                    { id: 1, name: 'Tom', status: 'Active' },
+                    { id: 2, name: 'Jerry', status: 'Inactive' },
+                    { id: 3, name: 'Spike', status: 'Active' }
+                ])
+
+                // Dialog
+                const dialogVisible = ref(false)
+
+                // DatePicker
+                const dateValue = ref('')
+                const dateTimeValue = ref('')
+                const dateRange = ref([])
+
+                // Badge
+                const badgeCount = ref(5)
+
+                // WebSocket send helper
+                const wsSend = (path, data = {}) => {
+                    const socket = window.vxuiSocket
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        const msg = {
+                            verb: 'post',
+                            path: path,
+                            parameters: data,
+                            HEADERS: { 'HX-Request': 'true' }
+                        }
+                        socket.send(JSON.stringify(msg))
+                    }
+                }
+
+                // Handlers
+                const handleClick = (type) => {
+                    buttonResult.value = `Clicked: ${type}`
+                    wsSend('/button/click', { type })
+                }
+
+                const handleLoading = () => {
+                    loading.value = true
+                    wsSend('/button/loading')
+                    setTimeout(() => {
+                        loading.value = false
+                        buttonResult.value = 'Loading complete!'
+                    }, 2000)
+                }
+
+                const handleInput = () => {
+                    wsSend('/form/input', { value: form.input })
+                }
+
+                const handleSelect = () => {
+                    wsSend('/form/select', { value: form.select })
+                }
+
+                const handleSwitch = () => {
+                    wsSend('/form/switch', { value: form.switch })
+                }
+
+                const handleSlider = () => {
+                    wsSend('/form/slider', { value: form.slider })
+                }
+
+                const handleRate = () => {
+                    wsSend('/form/rate', { value: form.rate })
+                }
+
+                const handleColor = () => {
+                    wsSend('/form/color', { value: form.color })
+                }
+
+                const handleTagClose = (tag) => {
+                    tags.value = tags.value.filter(t => t !== tag)
+                    wsSend('/tag/close', { tag })
+                }
+
+                const startProgress = () => {
+                    if (progress.value >= 100) return
+                    progressStatus.value = ''
+                    const timer = setInterval(() => {
+                        progress.value += 10
+                        if (progress.value >= 100) {
+                            clearInterval(timer)
+                            progressStatus.value = 'success'
+                            wsSend('/progress/complete')
+                        }
+                    }, 200)
+                }
+
+                const resetProgress = () => {
+                    progress.value = 0
+                    progressStatus.value = ''
+                }
+
+                const handleTableAction = (row) => {
+                    wsSend('/table/edit', { id: row.id, name: row.name })
+                }
+
+                const addTableRow = () => {
+                    const newId = tableData.value.length + 1
+                    tableData.value.push({
+                        id: newId,
+                        name: `User ${newId}`,
+                        status: Math.random() > 0.5 ? 'Active' : 'Inactive'
+                    })
+                    wsSend('/table/add', { id: newId })
+                }
+
+                const clearTable = () => {
+                    tableData.value = []
+                    wsSend('/table/clear')
+                }
+
+                const showMessage = (type) => {
+                    ElementPlus.ElMessage({
+                        message: `This is a ${type} message from Element Plus!`,
+                        type: type === 'error' ? 'error' : type
+                    })
+                    wsSend('/message/show', { type })
+                }
+
+                const confirmDialog = () => {
+                    dialogVisible.value = false
+                    wsSend('/dialog/confirm')
+                    ElementPlus.ElMessage.success('Dialog confirmed!')
+                }
+
+                const handleDate = () => {
+                    wsSend('/date/pick', { value: dateValue.value })
+                }
+
+                const handleDateTime = () => {
+                    wsSend('/datetime/pick', { value: dateTimeValue.value })
+                }
+
+                const handleDateRange = () => {
+                    wsSend('/daterange/pick', { value: dateRange.value })
+                }
+
+                return {
+                    buttonResult,
+                    loading,
+                    form,
+                    tags,
+                    progress,
+                    progressStatus,
+                    tableData,
+                    dialogVisible,
+                    dateValue,
+                    dateTimeValue,
+                    dateRange,
+                    badgeCount,
+                    handleClick,
+                    handleLoading,
+                    handleInput,
+                    handleSelect,
+                    handleSwitch,
+                    handleSlider,
+                    handleRate,
+                    handleColor,
+                    handleTagClose,
+                    startProgress,
+                    resetProgress,
+                    handleTableAction,
+                    addTableRow,
+                    clearTable,
+                    showMessage,
+                    confirmDialog,
+                    handleDate,
+                    handleDateTime,
+                    handleDateRange
+                }
+            }
+        })
+
+        // Register Element Plus
+        app.use(ElementPlus)
+
+        // Register icons
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+            app.component(key, component)
+        }
+
+        app.mount('#app')
+    </script>
+</body>
+</html>
