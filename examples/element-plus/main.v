@@ -27,6 +27,22 @@ fn main() {
 	vxui.run(mut app, './ui/index.html')!
 }
 
+// Helper: show Element Plus message via run_js
+fn (mut app App) show_message(msg string, msg_type string) {
+	js_code := "ElementPlus.ElMessage({ message: '${msg}', type: '${msg_type}' })"
+	app.run_js(js_code, 1000) or {
+		app.logger.error('Failed to run_js: ${err}')
+	}
+}
+
+// Helper: show Element Plus notification via run_js
+fn (mut app App) show_notification(title string, msg string, msg_type string) {
+	js_code := "ElementPlus.ElNotification({ title: '${title}', message: '${msg}', type: '${msg_type}' })"
+	app.run_js(js_code, 1000) or {
+		app.logger.error('Failed to run_js: ${err}')
+	}
+}
+
 // =============================================================================
 // Button handlers
 // =============================================================================
@@ -36,12 +52,25 @@ fn (mut app App) button_click(message map[string]json2.Any) string {
 	params := get_params(message)
 	type_val := params['type'] or { json2.Any('unknown') }
 	app.click_count++
+	
+	msg_type := map_button_type(type_val.str())
+	app.show_message('Button "${type_val.str()}" clicked! (Count: ${app.click_count})', msg_type)
 	app.logger.info('Button clicked: ${type_val.str()}, count: ${app.click_count}')
-	return '' // Vue handles the UI update
+	return ''
+}
+
+fn map_button_type(t string) string {
+	return match t {
+		'success' { 'success' }
+		'warning' { 'warning' }
+		'danger' { 'error' }
+		else { 'info' }
+	}
 }
 
 @['/button/loading']
 fn (mut app App) button_loading(message map[string]json2.Any) string {
+	app.show_message('Loading started...', 'info')
 	app.logger.info('Loading button clicked')
 	return ''
 }
@@ -55,6 +84,9 @@ fn (mut app App) form_input(message map[string]json2.Any) string {
 	params := get_params(message)
 	if val := params['value'] {
 		app.input_text = val.str()
+		if app.input_text.len > 0 {
+			app.show_notification('Input Changed', 'New value: "${app.input_text}"', 'info')
+		}
 		app.logger.info('Input changed: ${app.input_text}')
 	}
 	return ''
@@ -65,6 +97,13 @@ fn (mut app App) form_select(message map[string]json2.Any) string {
 	params := get_params(message)
 	if val := params['value'] {
 		app.select_val = val.str()
+		option_name := match app.select_val {
+			'option1' { '选项一' }
+			'option2' { '选项二' }
+			'option3' { '选项三' }
+			else { app.select_val }
+		}
+		app.show_message('Selected: ${option_name}', 'success')
 		app.logger.info('Select changed: ${app.select_val}')
 	}
 	return ''
@@ -75,6 +114,9 @@ fn (mut app App) form_switch(message map[string]json2.Any) string {
 	params := get_params(message)
 	if val := params['value'] {
 		app.switch_val = val.str() == 'true'
+		status := if app.switch_val { 'ON' } else { 'OFF' }
+		msg_type := if app.switch_val { 'success' } else { 'info' }
+		app.show_message('Switch turned ${status}', msg_type)
 		app.logger.info('Switch changed: ${app.switch_val}')
 	}
 	return ''
@@ -85,6 +127,7 @@ fn (mut app App) form_slider(message map[string]json2.Any) string {
 	params := get_params(message)
 	if val := params['value'] {
 		app.slider_val = int(val.int())
+		app.show_notification('Slider Changed', 'Value: ${app.slider_val}%', 'info')
 		app.logger.info('Slider changed: ${app.slider_val}')
 	}
 	return ''
@@ -95,6 +138,9 @@ fn (mut app App) form_rate(message map[string]json2.Any) string {
 	params := get_params(message)
 	if val := params['value'] {
 		app.rate_val = int(val.int())
+		stars := '★'.repeat(app.rate_val) + '☆'.repeat(5 - app.rate_val)
+		msg_type := if app.rate_val >= 4 { 'success' } else if app.rate_val >= 2 { 'warning' } else { 'error' }
+		app.show_message('Rating: ${stars} (${app.rate_val}/5)', msg_type)
 		app.logger.info('Rate changed: ${app.rate_val}')
 	}
 	return ''
@@ -105,6 +151,7 @@ fn (mut app App) form_color(message map[string]json2.Any) string {
 	params := get_params(message)
 	if val := params['value'] {
 		app.color_val = val.str()
+		app.show_notification('Color Changed', 'New color: ${app.color_val}', 'info')
 		app.logger.info('Color changed: ${app.color_val}')
 	}
 	return ''
@@ -118,6 +165,7 @@ fn (mut app App) form_color(message map[string]json2.Any) string {
 fn (mut app App) tag_close(message map[string]json2.Any) string {
 	params := get_params(message)
 	tag := params['tag'] or { json2.Any('') }
+	app.show_message('Tag "${tag.str()}" closed', 'warning')
 	app.logger.info('Tag closed: ${tag.str()}')
 	return ''
 }
@@ -128,6 +176,7 @@ fn (mut app App) tag_close(message map[string]json2.Any) string {
 
 @['/progress/complete']
 fn (mut app App) progress_complete(message map[string]json2.Any) string {
+	app.show_notification('Progress Complete', 'Task finished successfully!', 'success')
 	app.logger.info('Progress completed!')
 	return ''
 }
@@ -141,6 +190,7 @@ fn (mut app App) table_edit(message map[string]json2.Any) string {
 	params := get_params(message)
 	id := params['id'] or { json2.Any(0) }
 	name := params['name'] or { json2.Any('') }
+	app.show_notification('Edit Row', 'ID: ${id.int()}, Name: ${name.str()}', 'info')
 	app.logger.info('Edit row: id=${id.int()}, name=${name.str()}')
 	return ''
 }
@@ -149,12 +199,14 @@ fn (mut app App) table_edit(message map[string]json2.Any) string {
 fn (mut app App) table_add(message map[string]json2.Any) string {
 	params := get_params(message)
 	id := params['id'] or { json2.Any(0) }
+	app.show_message('New row added (ID: ${id.int()})', 'success')
 	app.logger.info('Add row: id=${id.int()}')
 	return ''
 }
 
 @['/table/clear']
 fn (mut app App) table_clear(message map[string]json2.Any) string {
+	app.show_message('Table cleared', 'warning')
 	app.logger.info('Table cleared')
 	return ''
 }
@@ -177,6 +229,7 @@ fn (mut app App) message_show(message map[string]json2.Any) string {
 
 @['/dialog/confirm']
 fn (mut app App) dialog_confirm(message map[string]json2.Any) string {
+	app.show_notification('Dialog Confirmed', 'Your action was recorded by the backend!', 'success')
 	app.logger.info('Dialog confirmed')
 	return ''
 }
@@ -189,6 +242,9 @@ fn (mut app App) dialog_confirm(message map[string]json2.Any) string {
 fn (mut app App) date_pick(message map[string]json2.Any) string {
 	params := get_params(message)
 	val := params['value'] or { json2.Any('') }
+	if val.str().len > 0 {
+		app.show_message('Date selected: ${val.str()}', 'info')
+	}
 	app.logger.info('Date picked: ${val.str()}')
 	return ''
 }
@@ -197,6 +253,9 @@ fn (mut app App) date_pick(message map[string]json2.Any) string {
 fn (mut app App) datetime_pick(message map[string]json2.Any) string {
 	params := get_params(message)
 	val := params['value'] or { json2.Any('') }
+	if val.str().len > 0 {
+		app.show_message('DateTime selected: ${val.str()}', 'info')
+	}
 	app.logger.info('DateTime picked: ${val.str()}')
 	return ''
 }
@@ -205,6 +264,9 @@ fn (mut app App) datetime_pick(message map[string]json2.Any) string {
 fn (mut app App) daterange_pick(message map[string]json2.Any) string {
 	params := get_params(message)
 	val := params['value'] or { json2.Any('') }
+	if val.str().len > 0 {
+		app.show_notification('Date Range Selected', val.str(), 'info')
+	}
 	app.logger.info('DateRange picked: ${val.str()}')
 	return ''
 }
