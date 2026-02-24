@@ -551,7 +551,7 @@ Line 3</textarea>
 
                     <div class="input-group">
                         <label>Select</label>
-                        <select hx-post="/form/select" hx-target="#select-result">
+                        <select name="selected" hx-post="/form/select" hx-trigger="change" hx-target="#select-result">
                             <option value="option1">Option 1</option>
                             <option value="option2" selected>Option 2</option>
                             <option value="option3">Option 3</option>
@@ -593,8 +593,8 @@ Line 3</textarea>
 
                     <div class="input-group">
                         <label>Slider: <span id="slider-result" class="result">Value: 50</span></label>
-                        <input type="range" min="0" max="100" value="50" 
-                               hx-post="/form/slider" hx-trigger="input" hx-target="#slider-result">
+                        <input type="range" name="value" min="0" max="100" value="50" 
+                               hx-post="/form/slider" hx-trigger="input changed" hx-target="#slider-result">
                     </div>
 
                     <div class="input-group">
