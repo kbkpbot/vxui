@@ -155,7 +155,9 @@ fn (mut app App) form_slider(message map[string]json2.Any) string {
 @['/form/toggle']
 fn (mut app App) form_toggle(message map[string]json2.Any) string {
 	app.toggle = !app.toggle
-	return '<span id="toggle-btn" hx-swap-oob="true" class="toggle ${if app.toggle { 'active' } else { '' }}">${if app.toggle { 'ON' } else { 'OFF' }}</span><span id="toggle-result" hx-swap-oob="true">State: ${app.toggle}</span>'
+	active_class := if app.toggle { 'active' } else { '' }
+	text := if app.toggle { 'ON' } else { 'OFF' }
+	return '<span id="toggle-btn" hx-swap-oob="true" class="toggle ${active_class}" hx-post="/form/toggle">${text}</span><span id="toggle-result" hx-swap-oob="true">State: ${app.toggle}</span>'
 }
 
 // =============================================================================
