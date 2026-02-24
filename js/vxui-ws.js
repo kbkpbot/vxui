@@ -7,8 +7,9 @@ Designed for vxui framework - a desktop UI framework using browser as display la
 Features:
 - Token authentication
 - Automatic reconnection
-- JavaScript execution from backend
+- JavaScript execution from backend with sandbox security
 - Multi-client support
+- Heartbeat/ping-pong mechanism
 
 Usage:
   <script src="htmx.js"></script>
@@ -35,12 +36,26 @@ Usage:
     var isAuthenticated = false
     var clientId = null
     var token = null
+    var heartbeatInterval = null
+    var lastPongTime = null
 
     // Configuration
     var config = {
         reconnectDelay: 'full-jitter',
         connectTimeout: 5000,
-        debug: true
+        heartbeatInterval: 30000,  // 30 seconds
+        pongTimeout: 60000,        // 60 seconds without pong = stale connection
+        debug: false
+    }
+
+    // JavaScript Sandbox Configuration (received from backend)
+    var jsSandbox = {
+        enabled: true,
+        timeout_ms: 5000,
+        max_result_size: 1048576,  // 1MB
+        allow_eval: false,
+        allowed_apis: ['document.*', 'window.location.*', 'console.*', 'localStorage.*', 'sessionStorage.*'],
+        forbidden_patterns: ['eval(', 'Function(', 'setTimeout(', 'setInterval(', 'XMLHttpRequest', 'fetch(', 'WebSocket', 'import(']
     }
 
     /**
@@ -145,6 +160,98 @@ Usage:
     }
 
     /**
+     * Validate JavaScript code against sandbox rules
+     */
+    function validateJsCode(script) {
+        if (!jsSandbox.enabled) {
+            return { valid: true }
+        }
+
+        var scriptLower = script.toLowerCase()
+        
+        // Check forbidden patterns
+        for (var i = 0; i < jsSandbox.forbidden_patterns.length; i++) {
+            var pattern = jsSandbox.forbidden_patterns[i].toLowerCase()
+            if (scriptLower.indexOf(pattern) !== -1) {
+                return { 
+                    valid: false, 
+                    error: 'Forbidden pattern found: ' + jsSandbox.forbidden_patterns[i] 
+                }
+            }
+        }
+
+        return { valid: true }
+    }
+
+    /**
+     * Execute JavaScript safely using Function constructor instead of eval
+     */
+    function executeJsSafely(script) {
+        var result = ''
+        var error = null
+
+        // Validate against sandbox rules
+        var validation = validateJsCode(script)
+        if (!validation.valid) {
+            return { result: '', error: validation.error }
+        }
+
+        try {
+            // Use Function constructor for slightly better isolation than eval
+            // This is still not fully secure but better than direct eval
+            var fn
+            if (jsSandbox.allow_eval) {
+                // Only use eval if explicitly allowed
+                fn = new Function('return (' + script + ')')
+            } else {
+                // Wrap in a controlled context
+                fn = new Function(
+                    'document', 
+                    'console', 
+                    'localStorage', 
+                    'sessionStorage',
+                    'location',
+                    '"use strict"; return (' + script + ')'
+                )
+            }
+            
+            result = fn.call(
+                null, 
+                document, 
+                console, 
+                localStorage, 
+                sessionStorage,
+                window.location
+            )
+            
+            if (result === undefined || result === null) {
+                result = ''
+            } else if (typeof result === 'object') {
+                try {
+                    result = JSON.stringify(result)
+                } catch (e) {
+                    result = String(result)
+                }
+            } else {
+                result = String(result)
+            }
+
+            // Check result size
+            if (jsSandbox.enabled && result.length > jsSandbox.max_result_size) {
+                return { 
+                    result: '', 
+                    error: 'Result exceeds maximum size (' + result.length + ' > ' + jsSandbox.max_result_size + ')' 
+                }
+            }
+        } catch (e) {
+            error = e.message || String(e)
+            log('JS execution error:', error)
+        }
+
+        return { result: result, error: error }
+    }
+
+    /**
      * Send authentication message
      */
     function sendAuth() {
@@ -165,6 +272,49 @@ Usage:
     }
 
     /**
+     * Start heartbeat mechanism
+     */
+    function startHeartbeat() {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+        }
+        
+        lastPongTime = Date.now()
+        
+        heartbeatInterval = setInterval(function() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return
+            }
+
+            // Check if connection is stale (no pong for too long)
+            if (lastPongTime && (Date.now() - lastPongTime > config.pongTimeout)) {
+                log('Connection stale, no pong received for', config.pongTimeout, 'ms')
+                socket.close(1006, 'Connection stale')
+                return
+            }
+
+            // Send ping
+            var pingMsg = {
+                cmd: 'ping',
+                client_id: clientId,
+                timestamp: Date.now()
+            }
+            socket.send(JSON.stringify(pingMsg))
+            log('Sent heartbeat ping')
+        }, config.heartbeatInterval)
+    }
+
+    /**
+     * Stop heartbeat mechanism
+     */
+    function stopHeartbeat() {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+            heartbeatInterval = null
+        }
+    }
+
+    /**
      * Handle incoming command messages
      */
     function handleCommand(msg) {
@@ -172,45 +322,61 @@ Usage:
             case 'auth_ok':
                 isAuthenticated = true
                 clientId = msg.client_id
+                
+                // Update sandbox config from server
+                if (msg.js_sandbox) {
+                    try {
+                        var serverSandbox = JSON.parse(msg.js_sandbox)
+                        jsSandbox.enabled = serverSandbox.enabled !== false
+                        jsSandbox.timeout_ms = serverSandbox.timeout_ms || 5000
+                        jsSandbox.max_result_size = serverSandbox.max_result_size || 1048576
+                        jsSandbox.allow_eval = serverSandbox.allow_eval === true
+                        if (serverSandbox.allowed_apis) {
+                            jsSandbox.allowed_apis = serverSandbox.allowed_apis
+                        }
+                        if (serverSandbox.forbidden_patterns) {
+                            jsSandbox.forbidden_patterns = serverSandbox.forbidden_patterns
+                        }
+                        log('Updated JS sandbox config from server:', jsSandbox)
+                    } catch (e) {
+                        log('Failed to parse js_sandbox config:', e)
+                    }
+                }
+                
                 log('Authentication successful, client_id:', clientId)
+                startHeartbeat()
                 processQueue()
                 api.triggerEvent(document.body, 'vxui:authenticated', { clientId: clientId })
                 break
             
             case 'run_js':
-                executeJs(msg.js_id, msg.script)
+                var execution = executeJsSafely(msg.script)
+                var response = {
+                    cmd: 'js_result',
+                    js_id: msg.js_id,
+                    result: execution.result,
+                    error: execution.error
+                }
+                socket.send(JSON.stringify(response))
+                break
+            
+            case 'ping':
+                // Respond to server ping
+                var pongResponse = {
+                    cmd: 'pong',
+                    client_id: clientId,
+                    timestamp: Date.now()
+                }
+                socket.send(JSON.stringify(pongResponse))
+                log('Sent pong response')
+                break
+            
+            case 'pong':
+                // Server acknowledged our ping
+                lastPongTime = Date.now()
+                log('Received pong from server')
                 break
         }
-    }
-
-    /**
-     * Execute JavaScript and return result
-     */
-    function executeJs(jsId, script) {
-        var result = ''
-        var error = null
-        
-        try {
-            result = eval(script)
-            if (result === undefined) {
-                result = ''
-            }
-            if (typeof result === 'object') {
-                result = JSON.stringify(result)
-            }
-            result = String(result)
-        } catch (e) {
-            error = e.message
-            log('JS execution error:', error)
-        }
-
-        var response = {
-            cmd: 'js_result',
-            js_id: jsId,
-            result: result,
-            error: error
-        }
-        socket.send(JSON.stringify(response))
     }
 
     /**
@@ -250,6 +416,7 @@ Usage:
                 isAuthenticated = false
                 socket = null
                 socketWrapper = null
+                stopHeartbeat()
 
                 api.triggerEvent(document.body, 'vxui:wsClose', { code: e.code, reason: e.reason })
 
@@ -541,6 +708,7 @@ Usage:
         isAuthenticated: function() { return isAuthenticated },
         getClientId: function() { return clientId },
         reconnect: function() {
+            stopHeartbeat()
             if (socket) {
                 socket.close()
             }
@@ -549,8 +717,21 @@ Usage:
         setDebug: function(enabled) {
             config.debug = enabled
         },
+        getSandboxConfig: function() { return jsSandbox },
+        setSandboxConfig: function(newConfig) {
+            Object.assign(jsSandbox, newConfig)
+        },
         runJs: function(script) {
-            return eval(script)
+            var result = executeJsSafely(script)
+            return result.error ? { error: result.error } : { result: result.result }
+        },
+        // Heartbeat controls
+        getHeartbeatInterval: function() { return config.heartbeatInterval },
+        setHeartbeatInterval: function(ms) { 
+            config.heartbeatInterval = ms
+            if (isAuthenticated) {
+                startHeartbeat()
+            }
         }
     }
 

@@ -1,31 +1,31 @@
 module vxui
 
 // embed.v - Support for embedding frontend resources into executable
-// 
+//
 // Usage:
 // ```v
 // module main
-// 
+//
 // import vxui
-// 
+//
 // // Embed your frontend files
 // const index_html = $embed_file('ui/index.html')
-// const app_css = $embed_file('ui/style.css') 
+// const app_css = $embed_file('ui/style.css')
 // const app_js = $embed_file('ui/app.js')
-// 
+//
 // struct App {
 //     vxui.Context
 // }
-// 
+//
 // fn main() {
 //     mut app := App{}
-//     
+//
 //     // Create packed resources
 //     mut packed := vxui.new_packed_app()
 //     packed.add_file('index.html', index_html)
 //     packed.add_file('style.css', app_css)
 //     packed.add_file('app.js', app_js)
-//     
+//
 //     // Run with packed resources (extracts to temp dir)
 //     vxui.run_packed(mut app, packed)!
 // }
@@ -35,7 +35,6 @@ module vxui
 // ```bash
 // v -prod -compress myapp.v
 // ```
-
 import os
 import time
 import rand
@@ -83,16 +82,16 @@ pub fn (p PackedApp) extract_to(dir string) ! {
 	if !os.exists(dir) {
 		os.mkdir_all(dir)!
 	}
-	
+
 	for path, file in p.files {
 		full_path := os.join_path(dir, path)
-		
+
 		// Create parent directories
 		parent := os.dir(full_path)
 		if !os.exists(parent) {
 			os.mkdir_all(parent)!
 		}
-		
+
 		// Write file
 		os.write_file(full_path, file.data.bytestr())!
 	}
@@ -100,10 +99,11 @@ pub fn (p PackedApp) extract_to(dir string) ! {
 
 // extract_to_temp extracts all files to a temp directory and returns the path
 pub fn (p PackedApp) extract_to_temp() !string {
-    temp_dir := os.join_path(os.temp_dir(), 'vxui_${time.now().unix()}_${rand.u32()}')
-    p.extract_to(temp_dir)!
-    return temp_dir
+	temp_dir := os.join_path(os.temp_dir(), 'vxui_${time.now().unix()}_${rand.u32()}')
+	p.extract_to(temp_dir)!
+	return temp_dir
 }
+
 // get_file retrieves a file by path
 pub fn (p PackedApp) get_file(path string) !EmbeddedFile {
 	return p.files[path] or { error('File not found: ${path}') }

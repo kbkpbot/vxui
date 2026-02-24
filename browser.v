@@ -2,73 +2,10 @@ module vxui
 
 import os
 
-// BrowserConfig holds browser path and arguments
-pub struct BrowserConfig {
-	path string
-	args []string
-}
-
-// detect_browser detects available browser on the system
-pub fn detect_browser() !BrowserConfig {
-	// Platform-specific browser detection
-	$if linux {
-		paths := [
-			'/usr/bin/google-chrome-stable',
-			'/usr/bin/google-chrome',
-			'/usr/bin/chromium',
-			'/usr/bin/chromium-browser',
-			'/usr/bin/microsoft-edge',
-			'/usr/bin/brave',
-			'/usr/bin/firefox',
-		]
-		for path in paths {
-			if os.exists(path) {
-				return BrowserConfig{
-					path: path
-					args: get_browser_args(os.base(path))
-				}
-			}
-		}
-	} $else $if macos {
-		paths := [
-			'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-			'/Applications/Chromium.app/Contents/MacOS/Chromium',
-			'/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-			'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-			'/Applications/Firefox.app/Contents/MacOS/Firefox',
-		]
-		for path in paths {
-			if os.exists(path) {
-				return BrowserConfig{
-					path: path
-					args: get_browser_args(os.base(path))
-				}
-			}
-		}
-	} $else $if windows {
-		// Windows common paths
-		paths := [
-			'C:/Program Files/Google/Chrome/Application/chrome.exe',
-			'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-			'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-			'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-			'C:/Program Files/Mozilla Firefox/firefox.exe',
-			'C:/Program Files (x86)/Mozilla Firefox/firefox.exe',
-		]
-		for path in paths {
-			if os.exists(path) {
-				return BrowserConfig{
-					path: path
-					args: get_browser_args(os.base(path))
-				}
-			}
-		}
-	}
-	return error('No supported browser found. Please install Chrome, Chromium, Edge, or Firefox.')
-}
+// BrowserConfig is defined in vxui.v, this file contains browser-related functions
 
 // get_browser_args returns browser-specific arguments
-fn get_browser_args(browser_name string) []string {
+fn get_browser_args(browser_name string, config BrowserConfig) []string {
 	base_args := [
 		'--no-first-run',
 		'--disable-breakpad',
@@ -114,15 +51,20 @@ fn get_browser_args(browser_name string) []string {
 
 // start_browser starts the browser and open the `filename`
 pub fn start_browser(filename string, vxui_ws_port u16) ! {
-	start_browser_with_token(filename, vxui_ws_port, '', WindowConfig{})!
+	start_browser_with_config(filename, vxui_ws_port, '', WindowConfig{}, BrowserConfig{})!
 }
 
 // start_browser_with_token starts the browser with security token and window config
 pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string, window WindowConfig) ! {
+	start_browser_with_config(filename, vxui_ws_port, token, window, BrowserConfig{})!
+}
+
+// start_browser_with_config starts the browser with full configuration
+pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string, window WindowConfig, browser_config BrowserConfig) ! {
 	// Check if it's an absolute path to temp directory (for packed apps)
 	mut abs_path := os.abs_path(filename)
 	is_temp := abs_path.starts_with(os.temp_dir())
-	
+
 	// Sanitize the filename (skip for temp directory)
 	if !is_temp {
 		safe_filename := sanitize_path(filename)!
@@ -134,11 +76,21 @@ pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string,
 		return error('HTML file not found: ${abs_path}')
 	}
 
-	// Detect browser
-	browser := detect_browser()!
+	// Detect browser path based on platform
+	browser_path := find_browser_path()
+
+	if browser_path == '' {
+		return error('No supported browser found')
+	}
 
 	// Create profile directory
-	profile_path := os.join_path(os.home_dir(), '.vxui', 'browser_profile')
+	profile_path := if browser_config.user_data_dir != '' {
+		browser_config.user_data_dir
+	} else if browser_config.profile_dir != '' {
+		browser_config.profile_dir
+	} else {
+		os.join_path(os.home_dir(), '.vxui', 'browser_profile')
+	}
 	os.mkdir_all(profile_path) or { return error('Failed to create profile directory: ${err}') }
 
 	// Build URL with parameters
@@ -153,19 +105,46 @@ pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string,
 		url_params += '&vxui_height=${window.height}'
 	}
 
+	// Get base browser name for argument selection
+	browser_name := os.base(browser_path)
+	is_firefox := browser_name.to_lower().contains('firefox')
+	is_chrome_based := !is_firefox
+
 	// Build command arguments
-	mut cmd_args := browser.args.clone()
+	mut cmd_args := get_browser_args(browser_name, browser_config)
+
+	// Add custom arguments first
+	if browser_config.custom_args.len > 0 {
+		cmd_args << browser_config.custom_args
+	}
+
 	cmd_args << '--user-data-dir=${profile_path}'
 
 	// Add window size for Chrome-based browsers
-	is_firefox := browser.path.to_lower().contains('firefox')
-	if !is_firefox {
+	if is_chrome_based {
 		if window.width > 0 && window.height > 0 {
 			cmd_args << '--window-size=${window.width},${window.height}'
 		}
 		if window.x >= 0 && window.y >= 0 {
 			cmd_args << '--window-position=${window.x},${window.y}'
 		}
+
+		// Headless mode for testing
+		if browser_config.headless {
+			cmd_args << '--headless=new'
+		}
+
+		// DevTools
+		if browser_config.devtools {
+			cmd_args << '--auto-open-devtools-for-tabs'
+		}
+
+		// No sandbox (for root/CI environments)
+		if browser_config.no_sandbox {
+			cmd_args << '--no-sandbox'
+			cmd_args << '--disable-setuid-sandbox'
+		}
+
 		cmd_args << '--force-app-mode'
 		cmd_args << '--new-window'
 		cmd_args << '--app=file://${abs_path}?${url_params}'
@@ -181,12 +160,12 @@ pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string,
 	// Start browser process
 	$if windows {
 		// On Windows, use spawn to avoid blocking
-		os.execute('start "" "${browser.path}" ' + cmd_args.join(' '))
+		os.execute('start "" "${browser_path}" ' + cmd_args.join(' '))
 	} $else {
 		pid := os.fork()
 		if pid == 0 {
 			// Child process
-			os.execvp(browser.path, cmd_args) or {
+			os.execvp(browser_path, cmd_args) or {
 				eprintln('Failed to start browser: ${err}')
 				exit(1)
 			}
@@ -196,4 +175,70 @@ pub fn start_browser_with_token(filename string, vxui_ws_port u16, token string,
 	}
 
 	return
+}
+
+// find_browser_path finds browser path based on current platform
+fn find_browser_path() string {
+	$if linux {
+		return find_browser_path_linux()
+	} $else $if macos {
+		return find_browser_path_macos()
+	} $else $if windows {
+		return find_browser_path_windows()
+	}
+	return ''
+}
+
+// find_browser_path_linux finds browser on Linux
+fn find_browser_path_linux() string {
+	paths := [
+		'/usr/bin/google-chrome-stable',
+		'/usr/bin/google-chrome',
+		'/usr/bin/chromium',
+		'/usr/bin/chromium-browser',
+		'/usr/bin/microsoft-edge',
+		'/usr/bin/brave',
+		'/usr/bin/firefox',
+	]
+	for path in paths {
+		if os.exists(path) {
+			return path
+		}
+	}
+	return ''
+}
+
+// find_browser_path_macos finds browser on macOS
+fn find_browser_path_macos() string {
+	paths := [
+		'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+		'/Applications/Chromium.app/Contents/MacOS/Chromium',
+		'/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+		'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+		'/Applications/Firefox.app/Contents/MacOS/Firefox',
+	]
+	for path in paths {
+		if os.exists(path) {
+			return path
+		}
+	}
+	return ''
+}
+
+// find_browser_path_windows finds browser on Windows
+fn find_browser_path_windows() string {
+	paths := [
+		'C:/Program Files/Google/Chrome/Application/chrome.exe',
+		'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+		'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+		'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+		'C:/Program Files/Mozilla Firefox/firefox.exe',
+		'C:/Program Files (x86)/Mozilla Firefox/firefox.exe',
+	]
+	for path in paths {
+		if os.exists(path) {
+			return path
+		}
+	}
+	return ''
 }

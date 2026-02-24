@@ -26,15 +26,15 @@ fn main() {
 	app.close_timer = 5000
 	app.logger.set_level(.debug)
 	app.logger.set_output_stream(os.stderr())
-	
+
 	// Create packed app with embedded files
 	mut packed := vxui.new_packed_app()
 	packed.add_file_string('index.html', index_html.to_string())
 	packed.add_file_string('js/htmx.js', htmx_js.to_string())
 	packed.add_file_string('js/vxui-ws.js', vxui_ws_js.to_string())
-	
+
 	app.logger.info('Packed app ready, total size: ${packed.total_size()} bytes')
-	
+
 	// Run with packed resources
 	vxui.run_packed(mut app, mut packed, 'index.html') or {
 		eprintln('Error: ${err}')
