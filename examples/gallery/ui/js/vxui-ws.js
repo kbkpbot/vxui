@@ -1,7 +1,7 @@
 /*
 vxui-ws - WebSocket Extension for vxui
 ============================================
-This extension intercepts all htmx AJAX requests and routes them through WebSocket.
+This extension converts htmx triggers (hx-post, hx-get, etc.) to WebSocket messages.
 Designed for vxui framework - a desktop UI framework using browser as display layer.
 
 Features:

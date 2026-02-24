@@ -195,8 +195,8 @@ v run main.v
        ▼                                          ▼
 ┌─────────────────┐                     ┌─────────────────┐
 │  vxui-ws.js    │                     │   Route Handler │
-│  (Intercepts    │                     │   (Your code!)  │
-│   AJAX calls)   │                     │                 │
+│  (Converts      │                     │   (Your code!)  │
+│   htmx to WS)   │                     │                 │
 └─────────────────┘                     └─────────────────┘
 ```
 

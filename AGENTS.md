@@ -63,7 +63,7 @@
 2. **Communication Mechanism**:
    - Frontend establishes WebSocket connection via `vxui-ws.js`
    - Client authenticates with token
-   - All htmx AJAX requests are intercepted and converted to WebSocket messages
+   - All htmx triggers (hx-post, hx-get, etc.) are converted to WebSocket messages
    - Backend processes requests and returns HTML fragments, frontend performs partial updates
 
 3. **Message Format**:
