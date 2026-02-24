@@ -204,6 +204,7 @@ flowchart LR
     Handler -->|"HTML fragments"| WSS
     WSS -->|"Response"| WS
     WS -->|"DOM Update"| HTML
+```
 
 ### How it works
 
