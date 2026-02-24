@@ -1,16 +1,16 @@
+var mainChart = null;
+
 function created() {
-	var mainChart = echarts.init(document.getElementById('chart'));
+	mainChart = echarts.init(document.getElementById('chart'));
 	mainChart.setOption(chartOption);
 
-	// Listen for htmx afterSwap event to handle chart data
-	document.body.addEventListener('htmx:afterSwap', function(evt) {
-		var target = evt.detail.target;
-		if (target && target.id === 'data') {
-			// Parse the response data
-			var responseText = target.innerHTML;
-			if (responseText) {
+	// Listen for htmx afterRequest event to handle chart data
+	document.body.addEventListener('htmx:afterRequest', function(evt) {
+		if (evt.detail.pathInfo.requestPath === '/get') {
+			var xhr = evt.detail.xhr;
+			if (xhr && xhr.response) {
 				try {
-					var it = JSON.parse(responseText);
+					var it = JSON.parse(xhr.response);
 					if (it.get === 'hashtable') {
 						renderChart(mainChart, it.dat.time_axis, {
 							"key": it.dat.key,
@@ -18,7 +18,7 @@ function created() {
 						});
 					}
 				} catch (e) {
-					// Not JSON, ignore
+					console.error('Failed to parse chart data:', e);
 				}
 			}
 		}
