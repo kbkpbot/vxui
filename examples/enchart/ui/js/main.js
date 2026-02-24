@@ -1,48 +1,28 @@
 function created() {
-	var i;
 	var mainChart = echarts.init(document.getElementById('chart'));
 	mainChart.setOption(chartOption);
 
-	// Get the port number from the url parameter
-	var vxui_ws;
-	const url = location.search; //get url string
-	let theRequest = new Object();
-	if (url.indexOf("?") != -1) {
-		let str = url.substr(1);
-		strs = str.split("&");
-		for(let i = 0; i < strs.length; i++) {
-			theRequest[strs[i].split("=")[0]]=unescape(strs[i].split("=")[1]);
-		};
-	};
-	
-	let vxui_ws_port = theRequest['vxui_ws_port'];
-	
-	var wssSource = "ws://localhost:" + vxui_ws_port + "/echo";
-	var ws = new WebSocket(wssSource, []);
-	
-	setInterval(function () {
-		ws.send(JSON.stringify({
-				path: '/get',
-				verb: 'GET',
-				rpcID: 0,
-				data: 'hashtable'
-			}));
-		}, 1000);
-	ws.onmessage = function (evt) {
-		if (ws) {
-			if (evt.data != 'pong') {
-			var it = JSON.parse(JSON.parse(evt.data).data);
-			if (it.get) {
-				if (it.get === 'hashtable') {
-					renderChart(mainChart, it.dat.time_axis, {
-						"key": it.dat.key,
-						"values": it.dat.values
-					});
+	// Listen for htmx afterSwap event to handle chart data
+	document.body.addEventListener('htmx:afterSwap', function(evt) {
+		var target = evt.detail.target;
+		if (target && target.id === 'data') {
+			// Parse the response data
+			var responseText = target.innerHTML;
+			if (responseText) {
+				try {
+					var it = JSON.parse(responseText);
+					if (it.get === 'hashtable') {
+						renderChart(mainChart, it.dat.time_axis, {
+							"key": it.dat.key,
+							"values": it.dat.values
+						});
+					}
+				} catch (e) {
+					// Not JSON, ignore
 				}
 			}
-			}
 		}
-	};
+	});
 }
 
 var chartOption = {
