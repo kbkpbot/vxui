@@ -60,7 +60,7 @@ fn main() {
 	// because when page change, it have a small time gap between close old page and open new page
 	app.config.close_timer_ms = 1000
 	app.config.window.width = 1200
-	app.config.window.height = 700
+	app.config.window.height = 800
 	app.logger.set_level(.debug)
 	app.logger.set_output_stream(os.stderr())
 	app.logger.set_short_tag(true)

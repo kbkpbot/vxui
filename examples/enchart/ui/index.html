@@ -58,36 +58,39 @@
     
     .stats-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      margin-bottom: 30px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 25px;
+      max-width: 85%;
+      margin-left: auto;
+      margin-right: auto;
     }
     
     .stat-card {
       background: rgba(255, 255, 255, 0.05);
       backdrop-filter: blur(10px);
-      border-radius: 16px;
-      padding: 20px;
+      border-radius: 12px;
+      padding: 12px 15px;
       border: 1px solid rgba(255, 255, 255, 0.1);
       transition: all 0.3s ease;
     }
     
     .stat-card:hover {
-      transform: translateY(-5px);
+      transform: translateY(-3px);
       border-color: rgba(58, 123, 213, 0.5);
-      box-shadow: 0 10px 40px rgba(58, 123, 213, 0.2);
+      box-shadow: 0 8px 30px rgba(58, 123, 213, 0.2);
     }
     
     .stat-card .label {
       color: #8892b0;
-      font-size: 0.9em;
-      margin-bottom: 8px;
+      font-size: 0.75em;
+      margin-bottom: 5px;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
     
     .stat-card .value {
-      font-size: 2em;
+      font-size: 1.4em;
       font-weight: 600;
       color: #fff;
     }
@@ -98,8 +101,8 @@
     .stat-card .value.orange { color: #fb923c; }
     
     .stat-card .change {
-      font-size: 0.85em;
-      margin-top: 8px;
+      font-size: 0.7em;
+      margin-top: 4px;
     }
     
     .stat-card .change.up { color: #4ade80; }
