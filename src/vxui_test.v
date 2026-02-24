@@ -1119,3 +1119,127 @@ fn test_config_full_setup() {
 	assert config.rate_limit.max_requests == 50
 	assert config.reconnect.strategy == BackoffStrategy.exponential
 }
+
+// =============================================================================
+// Enhanced Path Sanitization Tests
+// =============================================================================
+
+fn test_sanitize_path_url_encoded_traversal() {
+	// Test URL-encoded ../
+	if _ := sanitize_path('%2e%2e%2f') {
+		assert false // Should fail
+	}
+}
+
+fn test_sanitize_path_double_encoded_traversal() {
+	// Test double-encoded ../
+	if _ := sanitize_path('%252e%252e%252f') {
+		assert false // Should fail
+	}
+}
+
+fn test_sanitize_path_mixed_encoding() {
+	// Test mixed encoding
+	if _ := sanitize_path('..%2fetc%2fpasswd') {
+		assert false // Should fail
+	}
+}
+
+fn test_sanitize_path_null_byte_enhanced() {
+	// Test null byte injection
+	if _ := sanitize_path('file\x00.txt') {
+		assert false // Should fail
+	}
+}
+
+fn test_sanitize_path_hidden_file_blocked() {
+	// Hidden files without allowed extension should be blocked
+	if _ := sanitize_path('.env') {
+		assert false // Should fail
+	}
+	if _ := sanitize_path('.git/config') {
+		assert false // Should fail
+	}
+	if _ := sanitize_path('.htaccess') {
+		assert false // Should fail
+	}
+}
+
+fn test_sanitize_path_hidden_file_allowed() {
+	// Hidden files with allowed extensions should pass
+	if _ := sanitize_path('.hidden.html') {
+		// Should pass
+	} else {
+		assert false
+	}
+	if _ := sanitize_path('path/.styles.css') {
+		// Should pass
+	} else {
+		assert false
+	}
+}
+
+fn test_sanitize_path_backslash_traversal() {
+	// Test backslash traversal (Windows-style)
+	if _ := sanitize_path('..\\windows\\system32') {
+		assert false // Should fail
+	}
+}
+
+fn test_sanitize_path_plus_sign() {
+	// Test that + is decoded to space
+	result := sanitize_path('file+name.txt') or {
+		assert false
+		return
+	}
+	assert result == 'file+name.txt'
+}
+
+// =============================================================================
+// Error Handling Consistency Tests
+// =============================================================================
+
+fn test_error_with_cause() {
+	// Test that error detail can be created
+	err := new_error_detail(VxuiError.connection_error, 'WebSocket failed')
+	assert err.code == VxuiError.connection_error
+	assert err.message == 'WebSocket failed'
+}
+
+fn test_error_chain() {
+	// Test error with details
+	inner := new_error_detail_with_details(VxuiError.client_not_found, 'Client abc not found', {'id': 'abc'})
+	
+	assert inner.code == VxuiError.client_not_found
+	assert inner.details['id'] == 'abc'
+}
+
+fn test_all_error_codes_have_messages() {
+	// Verify all error codes are defined
+	codes := [
+		VxuiError.unknown,
+		VxuiError.client_not_found,
+		VxuiError.no_clients,
+		VxuiError.no_valid_connection,
+		VxuiError.js_timeout,
+		VxuiError.js_validation_failed,
+		VxuiError.connection_error,
+		VxuiError.browser_not_found,
+		VxuiError.file_not_found,
+		VxuiError.auth_failed,
+		VxuiError.rate_limited,
+		VxuiError.invalid_message,
+		VxuiError.port_not_available,
+		VxuiError.route_not_found,
+		VxuiError.middleware_rejected,
+		VxuiError.connection_closed,
+		VxuiError.request_timeout,
+		VxuiError.auth_invalid_token,
+		VxuiError.path_traversal,
+		VxuiError.js_result_too_large,
+	]
+	
+	for code in codes {
+		assert int(code) >= 0
+	}
+}

@@ -431,11 +431,6 @@ mut:
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}
-	// Backward compatibility aliases - these delegate to config
-	// Deprecated: Use config.token directly
-	token string @[deprecated: 'Use config.token instead'; deprecated_after: 'v0.5.0']
-	// Deprecated: Use config.multi_client directly
-	multi_client bool @[deprecated: 'Use config.multi_client instead'; deprecated_after: 'v0.5.0']
 }
 
 // RateCounter tracks request rates per client
@@ -458,8 +453,6 @@ fn init[T](mut app T) ! {
 	if app.config.token == '' {
 		app.config.token = generate_token()
 	}
-	// Backward compatibility
-	app.token = app.config.token
 
 	// Initialize maps
 	app.clients = map[string]Client{}
@@ -995,10 +988,6 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	app.routes = generate_routes(app)!
 
-	// Sync backward compatibility fields
-	app.token = app.config.token
-	app.multi_client = app.config.multi_client
-
 	// Start client removal handler goroutine (serializes removal to prevent races)
 	spawn app.process_client_removals()
 
@@ -1122,9 +1111,6 @@ pub fn run[T](mut app T, html_filename string) ! {
 pub fn run_with_config[T](mut app T, html_filename string, config Config) ! {
 	// Apply configuration
 	app.config = config
-	// Sync backward compatibility fields
-	app.token = config.token
-	app.multi_client = config.multi_client
 
 	run(mut app, html_filename)!
 }

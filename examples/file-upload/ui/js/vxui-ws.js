@@ -59,9 +59,43 @@ Usage:
         enabled: true,
         timeout_ms: 5000,
         max_result_size: 1048576,  // 1MB
+        max_script_size: 65536,    // 64KB max script size
         allow_eval: false,
         allowed_apis: ['document.*', 'window.location.*', 'console.*', 'localStorage.*', 'sessionStorage.*'],
-        forbidden_patterns: ['eval(', 'Function(', 'setTimeout(', 'setInterval(', 'XMLHttpRequest', 'fetch(', 'WebSocket', 'import(']
+        forbidden_patterns: [
+            // Direct eval and Function constructor
+            'eval(', 'eval[', 'eval`',
+            'function(', 'new function', 'new Function',
+            'constructor',  // Block constructor access which can be used to get Function
+            // Timers that could be used for side effects
+            'setTimeout(', 'setInterval(', 'setImmediate(',
+            'requestAnimationFrame(', 'requestIdleCallback(',
+            // Network APIs
+            'XMLHttpRequest', 'fetch(', 'WebSocket', 'EventSource',
+            'navigator.sendBeacon', 'navigator.connection',
+            // Dynamic code loading
+            'import(', 'importScripts', 'require(',
+            // Global object access
+            'globalThis', 'global', 'process', 'module', 'exports',
+            'Buffer', '__proto__', 'prototype[',
+            // DOM manipulation that could be dangerous
+            'document.write(', 'document.writeln(',
+            'document.createElement(',  // Could create script tags
+            'innerHTML', 'outerHTML', 'insertAdjacentHTML',
+            // Event handler injection
+            'onerror', 'onload', 'onclick', 'onmouse', 'onkey',
+            // Other dangerous APIs
+            'alert(', 'confirm(', 'prompt(',
+            'postMessage', 'open(', 'close(',
+            'document.cookie', 'document.domain',
+            // Encoding tricks
+            'fromCharCode', 'charCodeAt',
+            'atob(', 'btoa(',
+            // Prototype pollution
+            '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__',
+            'Object.assign', 'Object.defineProperty', 'Object.setPrototypeOf',
+            'Reflect.'
+        ]
     }
 
     /**
@@ -306,6 +340,14 @@ Usage:
             return { valid: true }
         }
 
+        // Check script size
+        if (script.length > jsSandbox.max_script_size) {
+            return { 
+                valid: false, 
+                error: 'Script exceeds maximum size (' + script.length + ' > ' + jsSandbox.max_script_size + ')' 
+            }
+        }
+
         var scriptLower = script.toLowerCase()
         
         // Check forbidden patterns
@@ -316,6 +358,50 @@ Usage:
                     valid: false, 
                     error: 'Forbidden pattern found: ' + jsSandbox.forbidden_patterns[i] 
                 }
+            }
+        }
+
+        // Check for string concatenation tricks to bypass filters
+        // e.g., "ev" + "al(" or "e\x76al("
+        var obfuscationPatterns = [
+            /['"]\s*\+\s*['"]/,           // String concatenation: 'a' + 'b'
+            /\\x[0-9a-f]{2}/i,            // Hex escape: \x65
+            /\\u[0-9a-f]{4}/i,            // Unicode escape: \u0065
+            /\\[0-7]{1,3}/,               // Octal escape: \145
+            /String\.fromCharCode/i,       // Character code construction
+            /\[\s*['"]/,                   // Bracket notation: obj['prop']
+            /['"]\s*\]/                    // Bracket notation end: 'prop']
+        ]
+        
+        for (var j = 0; j < obfuscationPatterns.length; j++) {
+            if (obfuscationPatterns[j].test(script)) {
+                // Don't block all obfuscation, just log a warning
+                log('Warning: Potential obfuscation detected:', obfuscationPatterns[j])
+            }
+        }
+
+        // Check for multiple statements that could hide malicious code
+        var statementCount = (script.match(/;/g) || []).length
+        if (statementCount > 10) {
+            return { 
+                valid: false, 
+                error: 'Too many statements (' + statementCount + ' > 10)' 
+            }
+        }
+
+        // Check for try-catch which could be used to hide errors
+        if (/try\s*\{/.test(scriptLower) && /catch\s*\(/.test(scriptLower)) {
+            return { 
+                valid: false, 
+                error: 'try-catch blocks are not allowed' 
+            }
+        }
+
+        // Check for template literals which can be used to bypass filters
+        if (/`[^`]*\$\{/.test(script)) {
+            return { 
+                valid: false, 
+                error: 'Template literals with interpolation are not allowed' 
             }
         }
 

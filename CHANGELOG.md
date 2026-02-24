@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-24
+
+### Security
+
+- **Enhanced Path Validation**:
+  - Added URL-encoded path traversal detection
+  - Blocks double-encoded attacks (`%252e%252e%252f`)
+  - Prevents null byte injection
+  - Restricts hidden file access (except allowed extensions)
+- **Enhanced JS Sandbox**:
+  - Added 60+ forbidden patterns including constructor access, prototype pollution
+  - Script size limit (64KB max)
+  - Statement count limit (max 10 statements)
+  - Blocks try-catch and template literals with interpolation
+  - Detects obfuscation attempts
+
+### Added
+
+- **Comprehensive Test Suite**:
+  - Enhanced path sanitization tests (URL encoding, null bytes, hidden files)
+  - Error handling consistency tests
+  - All error codes validation
+
+### Changed
+
+- **Breaking Changes**:
+  - Removed deprecated `app.token` field - use `app.config.token`
+  - Removed deprecated `app.multi_client` field - use `app.config.multi_client`
+
+### Documentation
+
+- Added migration guide in README
+- Added security best practices section
+- Added Mermaid architecture diagram
+
 ## [0.5.2] - 2026-02-24
 
 ### Changed
@@ -268,7 +303,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simple routing system
 - Basic examples
 
-[Unreleased]: https://github.com/kbkpbot/vxui/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/kbkpbot/vxui/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kbkpbot/vxui/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/kbkpbot/vxui/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/kbkpbot/vxui/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kbkpbot/vxui/compare/v0.4.1...v0.5.0

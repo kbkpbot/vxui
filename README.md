@@ -384,6 +384,61 @@ fn (mut app App) handler(msg map[string]json2.Any) string {
 }
 ```
 
+### Security Best Practices
+
+1. **Always validate input** — Use `sanitize_path()` for file paths
+2. **Escape output** — Use `escape_html()`, `escape_js()`, `escape_attr()` 
+3. **Keep tokens secure** — Tokens are auto-generated and passed via URL
+4. **Limit JS execution** — Configure `js_sandbox` settings appropriately
+
+```v
+fn main() {
+    mut app := App{}
+    // Enhanced security configuration
+    app.config.js_sandbox = vxui.JsSandboxConfig{
+        enabled: true
+        timeout_ms: 3000
+        max_result_size: 1024 * 100  // 100KB
+        allow_eval: false
+    }
+    vxui.run(mut app, './ui/index.html')!
+}
+```
+
+## 🔄 Migration Guide
+
+### From v0.5.x to v0.6.0
+
+**Deprecated fields removed:**
+- `app.token` → Use `app.config.token`
+- `app.multi_client` → Use `app.config.multi_client`
+
+```v
+// Before (v0.5.x)
+mut app := App{}
+app.token = 'my-token'
+app.multi_client = true
+
+// After (v0.6.0)
+mut app := App{}
+app.config.token = 'my-token'
+app.config.multi_client = true
+```
+
+### From v0.4.x to v0.5.0
+
+**Configuration unified:**
+- All settings now in `app.config`
+- Window, browser, JS sandbox settings available
+
+```v
+// Before
+app.window = vxui.WindowConfig{width: 1200, height: 800}
+
+// After
+app.config.window = vxui.WindowConfig{width: 1200, height: 800}
+```
+
 ## 🌍 Browser Support
 
 vxui auto-detects and supports:
