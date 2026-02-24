@@ -327,14 +327,19 @@
                 const badgeCount = ref(5)
 
                 // WebSocket send helper
+                let rpcCounter = 0
                 const wsSend = (path, data = {}) => {
                     const socket = window.vxuiSocket
                     if (socket && socket.readyState === WebSocket.OPEN) {
+                        rpcCounter++
                         const msg = {
+                            rpcID: rpcCounter,
                             verb: 'post',
                             path: path,
                             parameters: data,
-                            HEADERS: { 'HX-Request': 'true' }
+                            token: window.vxuiToken || '',
+                            headers: { 'HX-Request': 'true' },
+                            timestamp: Date.now()
                         }
                         socket.send(JSON.stringify(msg))
                     }

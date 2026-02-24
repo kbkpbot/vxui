@@ -276,11 +276,6 @@ fn (mut app App) daterange_pick(message map[string]json2.Any) string {
 // =============================================================================
 
 fn get_params(message map[string]json2.Any) map[string]json2.Any {
-	mut params := map[string]json2.Any{}
-	if p := message['parameters'] {
-		if p is map[string]json2.Any {
-			params = p.clone()
-		}
-	}
-	return params
+	tmp := message['parameters'] or { json2.Null{} }
+	return tmp.as_map()
 }
