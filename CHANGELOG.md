@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.1] - 2026-02-24
+## [0.5.2] - 2026-02-24
+
+### Changed
+
+- **Modernized UI Examples**:
+  - `examples/test`: Redesigned with dark theme, card-based layout, glassmorphism effects
+  - `examples/enchart`: Enhanced dashboard with gradient backgrounds, stat cards, live status indicator
+  - Window sizes adjusted for better display (test: 1000x700, enchart: 1200x800)
+
+### Fixed
+
+- Removed CSS animations (gradient, pulse) to reduce CPU usage
+- Stat card text centering in enchart example
+- Chart height adjusted to 80vh for better responsiveness
 
 ### Added
 
@@ -255,7 +268,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simple routing system
 - Basic examples
 
-[Unreleased]: https://github.com/kbkpbot/vxui/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kbkpbot/vxui/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/kbkpbot/vxui/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/kbkpbot/vxui/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/kbkpbot/vxui/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/kbkpbot/vxui/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/kbkpbot/vxui/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/kbkpbot/vxui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kbkpbot/vxui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kbkpbot/vxui/releases/tag/v0.1.0
 [0.0.1]: https://github.com/kbkpbot/vxui/releases/tag/v0.0.1

@@ -418,16 +418,16 @@ struct ClientRemoveMsg {
 
 pub struct Context {
 mut:
-	ws_port             u16
-	ws                  websocket.Server
-	routes              map[string]Route
-	clients             map[string]Client
-	mu                  sync.RwMutex
-	js_callbacks        map[string]chan string
-	event_handlers      map[EventType][]EventHandler
-	middlewares         []Middleware
-	rate_counters       map[string]RateCounter
-	client_remove_chan  chan ClientRemoveMsg // channel for serialized client removal
+	ws_port            u16
+	ws                 websocket.Server
+	routes             map[string]Route
+	clients            map[string]Client
+	mu                 sync.RwMutex
+	js_callbacks       map[string]chan string
+	event_handlers     map[EventType][]EventHandler
+	middlewares        []Middleware
+	rate_counters      map[string]RateCounter
+	client_remove_chan chan ClientRemoveMsg // channel for serialized client removal
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}

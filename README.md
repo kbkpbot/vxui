@@ -182,6 +182,7 @@ v run main.v
 ### Basic Form Handling
 
 See [`examples/test/`](examples/test/) for a complete form handling example with:
+- Modern dark theme with glassmorphism
 - Input validation
 - Dynamic updates
 - Edit/Cancel workflow
@@ -189,9 +190,10 @@ See [`examples/test/`](examples/test/) for a complete form handling example with
 ### Real-time Charts
 
 See [`examples/enchart/`](examples/enchart/) for:
-- ECharts integration
-- Real-time data streaming
-- JSON API endpoints
+- Modern dashboard UI with dark theme
+- ECharts integration with gradient charts
+- Real-time data streaming with live statistics
+- Stat cards showing current/average/peak values
 
 ### Gallery Demo
 

@@ -100,7 +100,11 @@ fn calculate_center_position(window_width int, window_height int) (int, int) {
 	x := (screen.width - window_width) / 2
 	y := (screen.height - window_height) / 2
 	// Ensure positive values
-	return if x > 0 { x } else { 100 }, if y > 0 { y } else { 100 }
+	return if x > 0 { x } else { 100 }, if y > 0 {
+		y
+	} else {
+		100
+	}
 }
 
 // get_browser_args returns browser-specific arguments
