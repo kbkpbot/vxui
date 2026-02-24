@@ -642,7 +642,8 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 				break
 			}
 		}
-		if client_id_to_remove != '' {
+		// Only delete if client still exists (may have been removed by client_close message)
+		if client_id_to_remove != '' && client_id_to_remove in app.clients {
 			app.clients.delete(client_id_to_remove)
 			app.logger.info('Removed client: ${client_id_to_remove}')
 			app.trigger_event(EventType.client_disconnected, client_id_to_remove, 'Client disconnected',
