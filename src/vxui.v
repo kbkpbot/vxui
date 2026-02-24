@@ -38,6 +38,15 @@ pub enum VxuiError {
 	middleware_rejected
 	request_timeout
 	rate_limited
+	// Additional error codes for unified error handling
+	profile_create_failed
+	process_fork_failed
+	hidden_file_access
+	null_byte_detected
+	absolute_path_not_allowed
+	invalid_method
+	method_not_allowed
+	attribute_parse_error
 }
 
 // VxuiErrorDetail represents a structured error with code and details
@@ -49,13 +58,23 @@ pub:
 	cause   ?IError // Underlying error that caused this error
 }
 
-// str returns the error message
-pub fn (e VxuiErrorDetail) str() string {
+// msg returns the error message (implements IError interface)
+pub fn (e VxuiErrorDetail) msg() string {
 	mut result := e.message
 	if cause := e.cause {
 		result += ': ${cause.msg()}'
 	}
 	return result
+}
+
+// code returns the error code (implements IError interface)
+pub fn (e VxuiErrorDetail) code() int {
+	return int(e.code)
+}
+
+// str returns the error message
+pub fn (e VxuiErrorDetail) str() string {
+	return e.msg()
 }
 
 // err returns this as an IError
@@ -920,11 +939,18 @@ pub fn fire_call[T](mut app T, method_name string, message map[string]json2.Any)
 			$if method.return_type is string {
 				return app.$method(message)
 			} $else {
-				return error('[${method_name}] should return string.(${method.return_type})')
+				return new_error_detail_with_details(VxuiError.invalid_method, 'Method should return string',
+					{
+					'method':      method_name
+					'return_type': method.return_type
+				})
 			}
 		}
 	}
-	return error("Can't find method [${method_name}]")
+	return new_error_detail_with_details(VxuiError.route_not_found, 'Method not found',
+		{
+		'method': method_name
+	})
 }
 
 // parse_attrs parses function attributes for verbs and path
@@ -939,7 +965,10 @@ pub fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 	for x in attrs {
 		if x.starts_with('/') {
 			if path != '' {
-				return error("[${name}]:Can't assign multiply path for a route.")
+				return new_error_detail_with_details(VxuiError.route_not_found, 'Cannot assign multiple paths to a route',
+					{
+					'function': name
+				})
 			} else {
 				path = x
 			}
@@ -947,7 +976,11 @@ pub fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 			if x.to_lower() in verb_strings.keys() {
 				verbs << verb_strings[x.to_lower()]
 			} else {
-				return error('[${name}]:Unknown verb: ${x}')
+				return new_error_detail_with_details(VxuiError.invalid_method, 'Unknown verb',
+					{
+					'function': name
+					'verb':     x
+				})
 			}
 		}
 	}
@@ -965,7 +998,8 @@ pub fn generate_routes[T](app &T) !map[string]Route {
 	mut routes := map[string]Route{}
 	$for method in T.methods {
 		verbs, route_path := parse_attrs(method.name, method.attrs) or {
-			return error('error parsing method attributes: ${err}')
+			return new_error_detail_with_cause(VxuiError.attribute_parse_error, 'Error parsing method attributes',
+				err)
 		}
 		routes[method.name] = Route{
 			verb: verbs

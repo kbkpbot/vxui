@@ -181,14 +181,17 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 
 	// Ensure the file exists
 	if !os.exists(abs_path) {
-		return error('HTML file not found: ${abs_path}')
+		return new_error_detail_with_details(VxuiError.file_not_found, 'HTML file not found',
+			{
+			'path': abs_path
+		})
 	}
 
 	// Detect browser path based on platform
 	browser_path := find_browser_path()
 
 	if browser_path == '' {
-		return error('No supported browser found')
+		return new_error_detail(VxuiError.browser_not_found, 'No supported browser found')
 	}
 
 	// Build URL with parameters
@@ -217,7 +220,7 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 			os.execute('open -a Safari "${url}"')
 			return
 		}
-		return error('Safari is only supported on macOS')
+		return new_error_detail(VxuiError.browser_not_found, 'Safari is only supported on macOS')
 	}
 
 	// Create profile directory for non-Safari browsers
@@ -228,7 +231,10 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 	} else {
 		os.join_path(os.home_dir(), '.vxui', 'browser_profile')
 	}
-	os.mkdir_all(profile_path) or { return error('Failed to create profile directory: ${err}') }
+	os.mkdir_all(profile_path) or {
+		return new_error_detail_with_cause(VxuiError.profile_create_failed, 'Failed to create profile directory',
+			err)
+	}
 
 	// Build command arguments
 	mut cmd_args := get_browser_args(browser_name, browser_config)
@@ -298,7 +304,7 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 				exit(1)
 			}
 		} else if pid < 0 {
-			return error('Failed to fork process')
+			return new_error_detail(VxuiError.process_fork_failed, 'Failed to fork process')
 		}
 	}
 

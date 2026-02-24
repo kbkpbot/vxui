@@ -57,43 +57,57 @@ pub fn sanitize_path(path string) !string {
 	mut decoded := url_decode(path)
 	// Double decoding for doubly-encoded attacks
 	decoded2 := url_decode(decoded)
-	
+
 	// Check for path traversal attempts in original, decoded, and double-decoded forms
 	for check_path in [path, decoded, decoded2] {
 		// Check for dangerous patterns
 		if check_path.contains('..') || check_path.contains('~') {
-			return error('Invalid path: path traversal detected')
+			return new_error_detail_with_details(VxuiError.path_traversal, 'Path traversal detected',
+				{
+				'path': path
+			})
 		}
 	}
-	
+
 	// Check for encoded traversal patterns
 	lower_path := path.to_lower()
 	encoded_patterns := ['%2e%2e', '%252e%252e', '..%2f', '..%5c', '%2e%2e%2f', '%2e%2e%5c']
 	for pattern in encoded_patterns {
 		if lower_path.contains(pattern) {
-			return error('Invalid path: path traversal detected')
+			return new_error_detail_with_details(VxuiError.path_traversal, 'Encoded path traversal detected',
+				{
+				'path':    path
+				'pattern': pattern
+			})
 		}
 	}
-	
+
 	// Ensure path is relative (not absolute)
 	for check_path in [path, decoded] {
 		if check_path.starts_with('/') {
-			return error('Invalid path: absolute paths not allowed')
+			return new_error_detail_with_details(VxuiError.absolute_path_not_allowed,
+				'Absolute paths not allowed', {
+				'path': path
+			})
 		}
 	}
-	
+
 	// Prevent null byte injection
 	if path.contains('\x00') || decoded.contains('\x00') {
-		return error('Invalid path: null byte detected')
+		return new_error_detail_with_details(VxuiError.null_byte_detected, 'Null byte detected in path',
+			{
+			'path': path
+		})
 	}
-	
+
 	// Prevent access to sensitive hidden files
 	path_parts := decoded.split('/')
 	for part in path_parts {
 		// Block hidden files (except . for current directory reference)
 		if part.starts_with('.') && part != '.' && part.len > 1 {
 			// Allow .html, .css, .js etc but block .env, .git, .htaccess
-			allowed_extensions := ['.html', '.htm', '.css', '.js', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot']
+			allowed_extensions := ['.html', '.htm', '.css', '.js', '.json', '.png', '.jpg', '.jpeg',
+				'.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot']
 			mut is_allowed := false
 			for ext in allowed_extensions {
 				if part.to_lower().ends_with(ext) {
@@ -102,11 +116,15 @@ pub fn sanitize_path(path string) !string {
 				}
 			}
 			if !is_allowed {
-				return error('Invalid path: hidden files not allowed')
+				return new_error_detail_with_details(VxuiError.hidden_file_access, 'Hidden file access not allowed',
+					{
+					'path': path
+					'file': part
+				})
 			}
 		}
 	}
-	
+
 	return path
 }
 
@@ -123,7 +141,10 @@ pub fn get_free_port() !u16 {
 		}
 		attempts++
 	}
-	return error('Failed to find a free port after ${max_attempts} attempts')
+	return new_error_detail_with_details(VxuiError.port_not_available, 'Failed to find a free port',
+		{
+		'attempts': max_attempts.str()
+	})
 }
 
 // escape_html escapes special HTML characters to prevent XSS attacks

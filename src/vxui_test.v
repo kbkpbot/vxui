@@ -1208,8 +1208,11 @@ fn test_error_with_cause() {
 
 fn test_error_chain() {
 	// Test error with details
-	inner := new_error_detail_with_details(VxuiError.client_not_found, 'Client abc not found', {'id': 'abc'})
-	
+	inner := new_error_detail_with_details(VxuiError.client_not_found, 'Client abc not found',
+		{
+		'id': 'abc'
+	})
+
 	assert inner.code == VxuiError.client_not_found
 	assert inner.details['id'] == 'abc'
 }
@@ -1238,7 +1241,7 @@ fn test_all_error_codes_have_messages() {
 		VxuiError.path_traversal,
 		VxuiError.js_result_too_large,
 	]
-	
+
 	for code in codes {
 		assert int(code) >= 0
 	}
