@@ -135,6 +135,11 @@ fn get_browser_args(browser_name string, config BrowserConfig) []string {
 		'--bwsi',
 		'--disable-sync',
 		'--disable-sync-preferences',
+		// Disable hardware acceleration to avoid VA-API errors on Linux
+		'--disable-accelerated-video-decode',
+		'--disable-accelerated-video-encode',
+		'--disable-gpu-compositing',
+		'--disable-vaapi',
 	]
 
 	// Firefox doesn't support --app-mode, so use different args
