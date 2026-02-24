@@ -21,6 +21,7 @@
 - [Verb](#Verb)
 - [BrowserConfig](#BrowserConfig)
 - [Client](#Client)
+- [Config](#Config)
 - [Context](#Context)
   - [run_js](#run_js)
   - [run_js_client](#run_js_client)
@@ -225,6 +226,35 @@ Client represents a connected browser client
 
 [[Return to contents]](#Contents)
 
+## Config
+```v
+struct Config {
+pub mut:
+	// Connection settings
+	close_timer      int = 50 // Close app after N cycles with no browser (each cycle is ~1ms)
+	ws_ping_interval int = 10 // WebSocket ping interval in seconds
+
+	// Security settings
+	token        string // Security token (auto-generated if empty)
+	require_auth bool = true // Require token authentication
+
+	// Client settings
+	multi_client bool // Allow multiple browser clients
+	max_clients  int = 10 // Maximum number of concurrent clients (0 = unlimited)
+
+	// JavaScript execution settings
+	js_timeout_default int = 5000 // Default timeout for run_js() in milliseconds
+	js_poll_interval   int = 10   // Polling interval for JS result in milliseconds
+
+	// Window settings
+	window WindowConfig
+}
+```
+
+Config holds vxui runtime configuration
+
+[[Return to contents]](#Contents)
+
 ## Context
 ```v
 struct Context {
@@ -389,4 +419,4 @@ WindowConfig holds window configuration
 
 [[Return to contents]](#Contents)
 
-#### Powered by vdoc. Generated on: 24 Feb 2026 10:20:27
+#### Powered by vdoc. Generated on: 24 Feb 2026 10:35:10

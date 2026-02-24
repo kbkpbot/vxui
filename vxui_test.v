@@ -1,5 +1,7 @@
 module vxui
 
+import time
+
 // Test get_free_port returns a valid port number
 fn test_get_free_port() {
 	port := get_free_port() or {
@@ -274,4 +276,241 @@ fn test_generate_id() {
 	for c in id1 {
 		assert (c >= `0` && c <= `9`) || (c >= `a` && c <= `f`)
 	}
+}
+
+// === New Feature Tests (v0.2.0) ===
+
+// Test Client struct
+fn test_client_struct() {
+	now := time.now()
+	client := Client{
+		id: 'test-client-123'
+		token: 'secret-token'
+		connected: now
+	}
+	assert client.id == 'test-client-123'
+	assert client.token == 'secret-token'
+	assert client.connected == now
+	assert client.connection == unsafe { nil }
+}
+
+// Test WindowConfig struct with defaults
+fn test_window_config_defaults() {
+	config := WindowConfig{}
+	assert config.width == 800
+	assert config.height == 600
+	assert config.x == -1  // center
+	assert config.y == -1  // center
+	assert config.min_width == 100
+	assert config.min_height == 100
+	assert config.resizable == true
+	assert config.frameless == false
+	assert config.transparent == false
+}
+
+// Test WindowConfig with custom values
+fn test_window_config_custom() {
+	config := WindowConfig{
+		width: 1920
+		height: 1080
+		x: 100
+		y: 50
+		resizable: false
+		title: 'My App'
+	}
+	assert config.width == 1920
+	assert config.height == 1080
+	assert config.x == 100
+	assert config.y == 50
+	assert config.resizable == false
+	assert config.title == 'My App'
+}
+
+// Test Context with multi_client enabled
+fn test_context_multi_client() {
+	mut ctx := Context{}
+	ctx.multi_client = true
+	ctx.close_timer = 5000
+	ctx.token = 'test-token-12345'
+	
+	assert ctx.multi_client == true
+	assert ctx.close_timer == 5000
+	assert ctx.token == 'test-token-12345'
+	assert ctx.clients.len == 0
+}
+
+// Test Context with WindowConfig
+fn test_context_window_config() {
+	mut ctx := Context{}
+	ctx.window = WindowConfig{
+		width: 1200
+		height: 800
+		title: 'Test Window'
+	}
+	
+	assert ctx.window.width == 1200
+	assert ctx.window.height == 800
+	assert ctx.window.title == 'Test Window'
+}
+
+// Test get_clients returns empty list initially
+fn test_get_clients_empty() {
+	mut ctx := Context{}
+	clients := ctx.get_clients()
+	assert clients.len == 0
+}
+
+// Test get_client_count returns 0 initially
+fn test_get_client_count_empty() {
+	mut ctx := Context{}
+	count := ctx.get_client_count()
+	assert count == 0
+}
+
+// Test get_port returns 0 initially
+fn test_get_port_initial() {
+	ctx := Context{}
+	assert ctx.get_port() == 0
+}
+
+// Test get_token returns empty string initially
+fn test_get_token_initial() {
+	ctx := Context{}
+	assert ctx.get_token() == ''
+}
+
+// Test get_token with custom token
+fn test_get_token_custom() {
+	mut ctx := Context{}
+	ctx.token = 'my-secret-token'
+	assert ctx.get_token() == 'my-secret-token'
+}
+
+// Test set_window_size
+fn test_set_window_size() {
+	mut ctx := Context{}
+	ctx.set_window_size(1024, 768)
+	assert ctx.window.width == 1024
+	assert ctx.window.height == 768
+}
+
+// Test set_window_position
+fn test_set_window_position() {
+	mut ctx := Context{}
+	ctx.set_window_position(100, 200)
+	assert ctx.window.x == 100
+	assert ctx.window.y == 200
+}
+
+// Test set_window_position with center (-1)
+fn test_set_window_position_center() {
+	mut ctx := Context{}
+	ctx.set_window_position(-1, -1)
+	assert ctx.window.x == -1
+	assert ctx.window.y == -1
+}
+
+// Test set_window_title
+fn test_set_window_title() {
+	mut ctx := Context{}
+	ctx.set_window_title('My Application')
+	assert ctx.window.title == 'My Application'
+}
+
+// Test set_resizable
+fn test_set_resizable() {
+	mut ctx := Context{}
+	ctx.set_resizable(false)
+	assert ctx.window.resizable == false
+	ctx.set_resizable(true)
+	assert ctx.window.resizable == true
+}
+
+// Test close_client with non-existent client
+fn test_close_client_not_found() {
+	mut ctx := Context{}
+	ctx.close_client('non-existent-id') or {
+		// Expected to fail
+		assert err.msg().contains('not found')
+		return
+	}
+	assert false, 'Should have failed for non-existent client'
+}
+
+// Test broadcast with no clients (should not crash)
+fn test_broadcast_no_clients() {
+	mut ctx := Context{}
+	// This should succeed even with no clients (just does nothing)
+	ctx.broadcast('test message') or {
+		// Might fail if write fails, but not due to no clients
+		return
+	}
+}
+
+// Test run_js with no clients (should return error)
+fn test_run_js_no_clients() {
+	mut ctx := Context{}
+	ctx.run_js('alert(1)', 1000) or {
+		// Expected to fail with "No connected clients"
+		assert err.msg().contains('No connected clients')
+		return
+	}
+	assert false, 'Should have failed with no clients'
+}
+
+// Test run_js_client with non-existent client
+fn test_run_js_client_not_found() {
+	mut ctx := Context{}
+	ctx.run_js_client('non-existent-id', 'alert(1)', 1000) or {
+		// Expected to fail with "Client not found"
+		assert err.msg().contains('not found')
+		return
+	}
+	assert false, 'Should have failed for non-existent client'
+}
+
+// Test Config struct with defaults
+fn test_config_defaults() {
+	config := Config{}
+	assert config.close_timer == 50
+	assert config.ws_ping_interval == 10
+	assert config.require_auth == true
+	assert config.multi_client == false
+	assert config.max_clients == 10
+	assert config.js_timeout_default == 5000
+	assert config.js_poll_interval == 10
+}
+
+// Test Config with custom values
+fn test_config_custom() {
+	config := Config{
+		close_timer: 1000
+		token: 'my-custom-token'
+		multi_client: true
+		max_clients: 5
+		js_timeout_default: 10000
+		window: WindowConfig{
+			width: 1920
+			height: 1080
+		}
+	}
+	assert config.close_timer == 1000
+	assert config.token == 'my-custom-token'
+	assert config.multi_client == true
+	assert config.max_clients == 5
+	assert config.js_timeout_default == 10000
+	assert config.window.width == 1920
+	assert config.window.height == 1080
+}
+
+// Test Config window integration
+fn test_config_window() {
+	mut config := Config{}
+	config.window.width = 1280
+	config.window.height = 720
+	config.window.title = 'Test App'
+	
+	assert config.window.width == 1280
+	assert config.window.height == 720
+	assert config.window.title == 'Test App'
 }

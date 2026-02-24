@@ -36,6 +36,29 @@ pub mut:
 	title       string
 }
 
+// Config holds vxui runtime configuration
+pub struct Config {
+pub mut:
+	// Connection settings
+	close_timer         int = 50   // Close app after N cycles with no browser (each cycle is ~1ms)
+	ws_ping_interval    int = 10   // WebSocket ping interval in seconds
+	
+	// Security settings
+	token               string // Security token (auto-generated if empty)
+	require_auth        bool = true // Require token authentication
+	
+	// Client settings
+	multi_client        bool   // Allow multiple browser clients
+	max_clients         int = 10 // Maximum number of concurrent clients (0 = unlimited)
+	
+	// JavaScript execution settings
+	js_timeout_default  int = 5000 // Default timeout for run_js() in milliseconds
+	js_poll_interval    int = 10   // Polling interval for JS result in milliseconds
+	
+	// Window settings
+	window              WindowConfig
+}
+
 // Context is the main struct of vxui
 pub struct Context {
 mut:
@@ -298,7 +321,7 @@ pub fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string {
 	js_id := '${time.now().unix_milli()}-${rand.u32()}'
 
 	// Create response channel
-	ch := chan string{cap: 1}
+	mut ch := chan string{cap: 1}
 	ctx.mu.lock()
 	ctx.js_callbacks[js_id] = ch
 	ctx.mu.unlock()
@@ -332,9 +355,11 @@ pub fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string {
 			}
 		}
 
+		// Cleanup: remove from map and close channel
 		ctx.mu.lock()
 		ctx.js_callbacks.delete(js_id)
 		ctx.mu.unlock()
+		ch.close()
 
 		if !got_result {
 			return error('JavaScript execution timeout')
@@ -355,7 +380,7 @@ pub fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout
 	ctx.mu.runlock()
 
 	js_id := '${time.now().unix_milli()}-${rand.u32()}'
-	ch := chan string{cap: 1}
+	mut ch := chan string{cap: 1}
 	ctx.mu.lock()
 	ctx.js_callbacks[js_id] = ch
 	ctx.mu.unlock()
@@ -386,9 +411,11 @@ pub fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout
 			}
 		}
 
+		// Cleanup: remove from map and close channel
 		ctx.mu.lock()
 		ctx.js_callbacks.delete(js_id)
 		ctx.mu.unlock()
+		ch.close()
 
 		if !got_result {
 			return error('JavaScript execution timeout')
