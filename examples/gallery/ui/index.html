@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vxui Gallery - Desktop Controls Demo</title>
+    <script src="js/htmx.js"></script>
+    <script src="js/vxui-ws.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --info: #3b82f6;
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #475569;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            hx-ext: vxui-ws;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            margin-bottom: 40px;
+            border-radius: 16px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: rgba(255,255,255,0.8);
+            font-size: 1.1rem;
+        }
+
+        .section {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .section h2 {
+            font-size: 1.4rem;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--primary);
+        }
+
+        .section h3 {
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg-input);
+            color: var(--text);
+        }
+
+        .btn:hover {
+            background: var(--border);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Inputs */
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="number"],
+        input[type="password"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-input);
+            color: var(--text);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        /* Checkbox & Radio */
+        .checkbox-group,
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .checkbox-label,
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"],
+        input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        /* Slider */
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: var(--bg-input);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+        }
+
+        /* Toggle */
+        .toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 30px;
+            border-radius: 15px;
+            background: var(--bg-input);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .toggle.active {
+            background: var(--success);
+        }
+
+        /* Progress */
+        .progress-container {
+            background: var(--bg-input);
+            border-radius: 8px;
+            height: 20px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            border-radius: 8px;
+            transition: width 0.3s;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--text);
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            padding: 16px 0;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-input);
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        tr:hover {
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+
+        .status-pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+        }
+
+        /* Cards */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .card {
+            perspective: 1000px;
+            height: 150px;
+            cursor: pointer;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front,
+        .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .card-front {
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+        }
+
+        .card-back {
+            background: linear-gradient(135deg, var(--success), #14b8a6);
+            transform: rotateY(180deg);
+        }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+        }
+
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            min-width: 400px;
+            max-width: 90vw;
+            z-index: 1001;
+            border: 1px solid var(--border);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        /* Notifications */
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .notification {
+            padding: 12px 20px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease;
+            min-width: 250px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .notification.info {
+            background: var(--info);
+            color: white;
+        }
+
+        .notification.success {
+            background: var(--success);
+            color: white;
+        }
+
+        .notification.warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .notification.error {
+            background: var(--error);
+            color: white;
+        }
+
+        /* Result spans */
+        .result {
+            display: inline-block;
+            padding: 4px 12px;
+            background: var(--bg-input);
+            border-radius: 6px;
+            font-size: 14px;
+            margin-left: 12px;
+        }
+
+        /* Grid layout */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+    </style>
+</head>
+<body hx-ext="vxui-ws">
+    <div class="container">
+        <header>
+            <h1>vxui Gallery</h1>
+            <p>Desktop Controls Demo - All components update in real-time via WebSocket</p>
+        </header>
+
+        <!-- Buttons Section -->
+        <div class="section">
+            <h2>Buttons</h2>
+            <div class="grid-2">
+                <div>
+                    <h3>Button Styles</h3>
+                    <div class="btn-group">
+                        <button class="btn" hx-post="/button/click">Default</button>
+                        <button class="btn btn-primary" hx-post="/button/primary">Primary</button>
+                        <button class="btn btn-success" hx-post="/button/click">Success</button>
+                        <button class="btn btn-warning" hx-post="/button/click">Warning</button>
+                        <button class="btn btn-danger" hx-post="/button/danger">Danger</button>
+                    </div>
+                    <span id="btn-result" class="result">Click a button</span>
+                </div>
+                <div>
+                    <h3>Button Sizes</h3>
+                    <div class="btn-group">
+                        <button class="btn btn-small btn-primary">Small</button>
+                        <button class="btn btn-primary">Medium</button>
+                        <button class="btn btn-primary" style="padding: 16px 32px; font-size: 16px;">Large</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Inputs Section -->
+        <div class="section">
+            <h2>Form Inputs</h2>
+            <div class="grid-2">
+                <div>
+                    <div class="input-group">
+                        <label>Text Input</label>
+                        <input type="text" name="text" placeholder="Type something..." 
+                               hx-post="/form/input" hx-trigger="keyup changed" hx-target="#input-result">
+                        <span id="input-result" class="result">Type to see result</span>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Textarea</label>
+                        <textarea name="text" hx-post="/form/textarea" hx-trigger="keyup changed" hx-target="#textarea-result">Multi-line text
+Line 2
+Line 3</textarea>
+                        <span id="textarea-result" class="result">3 lines</span>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Select</label>
+                        <select hx-post="/form/select" hx-target="#select-result">
+                            <option value="option1">Option 1</option>
+                            <option value="option2" selected>Option 2</option>
+                            <option value="option3">Option 3</option>
+                        </select>
+                        <span id="select-result" class="result">Selected: option2</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="input-group">
+                        <label>Checkbox</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="checked" checked hx-post="/form/checkbox" hx-target="#checkbox-result">
+                                I agree to the terms
+                            </label>
+                        </div>
+                        <span id="checkbox-result" class="result">Checked: true</span>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Radio Buttons</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="value" value="radio1" checked hx-post="/form/radio" hx-target="#radio-result">
+                                Option A
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="value" value="radio2" hx-post="/form/radio" hx-target="#radio-result">
+                                Option B
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="value" value="radio3" hx-post="/form/radio" hx-target="#radio-result">
+                                Option C
+                            </label>
+                        </div>
+                        <span id="radio-result" class="result">Selected: radio1</span>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Slider: <span id="slider-result" class="result">Value: 50</span></label>
+                        <input type="range" min="0" max="100" value="50" 
+                               hx-post="/form/slider" hx-trigger="input" hx-target="#slider-result">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Toggle Switch</label>
+                        <div>
+                            <span id="toggle-btn" class="toggle active" hx-post="/form/toggle">ON</span>
+                            <span id="toggle-result" class="result">State: true</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="section">
+            <h2>Progress & Loading</h2>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+            </div>
+            <span id="progress-result">0%</span>
+            <div class="btn-group" style="margin-top: 12px;">
+                <button class="btn btn-primary" hx-post="/progress/start" hx-target="#progress-bar">Reset</button>
+                <button class="btn" hx-post="/progress/increment" hx-target="#progress-bar">Increment +10%</button>
+            </div>
+        </div>
+
+        <!-- Tabs Section -->
+        <div class="section">
+            <h2>Tabs</h2>
+            <div id="tabs-container">
+                <div class="tabs">
+                    <button class="tab active" hx-post="/tabs/switch" hx-vals='{"tab":"tab1"}'>Tab 1</button>
+                    <button class="tab" hx-post="/tabs/switch" hx-vals='{"tab":"tab2"}'>Tab 2</button>
+                    <button class="tab" hx-post="/tabs/switch" hx-vals='{"tab":"tab3"}'>Tab 3</button>
+                </div>
+                <div class="tab-content">
+                    <h3>Tab 1 Content</h3>
+                    <p>This is the first tab panel.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Section -->
+        <div class="section">
+            <h2>Data Table</h2>
+            <div class="btn-group" style="margin-bottom: 16px;">
+                <button class="btn btn-primary" hx-post="/table/add" hx-target="#data-table">Add Row</button>
+                <button class="btn" hx-post="/table/refresh" hx-target="#data-table">Refresh</button>
+            </div>
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Value</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>Alpha</td>
+                        <td>100</td>
+                        <td><span class="status status-active">active</span></td>
+                        <td><button class="btn-small btn-danger" hx-post="/table/delete" hx-vals='{"id":1}'>Delete</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Cards Section -->
+        <div class="section">
+            <h2>Cards (Click to Flip)</h2>
+            <div class="cards-grid">
+                <div id="card-1" class="card" hx-post="/card/flip" hx-vals='{"id":"1"}'>
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <h4>Card 1</h4>
+                            <p>Click to flip</p>
+                        </div>
+                        <div class="card-back">
+                            <h4>Back Side</h4>
+                            <p>This is the back!</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="card-2" class="card" hx-post="/card/flip" hx-vals='{"id":"2"}'>
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <h4>Card 2</h4>
+                            <p>Click to flip</p>
+                        </div>
+                        <div class="card-back">
+                            <h4>Back Side</h4>
+                            <p>This is the back!</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="card-3" class="card" hx-post="/card/flip" hx-vals='{"id":"3"}'>
+                    <div class="card-inner">
+                        <div class="card-front">
+                            <h4>Card 3</h4>
+                            <p>Click to flip</p>
+                        </div>
+                        <div class="card-back">
+                            <h4>Back Side</h4>
+                            <p>This is the back!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Section -->
+        <div class="section">
+            <h2>Modal Dialog</h2>
+            <button class="btn btn-primary" hx-post="/modal/open">Open Modal</button>
+        </div>
+
+        <!-- Notifications Section -->
+        <div class="section">
+            <h2>Notifications</h2>
+            <div class="btn-group">
+                <button class="btn btn-primary" hx-post="/notify/show" hx-vals='{"type":"info"}' hx-target="#notifications">Info</button>
+                <button class="btn btn-success" hx-post="/notify/show" hx-vals='{"type":"success"}' hx-target="#notifications">Success</button>
+                <button class="btn btn-warning" hx-post="/notify/show" hx-vals='{"type":"warning"}' hx-target="#notifications">Warning</button>
+                <button class="btn btn-danger" hx-post="/notify/show" hx-vals='{"type":"error"}' hx-target="#notifications">Error</button>
+                <button class="btn" hx-post="/notify/clear">Clear All</button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer style="text-align: center; padding: 40px; color: var(--text-muted);">
+            <p>vxui Gallery - Built with V + htmx + WebSocket</p>
+        </footer>
+    </div>
+
+    <!-- Modal container -->
+    <div id="modal-container"></div>
+
+    <!-- Notifications container -->
+    <div id="notifications"></div>
+</body>
+</html>
