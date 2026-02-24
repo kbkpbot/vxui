@@ -1,1 +1,19 @@
+# V compiled binaries
+*.exe
+main
+
+# V cache
+.vcache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated
 generate_doc.sh
