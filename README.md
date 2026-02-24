@@ -97,7 +97,7 @@ vxui is a lightweight, cross-platform desktop UI framework that uses your browse
 - **No framework lock-in** — Use any frontend libraries you like
 
 ```
-vxui = browser + htmx/webui + websocket + V
+vxui = browser + htmx + websocket + V
 ```
 
 ## 💡 Motivation

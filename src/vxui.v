@@ -1,6 +1,6 @@
 module vxui
 
-// vxui = browser + htmx/webui + websocket + v
+// vxui = browser + htmx + websocket + v
 
 // vxui is a cross-platform desktop UI framework which use your browser as screen, and use V lang as backend. It reply on Websocket, no http/https, no web server!
 import net
