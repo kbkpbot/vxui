@@ -183,7 +183,7 @@ v run main.v
 ## 🏗️ Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Frontend["Browser"]
         HTML["HTML/CSS"]
         HTMX["htmx attributes"]
