@@ -25,8 +25,6 @@
   <a href="#contributing">Contributing</a>
 </p>
 
-<img src="vxui.png" alt="vxui Architecture" width="600">
-
 </div>
 
 ---
