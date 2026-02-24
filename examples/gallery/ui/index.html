@@ -520,9 +520,9 @@
                 <div>
                     <h3>Button Sizes</h3>
                     <div class="btn-group">
-                        <button class="btn btn-small btn-primary">Small</button>
-                        <button class="btn btn-primary">Medium</button>
-                        <button class="btn btn-primary" style="padding: 16px 32px; font-size: 16px;">Large</button>
+                        <button class="btn btn-small btn-primary" hx-post="/button/click" hx-swap="none">Small</button>
+                        <button class="btn btn-primary" hx-post="/button/click" hx-swap="none">Medium</button>
+                        <button class="btn btn-primary" style="padding: 16px 32px; font-size: 16px;" hx-post="/button/click" hx-swap="none">Large</button>
                     </div>
                 </div>
             </div>
