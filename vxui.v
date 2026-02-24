@@ -46,16 +46,52 @@ pub:
 	code    VxuiError
 	message string
 	details map[string]string
+	cause   ?IError // Underlying error that caused this error
 }
 
 // str returns the error message
 pub fn (e VxuiErrorDetail) str() string {
-	return e.message
+	mut result := e.message
+	if cause := e.cause {
+		result += ': ${cause.msg()}'
+	}
+	return result
 }
 
 // err returns this as an IError
 pub fn (e VxuiErrorDetail) err() IError {
-	return error(e.message)
+	return error(e.str())
+}
+
+// full_message returns the full error message including cause chain
+pub fn (e VxuiErrorDetail) full_message() string {
+	mut result := e.message
+	if cause := e.cause {
+		result += '\n  Caused by: ${cause.msg()}'
+	}
+	return result
+}
+
+// with_cause creates a new error with an underlying cause
+pub fn (e VxuiErrorDetail) with_cause(cause IError) VxuiErrorDetail {
+	return VxuiErrorDetail{
+		code:    e.code
+		message: e.message
+		details: e.details
+		cause:   cause
+	}
+}
+
+// with_detail adds a detail to the error
+pub fn (e VxuiErrorDetail) with_detail(key string, value string) VxuiErrorDetail {
+	mut new_details := e.details.clone()
+	new_details[key] = value
+	return VxuiErrorDetail{
+		code:    e.code
+		message: e.message
+		details: new_details
+		cause:   e.cause
+	}
 }
 
 // new_error_detail creates a new VxuiErrorDetail
@@ -73,6 +109,16 @@ pub fn new_error_detail_with_details(code VxuiError, message string, details map
 		code:    code
 		message: message
 		details: details
+	}
+}
+
+// new_error_detail_with_cause creates a new VxuiErrorDetail with an underlying cause
+pub fn new_error_detail_with_cause(code VxuiError, message string, cause IError) VxuiErrorDetail {
+	return VxuiErrorDetail{
+		code:    code
+		message: message
+		details: {}
+		cause:   cause
 	}
 }
 
@@ -362,15 +408,13 @@ mut:
 	middlewares    []Middleware
 	rate_counters  map[string]RateCounter
 pub mut:
-	config         Config
-	logger         &log.Log = &log.Log{}
-	token          string
-	multi_client   bool
-	window         WindowConfig
-	browser        BrowserConfig
-	js_sandbox     JsSandboxConfig
-	js_poll_ms     int = 10
-	close_timer_ms int = 5000
+	config Config
+	logger &log.Log = &log.Log{}
+	// Backward compatibility aliases - these delegate to config
+	// Deprecated: Use config.token directly
+	token string @[deprecated: 'Use config.token instead'; deprecated_after: 'v0.5.0']
+	// Deprecated: Use config.multi_client directly
+	multi_client bool @[deprecated: 'Use config.multi_client instead'; deprecated_after: 'v0.5.0']
 }
 
 // RateCounter tracks request rates per client
@@ -390,9 +434,11 @@ fn init[T](mut app T) ! {
 	app.ws_port = get_free_port()!
 
 	// Generate security token if not set
-	if app.token == '' {
-		app.token = generate_token()
+	if app.config.token == '' {
+		app.config.token = generate_token()
 	}
+	// Backward compatibility
+	app.token = app.config.token
 
 	// Initialize maps
 	app.clients = map[string]Client{}
@@ -444,7 +490,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		client_count := app.clients.len
 		app.mu.runlock()
 
-		if !app.multi_client && client_count > 0 {
+		if !app.config.multi_client && client_count > 0 {
 			app.logger.warn('Rejecting connection: multi_client is disabled')
 			return false
 		}
@@ -491,7 +537,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 
 				// Verify token for regular messages
 				if client_token := message['token'] {
-					if client_token.str() != app.token {
+					if client_token.str() != app.config.token {
 						app.logger.warn('Invalid token from client')
 						ws.close(1008, 'Invalid token')!
 						return
@@ -687,7 +733,7 @@ fn (mut ctx Context) check_rate_limit(client_id string) bool {
 fn handle_auth[T](mut app T, mut ws websocket.Client, message map[string]json2.Any) ! {
 	client_token := message['token'] or { json2.Null{} }
 
-	if client_token.str() != app.token {
+	if client_token.str() != app.config.token {
 		return new_error_detail(.auth_invalid_token, 'Invalid token').err()
 	}
 
@@ -696,7 +742,7 @@ fn handle_auth[T](mut app T, mut ws websocket.Client, message map[string]json2.A
 	app.mu.lock()
 	app.clients[client_id] = Client{
 		id:            client_id
-		token:         app.token
+		token:         app.config.token
 		connected:     time.now()
 		last_ping:     time.now()
 		request_count: 0
@@ -711,8 +757,8 @@ fn handle_auth[T](mut app T, mut ws websocket.Client, message map[string]json2.A
 	mut response := map[string]json2.Any{}
 	response['cmd'] = json2.Any('auth_ok')
 	response['client_id'] = json2.Any(client_id)
-	if app.js_sandbox.enabled {
-		response['js_sandbox'] = json2.encode(app.js_sandbox)
+	if app.config.js_sandbox.enabled {
+		response['js_sandbox'] = json2.encode(app.config.js_sandbox)
 	}
 	ws.write(json2.encode(response).bytes(), .text_frame)!
 }
@@ -922,10 +968,15 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	app.routes = generate_routes(app)!
 
-	start_browser_with_config(html_filename, app.ws_port, app.token, app.window, app.browser)!
+	// Sync backward compatibility fields
+	app.token = app.config.token
+	app.multi_client = app.config.multi_client
+
+	start_browser_with_config(html_filename, app.ws_port, app.config.token, app.config.window,
+		app.config.browser)!
 
 	app.logger.info('Browser started, waiting for connections on port ${app.ws_port}...')
-	app.logger.debug('Token: ${app.token}')
+	app.logger.debug('Token: ${app.config.token}')
 
 	app.trigger_event(EventType.after_start, '', 'Application started', {}, none, none,
 		none)
@@ -947,8 +998,8 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 		if client_count == 0 {
 			elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
-			if elapsed_ms > app.close_timer_ms {
-				app.logger.info('No clients connected for ${app.close_timer_ms}ms, shutting down')
+			if elapsed_ms > app.config.close_timer_ms {
+				app.logger.info('No clients connected for ${app.config.close_timer_ms}ms, shutting down')
 				break
 			}
 		} else {
@@ -971,13 +1022,9 @@ pub fn run[T](mut app T, html_filename string) ! {
 pub fn run_with_config[T](mut app T, html_filename string, config Config) ! {
 	// Apply configuration
 	app.config = config
-	app.close_timer_ms = config.close_timer_ms
-	app.window = config.window
-	app.browser = config.browser
-	app.js_sandbox = config.js_sandbox
-	app.js_poll_ms = config.js_poll_ms
-	app.multi_client = config.multi_client
+	// Sync backward compatibility fields
 	app.token = config.token
+	app.multi_client = config.multi_client
 
 	run(mut app, html_filename)!
 }
@@ -1069,8 +1116,8 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 		return new_error_detail(.no_valid_connection, 'No valid client connection').err()
 	}
 
-	if ctx.js_sandbox.enabled {
-		validate_js_code(js_code, ctx.js_sandbox) or {
+	if ctx.config.js_sandbox.enabled {
+		validate_js_code(js_code, ctx.config.js_sandbox) or {
 			return new_error_detail(.js_validation_failed, 'JS validation failed: ${err}').err()
 		}
 	}
@@ -1105,7 +1152,7 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 					got_result = true
 				}
 				else {
-					time.sleep(ctx.js_poll_ms * time.millisecond)
+					time.sleep(ctx.config.js_poll_ms * time.millisecond)
 				}
 			}
 			if got_result {
@@ -1122,7 +1169,7 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 			return new_error_detail(.js_timeout, 'JavaScript execution timeout').err()
 		}
 
-		if ctx.js_sandbox.enabled && result.len > ctx.js_sandbox.max_result_size {
+		if ctx.config.js_sandbox.enabled && result.len > ctx.config.js_sandbox.max_result_size {
 			return new_error_detail(.js_result_too_large, 'Result exceeds maximum size').err()
 		}
 
@@ -1133,6 +1180,11 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 
 // validate_js_code checks JS code against sandbox rules
 fn validate_js_code(code string, sandbox JsSandboxConfig) ! {
+	// Skip validation if sandbox is disabled
+	if !sandbox.enabled {
+		return
+	}
+
 	code_lower := code.to_lower()
 	for pattern in sandbox.forbidden_patterns {
 		if code_lower.contains(pattern.to_lower()) {
@@ -1312,34 +1364,34 @@ pub fn (mut ctx Context) ping_all_clients() {
 
 // set_window_size sets the window dimensions
 pub fn (mut ctx Context) set_window_size(width int, height int) {
-	ctx.window.width = width
-	ctx.window.height = height
+	ctx.config.window.width = width
+	ctx.config.window.height = height
 }
 
 // set_window_position sets the window position
 pub fn (mut ctx Context) set_window_position(x int, y int) {
-	ctx.window.x = x
-	ctx.window.y = y
+	ctx.config.window.x = x
+	ctx.config.window.y = y
 }
 
 // set_window_title sets the window title
 pub fn (mut ctx Context) set_window_title(title string) {
-	ctx.window.title = title
+	ctx.config.window.title = title
 }
 
 // set_resizable sets whether the window can be resized
 pub fn (mut ctx Context) set_resizable(resizable bool) {
-	ctx.window.resizable = resizable
+	ctx.config.window.resizable = resizable
 }
 
 // set_js_sandbox configures JavaScript execution security
 pub fn (mut ctx Context) set_js_sandbox(config JsSandboxConfig) {
-	ctx.js_sandbox = config
+	ctx.config.js_sandbox = config
 }
 
 // set_browser_config configures browser startup options
 pub fn (mut ctx Context) set_browser_config(config BrowserConfig) {
-	ctx.browser = config
+	ctx.config.browser = config
 }
 
 // set_rate_limit configures rate limiting
@@ -1354,7 +1406,7 @@ pub fn (ctx Context) get_port() u16 {
 
 // get_token returns the security token
 pub fn (ctx Context) get_token() string {
-	return ctx.token
+	return ctx.config.token
 }
 
 // get_config returns the current configuration

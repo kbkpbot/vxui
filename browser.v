@@ -83,16 +83,6 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		return error('No supported browser found')
 	}
 
-	// Create profile directory
-	profile_path := if browser_config.user_data_dir != '' {
-		browser_config.user_data_dir
-	} else if browser_config.profile_dir != '' {
-		browser_config.profile_dir
-	} else {
-		os.join_path(os.home_dir(), '.vxui', 'browser_profile')
-	}
-	os.mkdir_all(profile_path) or { return error('Failed to create profile directory: ${err}') }
-
 	// Build URL with parameters
 	mut url_params := 'vxui_ws_port=${vxui_ws_port}'
 	if token != '' {
@@ -105,10 +95,33 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		url_params += '&vxui_height=${window.height}'
 	}
 
-	// Get base browser name for argument selection
+	// Detect browser type
+	browser_type := detect_browser_type(browser_path)
 	browser_name := os.base(browser_path)
-	is_firefox := browser_name.to_lower().contains('firefox')
-	is_chrome_based := !is_firefox
+	is_safari := browser_type == .safari
+	is_firefox := browser_type == .firefox
+	is_chrome_based := is_app_mode_supported(browser_type)
+
+	// Safari requires special handling on macOS
+	if is_safari {
+		$if macos {
+			// Safari doesn't support command-line arguments, use 'open' command
+			url := 'file://${abs_path}?${url_params}'
+			os.execute('open -a Safari "${url}"')
+			return
+		}
+		return error('Safari is only supported on macOS')
+	}
+
+	// Create profile directory for non-Safari browsers
+	profile_path := if browser_config.user_data_dir != '' {
+		browser_config.user_data_dir
+	} else if browser_config.profile_dir != '' {
+		browser_config.profile_dir
+	} else {
+		os.join_path(os.home_dir(), '.vxui', 'browser_profile')
+	}
+	os.mkdir_all(profile_path) or { return error('Failed to create profile directory: ${err}') }
 
 	// Build command arguments
 	mut cmd_args := get_browser_args(browser_name, browser_config)
@@ -215,6 +228,7 @@ fn find_browser_path_macos() string {
 		'/Applications/Chromium.app/Contents/MacOS/Chromium',
 		'/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
 		'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+		'/Applications/Safari.app/Contents/MacOS/Safari',
 		'/Applications/Firefox.app/Contents/MacOS/Firefox',
 	]
 	for path in paths {
@@ -241,4 +255,44 @@ fn find_browser_path_windows() string {
 		}
 	}
 	return ''
+}
+
+// BrowserType represents different browser types
+pub enum BrowserType {
+	chrome
+	firefox
+	safari
+	edge
+	brave
+	chromium
+	unknown
+}
+
+// detect_browser_type determines the browser type from path
+pub fn detect_browser_type(browser_path string) BrowserType {
+	name := os.base(browser_path).to_lower()
+	if name.contains('safari') {
+		return .safari
+	}
+	if name.contains('firefox') {
+		return .firefox
+	}
+	if name.contains('edge') || name.contains('msedge') {
+		return .edge
+	}
+	if name.contains('brave') {
+		return .brave
+	}
+	if name.contains('chromium') {
+		return .chromium
+	}
+	if name.contains('chrome') {
+		return .chrome
+	}
+	return .unknown
+}
+
+// is_app_mode_supported returns true if browser supports app mode
+pub fn is_app_mode_supported(browser_type BrowserType) bool {
+	return browser_type in [.chrome, .edge, .brave, .chromium]
 }

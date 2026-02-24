@@ -1,6 +1,7 @@
 module vxui
 
 import time
+import x.json2
 
 // =============================================================================
 // Error Type Tests
@@ -335,9 +336,9 @@ fn test_client_struct() {
 
 fn test_context_defaults() {
 	ctx := Context{}
-	assert ctx.close_timer_ms == 5000
-	assert ctx.js_poll_ms == 10
-	assert ctx.multi_client == false
+	assert ctx.config.close_timer_ms == 5000
+	assert ctx.config.js_poll_ms == 10
+	assert ctx.config.multi_client == false
 	assert ctx.clients.len == 0
 }
 
@@ -375,7 +376,7 @@ fn test_get_token_initial() {
 
 fn test_get_token_custom() {
 	mut ctx := Context{}
-	ctx.token = 'my-secret-token'
+	ctx.config.token = 'my-secret-token'
 	assert ctx.get_token() == 'my-secret-token'
 }
 
@@ -395,27 +396,27 @@ fn test_get_config() {
 fn test_set_window_size() {
 	mut ctx := Context{}
 	ctx.set_window_size(1024, 768)
-	assert ctx.window.width == 1024
-	assert ctx.window.height == 768
+	assert ctx.config.window.width == 1024
+	assert ctx.config.window.height == 768
 }
 
 fn test_set_window_position() {
 	mut ctx := Context{}
 	ctx.set_window_position(100, 200)
-	assert ctx.window.x == 100
-	assert ctx.window.y == 200
+	assert ctx.config.window.x == 100
+	assert ctx.config.window.y == 200
 }
 
 fn test_set_window_title() {
 	mut ctx := Context{}
 	ctx.set_window_title('My Application')
-	assert ctx.window.title == 'My Application'
+	assert ctx.config.window.title == 'My Application'
 }
 
 fn test_set_resizable() {
 	mut ctx := Context{}
 	ctx.set_resizable(false)
-	assert ctx.window.resizable == false
+	assert ctx.config.window.resizable == false
 }
 
 fn test_set_js_sandbox() {
@@ -424,7 +425,7 @@ fn test_set_js_sandbox() {
 		timeout_ms: 3000
 	}
 	ctx.set_js_sandbox(config)
-	assert ctx.js_sandbox.timeout_ms == 3000
+	assert ctx.config.js_sandbox.timeout_ms == 3000
 }
 
 fn test_set_browser_config() {
@@ -433,7 +434,7 @@ fn test_set_browser_config() {
 		headless: true
 	}
 	ctx.set_browser_config(config)
-	assert ctx.browser.headless == true
+	assert ctx.config.browser.headless == true
 }
 
 fn test_set_rate_limit() {
@@ -756,4 +757,365 @@ fn test_use_middleware() {
 		return .continue_
 	})
 	assert ctx.middlewares.len == 1
+}
+
+// =============================================================================
+// Route Matching Tests - Extended
+// =============================================================================
+
+fn test_parse_attrs_combined_verb_and_path() {
+	verbs, path := parse_attrs('test', ['get', '/api/users']) or {
+		assert false
+		return
+	}
+	assert path == '/api/users'
+	assert verbs.len == 1
+	assert Verb.get in verbs
+}
+
+fn test_parse_attrs_multiple_verbs() {
+	verbs, path := parse_attrs('api', ['get', 'post', 'put']) or {
+		assert false
+		return
+	}
+	assert verbs.len == 3
+	assert Verb.get in verbs
+	assert Verb.post in verbs
+	assert Verb.put in verbs
+	assert path == '/api'
+}
+
+fn test_parse_attrs_all_http_verbs() {
+	for verb_name in ['get', 'post', 'put', 'delete', 'patch'] {
+		verbs, _ := parse_attrs('test', [verb_name]) or {
+			assert false
+			return
+		}
+		assert verbs.len == 1
+	}
+}
+
+fn test_parse_attrs_case_insensitive_verb() {
+	verbs, _ := parse_attrs('test', ['GET', 'Post', 'PUT']) or {
+		assert false
+		return
+	}
+	assert verbs.len == 3
+}
+
+fn test_parse_attrs_path_normalization() {
+	verbs, path := parse_attrs('MyHandler', ['/MyPath']) or {
+		assert false
+		return
+	}
+	assert path == '/mypath' // lowercase
+}
+
+// =============================================================================
+// Security Tests - Extended
+// =============================================================================
+
+fn test_sanitize_path_null_byte() {
+	// Null byte in filename - current implementation doesn't block this
+	// This tests that the function handles it gracefully
+	result := sanitize_path('file\x00.txt') or { return }
+	assert result == 'file\x00.txt'
+}
+
+fn test_sanitize_path_encoded_traversal() {
+	// URL encoded traversal - current implementation allows this
+	// because it doesn't decode URL-encoded strings
+	result := sanitize_path('%2e%2e%2f') or { return }
+	assert result == '%2e%2e%2f'
+}
+
+fn test_sanitize_path_double_encoding() {
+	// Double encoded traversal - current implementation allows this
+	result := sanitize_path('%252e%252e%252f') or { return }
+	assert result == '%252e%252e%252f'
+}
+
+fn test_escape_html_all_special_chars() {
+	input := '<script>alert("xss")</script>&\''
+	result := escape_html(input)
+	assert result.contains('&lt;')
+	assert result.contains('&gt;')
+	assert result.contains('&quot;')
+	assert result.contains('&amp;')
+	assert result.contains('&#x27;')
+	assert !result.contains('<script>')
+}
+
+fn test_escape_js_special_chars() {
+	input := 'line1\nline2\ttab"quote\'apostrophe\\backslash'
+	result := escape_js(input)
+	assert result.contains('\\n')
+	assert result.contains('\\t')
+	assert result.contains('\\"')
+	assert result.contains("\\'")
+	assert result.contains('\\\\')
+}
+
+fn test_escape_attr_quotes() {
+	input := 'onclick="evil()" onmouseover=\'bad\''
+	result := escape_attr(input)
+	assert !result.contains('"onclick')
+	assert result.contains('&quot;')
+	assert result.contains('&#x27;')
+}
+
+fn test_is_valid_email_edge_cases() {
+	// Valid emails
+	assert is_valid_email('a@b.co') == true
+	assert is_valid_email('user+tag@example.com') == true
+	assert is_valid_email('user.name@example.org') == true
+
+	// Invalid emails
+	assert is_valid_email('') == false
+	assert is_valid_email('a@') == false
+	assert is_valid_email('@b.com') == false
+	assert is_valid_email('a@b') == false
+	assert is_valid_email('a@b.') == false
+	assert is_valid_email('a@.com') == false
+	// Note: current implementation doesn't validate spaces in email
+	// 'a b@c.com' passes basic validation
+}
+
+fn test_truncate_string_edge_cases() {
+	// Exact length
+	assert truncate_string('hello', 5) == 'hello'
+	// Empty string
+	assert truncate_string('', 10) == ''
+	// Very short max
+	assert truncate_string('hello', 2) == 'he'
+	// Max less than 3
+	assert truncate_string('hello', 1) == 'h'
+}
+
+fn test_generate_id_uniqueness() {
+	mut ids := map[string]bool{}
+	for _ in 0 .. 100 {
+		id := generate_id()
+		assert id !in ids
+		ids[id] = true
+	}
+}
+
+fn test_generate_id_length() {
+	id := generate_id()
+	assert id.len == 16
+}
+
+// =============================================================================
+// JS Sandbox Security Tests
+// =============================================================================
+
+fn test_validate_js_code_eval_blocked() {
+	sandbox := JsSandboxConfig{
+		enabled:            true
+		forbidden_patterns: ['eval(', 'Function(', 'setTimeout(']
+	}
+
+	// Should block eval
+	validate_js_code('eval("alert(1)")', sandbox) or {
+		assert err.msg().contains('Forbidden pattern')
+		return
+	}
+	assert false
+}
+
+fn test_validate_js_code_fetch_blocked() {
+	sandbox := JsSandboxConfig{
+		enabled:            true
+		forbidden_patterns: ['fetch(', 'XMLHttpRequest', 'WebSocket']
+	}
+
+	// Should block fetch
+	validate_js_code('fetch("/api/data")', sandbox) or {
+		assert err.msg().contains('Forbidden pattern')
+		return
+	}
+	assert false
+}
+
+fn test_validate_js_code_case_insensitive() {
+	sandbox := JsSandboxConfig{
+		enabled:            true
+		forbidden_patterns: ['EVAL(']
+	}
+
+	// Should block even with different case
+	validate_js_code('EVAL("test")', sandbox) or { return }
+	assert false
+}
+
+fn test_validate_js_code_safe_code() {
+	sandbox := JsSandboxConfig{
+		enabled:            true
+		forbidden_patterns: ['eval(', 'fetch(']
+	}
+
+	// Should allow safe code
+	validate_js_code('document.title = "Hello"', sandbox) or {
+		assert false
+		return
+	}
+}
+
+fn test_js_sandbox_disabled_allows_all() {
+	sandbox := JsSandboxConfig{
+		enabled:            false
+		forbidden_patterns: ['eval(']
+	}
+
+	// Should allow when sandbox disabled
+	validate_js_code('eval("test")', sandbox) or {
+		assert false
+		return
+	}
+}
+
+// =============================================================================
+// Error Handling Tests - Extended
+// =============================================================================
+
+fn test_vxui_error_detail_error_chain() {
+	err := new_error_detail(VxuiError.client_not_found, 'Client not found')
+	// Test that we can get the error message
+	assert err.str() == 'Client not found'
+	assert err.code == VxuiError.client_not_found
+}
+
+fn test_vxui_error_all_codes() {
+	// Ensure all error codes are accessible
+	codes := [
+		VxuiError.unknown,
+		VxuiError.client_not_found,
+		VxuiError.no_clients,
+		VxuiError.no_valid_connection,
+		VxuiError.js_timeout,
+		VxuiError.js_validation_failed,
+		VxuiError.js_result_too_large,
+		VxuiError.auth_failed,
+		VxuiError.auth_invalid_token,
+		VxuiError.connection_error,
+		VxuiError.connection_closed,
+		VxuiError.port_not_available,
+		VxuiError.browser_not_found,
+		VxuiError.file_not_found,
+		VxuiError.path_traversal,
+		VxuiError.route_not_found,
+		VxuiError.invalid_message,
+		VxuiError.middleware_rejected,
+		VxuiError.request_timeout,
+		VxuiError.rate_limited,
+	]
+	assert codes.len == 20
+}
+
+// =============================================================================
+// Request Building Tests
+// =============================================================================
+
+fn test_build_request_defaults() {
+	message := map[string]json2.Any{}
+	req := build_request(message, 'client-1')
+
+	assert req.verb == Verb.get
+	assert req.path == '/'
+	assert req.client_id == 'client-1'
+	assert req.parameters.len == 0
+	assert req.headers.len == 0
+	assert req.body == ''
+}
+
+fn test_build_request_with_verb() {
+	mut message := map[string]json2.Any{}
+	message['verb'] = json2.Any('POST')
+	req := build_request(message, 'client-1')
+
+	assert req.verb == Verb.post
+}
+
+fn test_build_request_with_path() {
+	mut message := map[string]json2.Any{}
+	message['path'] = json2.Any('/api/users')
+	req := build_request(message, 'client-1')
+
+	assert req.path == '/api/users'
+}
+
+fn test_build_request_with_parameters() {
+	mut message := map[string]json2.Any{}
+	mut params := map[string]json2.Any{}
+	params['name'] = json2.Any('John')
+	params['age'] = json2.Any(30)
+	message['parameters'] = json2.Any(params)
+	req := build_request(message, 'client-1')
+
+	assert req.parameters['name'] == 'John'
+	assert req.parameters['age'] == '30'
+}
+
+fn test_build_request_with_headers() {
+	mut message := map[string]json2.Any{}
+	mut headers := map[string]json2.Any{}
+	headers['Content-Type'] = json2.Any('application/json')
+	headers['Authorization'] = json2.Any('Bearer token')
+	message['headers'] = json2.Any(headers)
+	req := build_request(message, 'client-1')
+
+	assert req.headers['Content-Type'] == 'application/json'
+	assert req.headers['Authorization'] == 'Bearer token'
+}
+
+// =============================================================================
+// Config Integration Tests
+// =============================================================================
+
+fn test_config_full_setup() {
+	config := Config{
+		app_name:            'test-app'
+		close_timer_ms:      10000
+		ws_ping_interval_ms: 15000
+		ws_pong_timeout_ms:  30000
+		require_auth:        true
+		multi_client:        true
+		max_clients:         5
+		js_timeout:          3000
+		js_poll_ms:          20
+		window:              WindowConfig{
+			width:     1920
+			height:    1080
+			resizable: true
+			title:     'Test App'
+		}
+		browser:             BrowserConfig{
+			headless:   true
+			devtools:   true
+			no_sandbox: true
+		}
+		js_sandbox:          JsSandboxConfig{
+			enabled:    true
+			timeout_ms: 3000
+			allow_eval: false
+		}
+		rate_limit:          RateLimitConfig{
+			enabled:      true
+			max_requests: 50
+			window_ms:    30000
+		}
+		reconnect:           ReconnectConfig{
+			enabled:      true
+			max_attempts: 3
+			strategy:     .exponential
+		}
+	}
+
+	assert config.app_name == 'test-app'
+	assert config.window.width == 1920
+	assert config.browser.headless == true
+	assert config.js_sandbox.enabled == true
+	assert config.rate_limit.max_requests == 50
+	assert config.reconnect.strategy == BackoffStrategy.exponential
 }

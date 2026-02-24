@@ -45,8 +45,14 @@ Usage:
         connectTimeout: 5000,
         heartbeatInterval: 30000,  // 30 seconds
         pongTimeout: 60000,        // 60 seconds without pong = stale connection
-        debug: false
+        debug: false,
+        // UI notification settings
+        showConnectionStatus: true,  // Show connection status overlay
+        statusPosition: 'top-right'  // Position: 'top-right', 'top-left', 'bottom-right', 'bottom-left'
     }
+
+    // Connection status element
+    var statusElement = null
 
     // JavaScript Sandbox Configuration (received from backend)
     var jsSandbox = {
@@ -127,6 +133,139 @@ Usage:
             return maxDelay * Math.random()
         }
         return 1000
+    }
+
+    // =============================================================================
+    // Connection Status UI
+    // =============================================================================
+
+    /**
+     * Get position styles for status element
+     */
+    function getStatusPositionStyles() {
+        var positions = {
+            'top-right': 'top: 20px; right: 20px;',
+            'top-left': 'top: 20px; left: 20px;',
+            'bottom-right': 'bottom: 20px; right: 20px;',
+            'bottom-left': 'bottom: 20px; left: 20px;'
+        }
+        return positions[config.statusPosition] || positions['top-right']
+    }
+
+    /**
+     * Create the status indicator element
+     */
+    function createStatusElement() {
+        if (statusElement) {
+            return statusElement
+        }
+
+        statusElement = document.createElement('div')
+        statusElement.id = 'vxui-connection-status'
+        statusElement.style.cssText = [
+            'position: fixed;',
+            getStatusPositionStyles(),
+            'padding: 12px 20px;',
+            'border-radius: 8px;',
+            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+            'font-size: 14px;',
+            'font-weight: 500;',
+            'z-index: 99999;',
+            'transition: all 0.3s ease;',
+            'opacity: 0;',
+            'transform: translateY(-10px);',
+            'pointer-events: none;',
+            'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);'
+        ].join(' ')
+
+        document.body.appendChild(statusElement)
+        return statusElement
+    }
+
+    /**
+     * Show connection status with message and type
+     * @param {string} message - Status message
+     * @param {string} type - 'connecting', 'connected', 'disconnected', 'error'
+     */
+    function showStatus(message, type) {
+        if (!config.showConnectionStatus) {
+            return
+        }
+
+        var el = createStatusElement()
+        if (!el) return
+
+        var styles = {
+            connecting: {
+                bg: 'background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);',
+                color: 'color: #333;'
+            },
+            connected: {
+                bg: 'background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);',
+                color: 'color: white;'
+            },
+            disconnected: {
+                bg: 'background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);',
+                color: 'color: white;'
+            },
+            error: {
+                bg: 'background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);',
+                color: 'color: white;'
+            }
+        }
+
+        var style = styles[type] || styles.disconnected
+        
+        // Add spinner for connecting state
+        var spinnerHtml = type === 'connecting' 
+            ? '<span style="display: inline-block; width: 14px; height: 14px; margin-right: 8px; border: 2px solid #333; border-top-color: transparent; border-radius: 50%; animation: vxui-spin 1s linear infinite;"></span>'
+            : ''
+
+        el.innerHTML = spinnerHtml + message
+        el.style.cssText = [
+            'position: fixed;',
+            getStatusPositionStyles(),
+            'padding: 12px 20px;',
+            'border-radius: 8px;',
+            'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+            'font-size: 14px;',
+            'font-weight: 500;',
+            'z-index: 99999;',
+            'transition: all 0.3s ease;',
+            style.bg,
+            style.color,
+            'opacity: 1;',
+            'transform: translateY(0);',
+            'pointer-events: auto;',
+            'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);'
+        ].join(' ')
+
+        // Add keyframe animation for spinner if not exists
+        if (!document.getElementById('vxui-spin-style')) {
+            var styleEl = document.createElement('style')
+            styleEl.id = 'vxui-spin-style'
+            styleEl.textContent = '@keyframes vxui-spin { to { transform: rotate(360deg); } }'
+            document.head.appendChild(styleEl)
+        }
+    }
+
+    /**
+     * Hide the status indicator
+     */
+    function hideStatus() {
+        if (statusElement) {
+            statusElement.style.opacity = '0'
+            statusElement.style.transform = 'translateY(-10px)'
+        }
+    }
+
+    /**
+     * Show status briefly then hide (for success messages)
+     */
+    function flashStatus(message, type, duration) {
+        duration = duration || 2000
+        showStatus(message, type)
+        setTimeout(hideStatus, duration)
     }
 
     /**
@@ -346,6 +485,10 @@ Usage:
                 log('Authentication successful, client_id:', clientId)
                 startHeartbeat()
                 processQueue()
+                
+                // Show connected status briefly
+                flashStatus('Connected', 'connected', 1500)
+                
                 api.triggerEvent(document.body, 'vxui:authenticated', { clientId: clientId })
                 break
             
@@ -398,6 +541,9 @@ Usage:
         try {
             socket = new WebSocket(wsUrl)
 
+            // Show connecting status
+            showStatus('Connecting...', 'connecting')
+
             socket.onopen = function(e) {
                 log('WebSocket connected')
                 isConnecting = false
@@ -418,6 +564,9 @@ Usage:
                 socketWrapper = null
                 stopHeartbeat()
 
+                // Show disconnected status
+                showStatus('Disconnected - Reconnecting...', 'disconnected')
+
                 api.triggerEvent(document.body, 'vxui:wsClose', { code: e.code, reason: e.reason })
 
                 // Auto reconnect for abnormal closure
@@ -426,6 +575,7 @@ Usage:
                     log('Reconnecting in', delay, 'ms')
                     setTimeout(function() {
                         retryCount++
+                        showStatus('Reconnecting (attempt ' + retryCount + ')...', 'connecting')
                         initWebSocket()
                     }, delay)
                 }
@@ -434,6 +584,9 @@ Usage:
             socket.onerror = function(e) {
                 log('WebSocket error', e)
                 isConnecting = false
+
+                // Show error status
+                showStatus('Connection Error', 'error')
 
                 api.triggerErrorEvent(document.body, 'vxui:wsError', { error: e })
 
@@ -732,6 +885,31 @@ Usage:
             if (isAuthenticated) {
                 startHeartbeat()
             }
+        },
+        // Connection status UI controls
+        showStatus: showStatus,
+        hideStatus: hideStatus,
+        setShowConnectionStatus: function(enabled) {
+            config.showConnectionStatus = enabled
+            if (!enabled) {
+                hideStatus()
+            }
+        },
+        setStatusPosition: function(position) {
+            config.statusPosition = position
+            if (statusElement) {
+                statusElement.style.cssText = statusElement.style.cssText.replace(
+                    /(top|bottom):\s*\d+px;\s*(left|right):\s*\d+px;/,
+                    getStatusPositionStyles()
+                )
+            }
+        },
+        getConnectionState: function() {
+            if (!socket) return 'disconnected'
+            if (socket.readyState === WebSocket.CONNECTING) return 'connecting'
+            if (socket.readyState === WebSocket.OPEN) return isAuthenticated ? 'authenticated' : 'connected'
+            if (socket.readyState === WebSocket.CLOSING) return 'closing'
+            return 'closed'
         }
     }
 
