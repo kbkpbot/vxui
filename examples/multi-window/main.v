@@ -208,30 +208,26 @@ fn (app App) render_main_window() string {
 fn (app App) render_main_window_oob() string {
 	accent_color := app.app_config.accent_color
 
-	oob_html := '<div hx-swap-oob="true" id="oob-update-container">
-        <div id="main-wrapper" class="main-wrapper" style="--accent-color: ${accent_color}">
-            <div class="container">
-                <div class="header" style="border-bottom-color: ${accent_color}">
-                    <h1 style="color: ${accent_color}">${app.app_config.title}</h1>
-                    <button class="settings-btn" style="background: ${accent_color}" hx-post="/open-settings" hx-swap="none">
-                        ⚙️ Settings
-                    </button>
-                </div>
-                <div class="content-box">
-                    <div class="message-display">${app.app_config.message}</div>
-                    <div class="info-row">
-                        <span><span class="label" style="color: ${accent_color}">Background:</span> ${app.app_config.bg_color}</span>
-                        <span><span class="label" style="color: ${accent_color}">Accent:</span> ${accent_color}</span>
-                        <span><span class="label" style="color: ${accent_color}">Font Size:</span> ${app.app_config.font_size}px</span>
-                    </div>
+	// OOB update must target existing element by ID
+	oob_html := '<div id="main-wrapper" class="main-wrapper" style="--accent-color: ${accent_color}" hx-swap-oob="true">
+        <div class="container">
+            <div class="header" style="border-bottom-color: ${accent_color}">
+                <h1 style="color: ${accent_color}">${app.app_config.title}</h1>
+                <button class="settings-btn" style="background: ${accent_color}" hx-post="/open-settings" hx-swap="none">
+                    ⚙️ Settings
+                </button>
+            </div>
+            <div class="content-box">
+                <div class="message-display">${app.app_config.message}</div>
+                <div class="info-row">
+                    <span><span class="label" style="color: ${accent_color}">Background:</span> ${app.app_config.bg_color}</span>
+                    <span><span class="label" style="color: ${accent_color}">Accent:</span> ${accent_color}</span>
+                    <span><span class="label" style="color: ${accent_color}">Font Size:</span> ${app.app_config.font_size}px</span>
                 </div>
             </div>
-            <div id="open-result"></div>
         </div>
+        <div id="open-result"></div>
     </div>'
-
-	println('[DEBUG] OOB HTML generated:')
-	println(oob_html)
 
 	return oob_html
 }
