@@ -103,18 +103,6 @@ fn (app App) render_main_window() string {
             padding: 40px;
             font-size: ${app.app_config.font_size}px;
         }
-        .header {
-            border-bottom-color: ${app.app_config.accent_color};
-        }
-        h1 {
-            color: ${app.app_config.accent_color};
-        }
-        .settings-btn {
-            background: ${app.app_config.accent_color};
-        }
-        .label {
-            color: ${app.app_config.accent_color};
-        }
         .container {
             max-width: 800px;
             margin: 0 auto;
@@ -125,13 +113,15 @@ fn (app App) render_main_window() string {
             align-items: center;
             margin-bottom: 40px;
             padding-bottom: 20px;
-            border-bottom: 2px solid;
+            border-bottom: 2px solid ${app.app_config.accent_color};
         }
         h1 {
+            color: ${app.app_config.accent_color};
             font-size: 2.5em;
         }
         .settings-btn {
             padding: 12px 24px;
+            background: ${app.app_config.accent_color};
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -161,6 +151,9 @@ fn (app App) render_main_window() string {
             padding-top: 20px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             color: #888;
+        }
+        .label {
+            color: ${app.app_config.accent_color};
         }
     </style>
 </head>
