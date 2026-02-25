@@ -97,8 +97,23 @@ fn (app App) render_main_window() string {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: ${app.app_config.bg_color};
+            color: #fff;
             min-height: 100vh;
             padding: 40px;
+            font-size: ${app.app_config.font_size}px;
+        }
+        .header {
+            border-bottom-color: ${app.app_config.accent_color};
+        }
+        h1 {
+            color: ${app.app_config.accent_color};
+        }
+        .settings-btn {
+            background: ${app.app_config.accent_color};
+        }
+        .label {
+            color: ${app.app_config.accent_color};
         }
         .container {
             max-width: 800px;
