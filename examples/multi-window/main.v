@@ -42,38 +42,32 @@ fn (mut app App) update_settings(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 
 	println('[DEBUG] Received settings update request')
-	println('[DEBUG] Current config: title=${app.app_config.title}, bg=${app.app_config.bg_color}, accent=${app.app_config.accent_color}')
 
 	// Update config values
 	if title := params['title'] {
 		app.app_config.title = title.str()
-		println('[DEBUG] Updated title to: ${app.app_config.title}')
 	}
 	if bg_color := params['bg_color'] {
 		app.app_config.bg_color = bg_color.str()
-		println('[DEBUG] Updated bg_color to: ${app.app_config.bg_color}')
 	}
 	if accent_color := params['accent_color'] {
 		app.app_config.accent_color = accent_color.str()
-		println('[DEBUG] Updated accent_color to: ${app.app_config.accent_color}')
 	}
 	if msg := params['message'] {
 		app.app_config.message = msg.str()
-		println('[DEBUG] Updated message to: ${app.app_config.message}')
 	}
 	if font_size := params['font_size'] {
 		app.app_config.font_size = font_size.int()
-		println('[DEBUG] Updated font_size to: ${app.app_config.font_size}')
 	}
 
-	// Broadcast update to all windows (including main window)
-	client_count := app.get_client_count()
-	println('[DEBUG] Broadcasting to ${client_count} clients')
+	println('[DEBUG] Updated config: title=${app.app_config.title}, bg=${app.app_config.bg_color}, accent=${app.app_config.accent_color}')
 
-	update_html := app.render_main_window_oob()
-	println('[DEBUG] Generated OOB HTML length: ${update_html.len} chars')
-
-	app.broadcast(update_html) or {
+	// Broadcast a simple refresh trigger to all clients
+	// Each client will re-request the main page content
+	refresh_trigger := '<div hx-get="/" hx-trigger="load" hx-target="#main-wrapper" hx-swap="outerHTML" style="display:none"></div>'
+	
+	println('[DEBUG] Broadcasting refresh trigger to ${app.get_client_count()} clients')
+	app.broadcast(refresh_trigger) or {
 		println('[ERROR] Failed to broadcast: ${err}')
 	}
 	println('[DEBUG] Broadcast completed')
