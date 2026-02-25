@@ -226,10 +226,10 @@
                         <span class="counter-info">Click to increment across all windows</span>
                     </div>
                     <div class="counter-buttons">
-                        <button class="btn-primary" hx-post="/counter/increment" hx-target="#counter-result" hx-swap="outerHTML" hx-vals="js:{client_id: windowId}">
+                        <button class="btn-primary" hx-post="/counter/increment" hx-swap="none" hx-vals="js:{client_id: windowId}">
                             + Increment
                         </button>
-                        <button class="btn-danger" hx-post="/counter/reset" hx-target="#counter-result" hx-swap="outerHTML" hx-vals="js:{client_id: windowId}">
+                        <button class="btn-danger" hx-post="/counter/reset" hx-swap="none" hx-vals="js:{client_id: windowId}">
                             Reset
                         </button>
                     </div>
