@@ -158,23 +158,29 @@ fn (app App) render_main_window() string {
     </style>
 </head>
 <body hx-ext="vxui-ws">
-    <div class="container">
-        <div class="header">
-            <h1>${app.app_config.title}</h1>
-            <button class="settings-btn" hx-post="/open-settings" hx-swap="none">
-                ⚙️ Settings
-            </button>
-        </div>
-        <div class="content-box">
-            <div class="message-display">${app.app_config.message}</div>
-            <div class="info-row">
-                <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
-                <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
-                <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
+    <!-- Placeholder for OOB style updates -->
+    <div id="style-updater" style="display: none;"></div>
+    
+    <!-- Main wrapper for OOB content updates -->
+    <div id="main-wrapper" class="main-wrapper">
+        <div class="container">
+            <div class="header">
+                <h1>${app.app_config.title}</h1>
+                <button class="settings-btn" hx-post="/open-settings" hx-swap="none">
+                    ⚙️ Settings
+                </button>
+            </div>
+            <div class="content-box">
+                <div class="message-display">${app.app_config.message}</div>
+                <div class="info-row">
+                    <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
+                    <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
+                    <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
+                </div>
             </div>
         </div>
+        <div id="open-result"></div>
     </div>
-    <div id="open-result"></div>
 </body>
 </html>'
 }
