@@ -938,13 +938,10 @@ pub fn fire_call[T](mut app T, method_name string, message map[string]json2.Any)
 		if method.name == method_name {
 			$if method.return_type is string {
 				return app.$method(message)
-			} $else {
-				return new_error_detail_with_details(VxuiError.invalid_method, 'Method should return string',
-					{
-					'method':      method_name
-					'return_type': method.return_type
-				})
 			}
+			// Method found but doesn't return string - compile time error would be better
+			// but we handle it gracefully at runtime
+			return error('Method ${method_name} must return string')
 		}
 	}
 	return new_error_detail_with_details(VxuiError.route_not_found, 'Method not found',
