@@ -652,6 +652,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		app.mu.rlock()
 		mut client_id_to_remove := ''
 		for id, client in app.clients {
+			// SAFETY: nil comparison only, no dereference
 			if client.connection or { unsafe { nil } } == ws {
 				client_id_to_remove = id
 				break
@@ -674,6 +675,7 @@ fn find_client_id_by_connection[T](mut app T, ws websocket.Client) string {
 	app.mu.rlock()
 
 	for id, client in app.clients {
+		// SAFETY: nil comparison only, no dereference
 		if client.connection or { unsafe { nil } } == ws {
 			app.mu.runlock()
 			return id
@@ -1214,9 +1216,11 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 		return new_error_detail(.no_clients, 'No connected clients').err()
 	}
 
+	// SAFETY: nil is used as sentinel value for optional pointer
 	mut client_conn := &websocket.Client(unsafe { nil })
 	if client_id == '' {
 		for _, c in ctx.clients {
+			// SAFETY: nil comparison only, no dereference
 			client_conn = c.connection or { unsafe { nil } }
 			break
 		}
@@ -1225,10 +1229,12 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 			ctx.mu.runlock()
 			return new_error_detail(.client_not_found, 'Client not found: ${client_id}').err()
 		}
+		// SAFETY: nil comparison only, no dereference
 		client_conn = client.connection or { unsafe { nil } }
 	}
 	ctx.mu.runlock()
 
+	// SAFETY: nil comparison only, no dereference
 	if client_conn == unsafe { nil } {
 		return new_error_detail(.no_valid_connection, 'No valid client connection').err()
 	}
