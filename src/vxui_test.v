@@ -1263,7 +1263,7 @@ fn test_escape_html_empty() {
 
 fn test_escape_js_basic() {
 	assert escape_js('alert("test")') == 'alert(\\"test\\")'
-	assert escape_js("line1\nline2") == 'line1\\nline2'
+	assert escape_js('line1\nline2') == 'line1\\nline2'
 	assert escape_js('path\\to\\file') == 'path\\\\to\\\\file'
 }
 
