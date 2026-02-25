@@ -1,6 +1,11 @@
 # V compiled binaries
 *.exe
 main
+examples/*/main
+examples/*/[a-z]*
+!examples/*/main.v
+!examples/*/*.v
+!examples/*/README.md
 
 # V cache
 .vcache/
