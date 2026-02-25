@@ -175,6 +175,23 @@ pub mut:
     token        string      // Security token for client authentication
     multi_client bool        // Allow multiple clients
     window       WindowConfig // Window configuration
+    browser      BrowserConfig // Browser startup configuration
+}
+```
+
+### BrowserConfig
+
+```v
+struct BrowserConfig {
+pub mut:
+    custom_args       []string // Additional custom arguments
+    profile_dir       string   // Custom profile directory (empty = default)
+    headless          bool     // Run in headless mode (for testing)
+    devtools          bool     // Open DevTools automatically
+    no_sandbox        bool     // Disable sandbox (for root/CI)
+    user_data_dir     string   // Custom user data directory
+    preferred_path    string   // Preferred browser path (skip detection)
+    remote_debug_port int      // Chrome remote debugging port (e.g., 9222)
 }
 ```
 
@@ -252,6 +269,54 @@ app.window = vxui.WindowConfig{
     resizable: true
 }
 ```
+
+### Chrome Remote Debugging
+
+Enable Chrome DevTools Protocol for debugging:
+
+```v
+fn main() {
+    mut app := App{}
+    // Enable remote debugging on port 9222
+    app.Context.config.browser.remote_debug_port = 9222
+    vxui.run(mut app, './ui/index.html')!
+}
+```
+
+**Features:**
+- Connect Chrome DevTools via `http://localhost:9222`
+- Inspect elements, view console logs, debug JavaScript
+- Useful when F12 is disabled in app mode
+
+**Usage:**
+1. Start your vxui application with `remote_debug_port` set
+2. Open Chrome and navigate to `http://localhost:9222`
+3. Click on the page to inspect
+4. Full DevTools panel will open
+
+### OOB Update Command (Multi-Client Broadcast)
+
+Broadcast HTML updates to all connected clients:
+
+```v
+// Backend: broadcast HTML with CSS variable data
+oob_html := '<div id="main-wrapper" hx-swap-oob="true" 
+    data-bg="#ff0000" data-accent="#00ff00" data-font-size="18">
+    ...content...
+</div>'
+
+broadcast_msg := json2.encode({
+    'cmd':  'oob_update'
+    'html': oob_html
+})
+app.broadcast(broadcast_msg)!
+```
+
+**Frontend (vxui-ws.js):**
+- Automatically handles `oob_update` command
+- Performs OOB swap using htmx internal APIs
+- Updates CSS variables from `data-bg`, `data-accent`, `data-font-size` attributes
+- Rebinds htmx event listeners on new elements
 
 ### Single Executable Distribution
 

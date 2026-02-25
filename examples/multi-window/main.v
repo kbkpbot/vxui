@@ -641,6 +641,8 @@ fn main() {
 		title:     'Multi-Window Demo'
 		resizable: true
 	}
+	// Enable Chrome remote debugging for development (connect via localhost:9222)
+	app.Context.config.browser.remote_debug_port = 9222
 	app.logger.set_level(.info)
 
 	vxui.run(mut app, './ui/index.html') or {
