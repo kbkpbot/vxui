@@ -5,9 +5,8 @@ Demonstrates how to create applications with multiple synchronized windows using
 ## Features
 
 - **Multi-Client Mode**: Multiple browser windows/tabs connect to the same application
-- **Broadcast Messaging**: Send messages from main window to all child windows
+- **Broadcast Messaging**: Send messages from any window to all other windows
 - **Shared State**: Counter synchronized across all connected windows
-- **Window Management**: Track connected windows and their status
 - **Real-Time Updates**: All windows receive updates instantly via WebSocket
 
 ## How to Run
@@ -24,35 +23,31 @@ v -prod -o multi-window main.v
 ./multi-window
 ```
 
+**Open multiple windows**: Run the command again in another terminal to open additional synchronized windows.
+
 ## How It Works
 
-1. **Main Control Window**: Opens by default with full control panel
-2. **Child Windows**: Open additional windows by running `./multi-window` again
-3. **Synchronization**: All windows share the same state via WebSocket
-4. **Broadcasting**: Use `app.broadcast()` to send updates to all clients
+1. **Enable Multi-Client**: Set `app.config.multi_client = true`
+2. **Open Multiple Windows**: Each window connects to the same WebSocket server
+3. **Broadcast**: Use `app.broadcast()` to send updates to all clients
+4. **Synchronization**: All windows share the same application state
 
-## Architecture
-
-### Key Components
+## Key Code
 
 ```v
 // Enable multi-client mode
 app.config.multi_client = true
 
-// Broadcast to all windows
-app.broadcast('<div hx-swap-oob="true">...</div>')!
+// Broadcast HTML update to all windows
+app.broadcast('<div id="counter" hx-swap-oob="true">${count}</div>')!
 ```
 
-### Window Types
+## Architecture
 
-- **Main Window** (`?type=main`): Control panel with full features
-- **Child Window** (default): Receives broadcasts, can increment counter
-
-### State Management
-
-- `messages`: Shared message history
-- `shared_counter`: Synchronized counter across all windows
-- `window_states`: Track connected window information
+- **Shared State**: `messages` array and `shared_counter` are shared across all windows
+- **Broadcasting**: Server sends HTML fragments to all connected clients
+- **Real-Time**: WebSocket ensures instant synchronization
+- **Multi-Window**: Each window is a separate browser instance
 
 ## Use Cases
 
@@ -64,6 +59,6 @@ app.broadcast('<div hx-swap-oob="true">...</div>')!
 ## Technical Details
 
 - Uses `multi_client = true` to allow multiple connections
-- Each window gets a unique ID via JavaScript
+- Each window generates a unique ID via JavaScript
 - Periodic ping keeps connection alive
-- WebSocket ensures real-time synchronization
+- WebSocket broadcasts ensure real-time synchronization

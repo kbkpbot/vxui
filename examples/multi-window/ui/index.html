@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-Window Demo</title>
+    <script src="./js/htmx.js"></script>
+    <script src="./js/vxui-ws.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .panel h2 {
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #00d4ff, #0099cc);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+        }
+        .btn-danger {
+            background: linear-gradient(90deg, #ff4757, #cc0033);
+            color: #fff;
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        .message-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .message-list.empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100px;
+        }
+        .empty-text {
+            color: #666;
+        }
+        .message {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #00d4ff;
+        }
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        .message-sender {
+            color: #00d4ff;
+            font-weight: bold;
+        }
+        .message-time {
+            color: #666;
+        }
+        .message-text {
+            color: #ddd;
+        }
+        .counter-section {
+            text-align: center;
+            padding: 20px;
+        }
+        .counter-value {
+            font-size: 48px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .counter-info {
+            display: block;
+            color: #888;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .counter-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .windows-list ul {
+            list-style: none;
+        }
+        .windows-list li {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .window-name {
+            color: #00d4ff;
+        }
+        .window-ping {
+            color: #666;
+            font-size: 12px;
+        }
+        .error {
+            color: #ff4757;
+            padding: 10px;
+            background: rgba(255, 71, 87, 0.1);
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        .info-box {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info-box p {
+            margin-bottom: 8px;
+            color: #aaa;
+        }
+        .info-box code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #00d4ff;
+        }
+    </style>
+</head>
+<body hx-ext="vxui-ws">
+    <div class="container">
+        <h1>🪟 Multi-Window Demo</h1>
+        <p class="subtitle">Open multiple windows to see synchronization</p>
+
+        <div class="info-box">
+            <p><strong>How to use:</strong></p>
+            <p>1. Open multiple browser windows with: <code>v run main.v</code></p>
+            <p>2. Type messages below to broadcast to all windows</p>
+            <p>3. Click the counter button to sync across all windows</p>
+        </div>
+
+        <div class="grid">
+            <div class="panel">
+                <h2>📢 Broadcast Messages</h2>
+                <div class="input-group">
+                    <input type="text" name="text" placeholder="Enter message to broadcast..." id="message-input">
+                    <button class="btn-primary" hx-post="/broadcast" hx-target="#messages" hx-swap="outerHTML" hx-include="#message-input">
+                        Send
+                    </button>
+                </div>
+                <button class="btn-secondary" hx-post="/messages/clear" hx-target="#messages" hx-swap="outerHTML" style="margin-bottom: 15px;">
+                    Clear Messages
+                </button>
+                <div id="error"></div>
+                <div id="messages" class="message-list empty">
+                    <p class="empty-text">No messages yet</p>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🔢 Shared Counter</h2>
+                <div class="counter-section">
+                    <div id="shared-counter">
+                        <span class="counter-value">0</span>
+                        <span class="counter-info">Click to increment across all windows</span>
+                    </div>
+                    <div class="counter-buttons">
+                        <button class="btn-primary" hx-post="/counter/increment" hx-target="#counter-result" hx-swap="outerHTML">
+                            + Increment
+                        </button>
+                        <button class="btn-danger" hx-post="/counter/reset" hx-target="#counter-result" hx-swap="outerHTML">
+                            Reset
+                        </button>
+                    </div>
+                    <div id="counter-result"></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>🖥️ Connected Windows</h2>
+                <div id="connected-windows" class="windows-list">
+                    <h3>Connected Windows (0)</h3>
+                    <p class="empty">No windows connected</p>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📊 System Status</h2>
+                <div style="padding: 20px;">
+                    <p style="margin-bottom: 10px;"><strong>Multi-client mode:</strong> <span style="color: #00d4ff;">Enabled</span></p>
+                    <p style="margin-bottom: 10px;"><strong>WebSocket:</strong> <span style="color: #00ff88;">Connected</span></p>
+                    <p><strong>Window ID:</strong> <span id="window-id" style="color: #00d4ff;">...</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate unique window ID
+        const windowId = "win-" + Math.random().toString(36).substr(2, 9);
+        document.getElementById("window-id").textContent = windowId;
+
+        // Send periodic ping
+        setInterval(() => {
+            fetch("/ping", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ client_id: windowId })
+            });
+        }, 5000);
+    </script>
+</body>
+</html>
