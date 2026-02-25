@@ -72,7 +72,7 @@ fn (mut app App) open_settings(message map[string]json2.Any) string {
 	// Open settings window in a separate thread
 	spawn fn (port u16, token string) {
 		time.sleep(100 * time.millisecond)
-		vxui.start_browser_with_token('./ui/index.html#/settings', port, token, vxui.WindowConfig{
+		vxui.start_browser_with_token('./ui/settings.html', port, token, vxui.WindowConfig{
 			width:     500
 			height:    600
 			title:     'Settings'
