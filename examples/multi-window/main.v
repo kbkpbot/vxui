@@ -53,11 +53,22 @@ fn (mut app App) broadcast_handler(message map[string]json2.Any) string {
 		app.messages = app.messages[app.messages.len - 20..]
 	}
 
-	// Broadcast to all connected clients
-	broadcast_html := app.render_broadcast_message()
-	app.broadcast(broadcast_html) or {}
+	// Get current client ID
+	client_id := params['client_id'] or { json2.Any('') }.str()
 
-	return app.render_message_list()
+	// Create message update HTML
+	message_html := app.render_broadcast_message()
+
+	// Broadcast to all OTHER windows
+	if client_id != '' {
+		app.broadcast_except(message_html, client_id) or {}
+	} else {
+		// If no client_id, broadcast to all
+		app.broadcast(message_html) or {}
+	}
+
+	// Return update for current window
+	return message_html + '<div id="error" hx-swap-oob="true"></div>'
 }
 
 // Update shared counter
@@ -106,7 +117,23 @@ fn (mut app App) reset_counter(message map[string]json2.Any) string {
 @['/messages/clear']
 fn (mut app App) clear_messages(message map[string]json2.Any) string {
 	app.messages = []
-	return '<div id="messages" hx-swap-oob="true" class="message-list empty"><p class="empty-text">No messages yet</p></div>'
+
+	// Get current client ID
+	params := message['parameters'] or { json2.Null{} }.as_map()
+	client_id := params['client_id'] or { json2.Any('') }.str()
+
+	// Create clear message HTML
+	clear_html := '<div id="messages" hx-swap-oob="true" class="message-list empty"><p class="empty-text">No messages yet</p></div>'
+
+	// Broadcast to all OTHER windows
+	if client_id != '' {
+		app.broadcast_except(clear_html, client_id) or {}
+	} else {
+		app.broadcast(clear_html) or {}
+	}
+
+	// Return for current window
+	return clear_html
 }
 
 // Ping from window

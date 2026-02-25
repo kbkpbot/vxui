@@ -205,11 +205,11 @@
                 <h2>📢 Broadcast Messages</h2>
                 <div class="input-group">
                     <input type="text" name="text" placeholder="Enter message to broadcast..." id="message-input">
-                    <button class="btn-primary" hx-post="/broadcast" hx-target="#messages" hx-swap="outerHTML" hx-include="#message-input">
+                    <button class="btn-primary" hx-post="/broadcast" hx-swap="none" hx-include="#message-input" hx-vals="js:{client_id: windowId}">
                         Send
                     </button>
                 </div>
-                <button class="btn-secondary" hx-post="/messages/clear" hx-target="#messages" hx-swap="outerHTML" style="margin-bottom: 15px;">
+                <button class="btn-secondary" hx-post="/messages/clear" hx-swap="none" hx-vals="js:{client_id: windowId}" style="margin-bottom: 15px;">
                     Clear Messages
                 </button>
                 <div id="error"></div>
