@@ -24,8 +24,15 @@ mut:
 // Index handler - renders main display window
 @['/']
 fn (mut app App) index(message map[string]json2.Any) string {
-	println('[DEBUG] Index route called, rendering main window')
+	params := message['parameters'] or { json2.Null{} }.as_map()
+	client_id := message['client_id'] or { json2.Any('unknown') }.str()
+	
+	println('[DEBUG] ============================================')
+	println('[DEBUG] Index route called by client: ${client_id}')
+	println('[DEBUG] Parameters: ${params}')
 	println('[DEBUG] Current config: title=${app.app_config.title}, bg=${app.app_config.bg_color}')
+	println('[DEBUG] ============================================')
+	
 	return app.render_main_window()
 }
 
@@ -66,11 +73,20 @@ fn (mut app App) update_settings(message map[string]json2.Any) string {
 	// Each client will re-request the main page content
 	refresh_trigger := '<div hx-get="/" hx-trigger="load" hx-target="#main-wrapper" hx-swap="outerHTML" style="display:none"></div>'
 	
-	println('[DEBUG] Broadcasting refresh trigger to ${app.get_client_count()} clients')
+	client_count := app.get_client_count()
+	println('[DEBUG] Broadcasting refresh trigger to ${client_count} clients')
+	println('[DEBUG] Broadcast HTML: ${refresh_trigger}')
+	
+	// Try to broadcast
+	println('[DEBUG] Attempting broadcast...')
 	app.broadcast(refresh_trigger) or {
-		println('[ERROR] Failed to broadcast: ${err}')
+		println('[ERROR] Broadcast failed: ${err}')
 	}
 	println('[DEBUG] Broadcast completed')
+	
+	// Show client info
+	clients := app.get_clients()
+	println('[DEBUG] Connected clients: ${clients}')
 
 	return '<div id="save-result" hx-swap-oob="true" style="color: #00ff88; margin-top: 10px;">✓ Settings saved!</div>'
 }
