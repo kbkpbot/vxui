@@ -1,13 +1,18 @@
 # Multi-Window Demo
 
-Demonstrates how to create applications with multiple synchronized windows using vxui's multi-client support.
+Demonstrates a practical multi-window desktop application with a main window and a settings window.
 
 ## Features
 
-- **Multi-Client Mode**: Multiple browser windows/tabs connect to the same application
-- **Broadcast Messaging**: Send messages from any window to all other windows
-- **Shared State**: Counter synchronized across all connected windows
-- **Real-Time Updates**: All windows receive updates instantly via WebSocket
+- **Main Window**: Displays content with customizable properties
+- **Settings Window**: Separate window for editing configuration
+- **Real-Time Sync**: Changes in settings window immediately reflect in main window
+- **Configurable Properties**:
+  - Title
+  - Background color
+  - Accent color  
+  - Display message
+  - Font size
 
 ## How to Run
 
@@ -16,49 +21,54 @@ Demonstrates how to create applications with multiple synchronized windows using
 v run main.v
 ```
 
-Or build and run:
-
-```sh
-v -prod -o multi-window main.v
-./multi-window
-```
-
-**Open multiple windows**: Run the command again in another terminal to open additional synchronized windows.
-
 ## How It Works
 
-1. **Enable Multi-Client**: Set `app.config.multi_client = true`
-2. **Open Multiple Windows**: Each window connects to the same WebSocket server
-3. **Broadcast**: Use `app.broadcast()` to send updates to all clients
-4. **Synchronization**: All windows share the same application state
-
-## Key Code
-
-```v
-// Enable multi-client mode
-app.config.multi_client = true
-
-// Broadcast HTML update to all windows
-app.broadcast('<div id="counter" hx-swap-oob="true">${count}</div>')!
-```
+1. **Start the application** - Opens the main display window
+2. **Click Settings** - Opens a separate settings window
+3. **Modify settings** - Change colors, text, or other properties
+4. **Save changes** - Updates are broadcast to the main window instantly
+5. **Close settings** - Settings window can be closed independently
 
 ## Architecture
 
-- **Shared State**: `messages` array and `shared_counter` are shared across all windows
-- **Broadcasting**: Server sends HTML fragments to all connected clients
-- **Real-Time**: WebSocket ensures instant synchronization
-- **Multi-Window**: Each window is a separate browser instance
+### Window Communication
+
+```
+Main Window          Settings Window
+     │                       │
+     │  Click "Settings"    │
+     ├──────────────────────►│
+     │                       │
+     │   Broadcast Update   │
+     │◄──────────────────────┤
+     │   (real-time sync)   │
+```
+
+### Key Components
+
+- **Main Window** (`/`): Displays the content using `AppConfig`
+- **Settings Window** (`/settings`): Form for editing `AppConfig`
+- **Update Handler** (`/update-settings`): Broadcasts changes to all windows
+- **Open Handler** (`/open-settings`): Opens new settings window via `start_browser_with_token()`
+
+### Data Flow
+
+1. User changes setting in settings window
+2. Settings window POSTs to `/update-settings`
+3. Backend updates `AppConfig`
+4. Backend broadcasts HTML update to all connected windows
+5. Main window receives update via `hx-swap-oob` and refreshes display
 
 ## Use Cases
 
-- **Control Panels**: Main window controls multiple display windows
-- **Dashboards**: Multiple monitors showing different views of same data
-- **Collaboration**: Multiple users viewing synchronized state
-- **Presentations**: Presenter view + audience view
+- **Preferences/Settings dialogs**
+- **Property editors**
+- **Configuration panels**
+- **Inspector windows**
 
 ## Technical Details
 
-- Uses `multi_client = true` to allow multiple connections
-- Each window generates a unique ID via JavaScript
-- Periodic ping keeps connection alive
-- WebSocket broadcasts ensure real-time synchronization
+- Uses `multi_client = true` for multiple window support
+- `spawn` + `start_browser_with_token()` opens new windows programmatically
+- `broadcast()` sends updates to all connected clients
+- `hx-swap-oob` enables partial page updates without full refresh
