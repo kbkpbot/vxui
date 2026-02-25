@@ -208,7 +208,7 @@ fn (app App) render_main_window() string {
 fn (app App) render_main_window_oob() string {
 	accent_color := app.app_config.accent_color
 
-	return '<div hx-swap-oob="true">
+	oob_html := '<div hx-swap-oob="true" id="oob-update-container">
         <div id="main-wrapper" class="main-wrapper" style="--accent-color: ${accent_color}">
             <div class="container">
                 <div class="header" style="border-bottom-color: ${accent_color}">
@@ -228,8 +228,12 @@ fn (app App) render_main_window_oob() string {
             </div>
             <div id="open-result"></div>
         </div>
-        <script>document.body.style.background = "${app.app_config.bg_color}"; document.body.style.fontSize = "${app.app_config.font_size}px";</script>
     </div>'
+
+	println('[DEBUG] OOB HTML generated:')
+	println(oob_html)
+
+	return oob_html
 }
 
 // Render settings window HTML
