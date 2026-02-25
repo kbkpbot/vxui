@@ -24,12 +24,15 @@ mut:
 // Index handler - renders main display window
 @['/']
 fn (mut app App) index(message map[string]json2.Any) string {
+	println('[DEBUG] Index route called, rendering main window')
+	println('[DEBUG] Current config: title=${app.app_config.title}, bg=${app.app_config.bg_color}')
 	return app.render_main_window()
 }
 
 // Settings handler - renders settings window
 @['/settings']
 fn (mut app App) settings(message map[string]json2.Any) string {
+	println('[DEBUG] Settings route called')
 	return app.render_settings_window()
 }
 
@@ -38,26 +41,42 @@ fn (mut app App) settings(message map[string]json2.Any) string {
 fn (mut app App) update_settings(message map[string]json2.Any) string {
 	params := message['parameters'] or { json2.Null{} }.as_map()
 
+	println('[DEBUG] Received settings update request')
+	println('[DEBUG] Current config: title=${app.app_config.title}, bg=${app.app_config.bg_color}, accent=${app.app_config.accent_color}')
+
 	// Update config values
 	if title := params['title'] {
 		app.app_config.title = title.str()
+		println('[DEBUG] Updated title to: ${app.app_config.title}')
 	}
 	if bg_color := params['bg_color'] {
 		app.app_config.bg_color = bg_color.str()
+		println('[DEBUG] Updated bg_color to: ${app.app_config.bg_color}')
 	}
 	if accent_color := params['accent_color'] {
 		app.app_config.accent_color = accent_color.str()
+		println('[DEBUG] Updated accent_color to: ${app.app_config.accent_color}')
 	}
 	if msg := params['message'] {
 		app.app_config.message = msg.str()
+		println('[DEBUG] Updated message to: ${app.app_config.message}')
 	}
 	if font_size := params['font_size'] {
 		app.app_config.font_size = font_size.int()
+		println('[DEBUG] Updated font_size to: ${app.app_config.font_size}')
 	}
 
 	// Broadcast update to all windows (including main window)
+	client_count := app.get_client_count()
+	println('[DEBUG] Broadcasting to ${client_count} clients')
+
 	update_html := app.render_main_window_oob()
-	app.broadcast(update_html) or {}
+	println('[DEBUG] Generated OOB HTML length: ${update_html.len} chars')
+
+	app.broadcast(update_html) or {
+		println('[ERROR] Failed to broadcast: ${err}')
+	}
+	println('[DEBUG] Broadcast completed')
 
 	return '<div id="save-result" hx-swap-oob="true" style="color: #00ff88; margin-top: 10px;">✓ Settings saved!</div>'
 }
