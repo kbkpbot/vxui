@@ -1246,3 +1246,127 @@ fn test_all_error_codes_have_messages() {
 		assert int(code) >= 0
 	}
 }
+
+// =============================================================================
+// Escape Function Tests
+// =============================================================================
+
+fn test_escape_html_basic() {
+	assert escape_html('<script>alert("xss")</script>') == '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
+	assert escape_html('Test & Example') == 'Test &amp; Example'
+	assert escape_html("It's working") == 'It&#x27;s working'
+}
+
+fn test_escape_html_empty() {
+	assert escape_html('') == ''
+}
+
+fn test_escape_js_basic() {
+	assert escape_js('alert("test")') == 'alert(\\"test\\")'
+	assert escape_js("line1\nline2") == 'line1\\nline2'
+	assert escape_js('path\\to\\file') == 'path\\\\to\\\\file'
+}
+
+fn test_escape_js_tab_and_return() {
+	assert escape_js('\t') == '\\t'
+	assert escape_js('\r') == '\\r'
+}
+
+fn test_escape_attr_basic() {
+	assert escape_attr('value" onclick="alert(1)') == 'value&quot; onclick=&quot;alert(1)'
+	assert escape_attr("test' OR '1'='1") == 'test&#x27; OR &#x27;1&#x27;=&#x27;1'
+}
+
+fn test_escape_html_no_change() {
+	// Test that safe HTML passes through unchanged
+	input := 'Hello World 123'
+	assert escape_html(input) == input
+}
+
+// =============================================================================
+// Utility Function Tests
+// =============================================================================
+
+fn test_truncate_string_short() {
+	// String shorter than max should not be truncated
+	assert truncate_string('Hello', 10) == 'Hello'
+}
+
+fn test_truncate_string_exact() {
+	// String exactly at max should not be truncated
+	assert truncate_string('Hello World', 11) == 'Hello World'
+}
+
+fn test_truncate_string_long() {
+	// Long string should be truncated with ellipsis
+	result := truncate_string('This is a very long string', 20)
+	assert result.len == 20
+	assert result.ends_with('...')
+}
+
+fn test_truncate_string_boundary() {
+	// Test boundary condition
+	result := truncate_string('Hello World', 10)
+	assert result == 'Hello W...'
+}
+
+fn test_truncate_string_small_max() {
+	// When max_len <= 3, should just truncate without ellipsis
+	assert truncate_string('Hello', 3) == 'Hel'
+	assert truncate_string('Hello', 2) == 'He'
+}
+
+fn test_generate_id_format() {
+	id := generate_id()
+	assert id.len == 16 // rand.hex(16) returns 16 hex chars
+	// Check all chars are valid hex
+	for c in id.to_lower().bytes() {
+		assert (c >= u8(`0`) && c <= u8(`9`)) || (c >= u8(`a`) && c <= u8(`f`))
+	}
+}
+
+fn test_generate_id_unique() {
+	// Generate multiple IDs and verify they're different
+	ids := [generate_id(), generate_id(), generate_id()]
+	assert ids[0] != ids[1]
+	assert ids[1] != ids[2]
+	assert ids[0] != ids[2]
+}
+
+fn test_is_valid_email_valid() {
+	assert is_valid_email('test@example.com') == true
+	assert is_valid_email('user.name@domain.co.uk') == true
+	assert is_valid_email('user+tag@example.org') == true
+}
+
+fn test_is_valid_email_invalid() {
+	assert is_valid_email('invalid') == false
+	assert is_valid_email('no@domain') == false
+	assert is_valid_email('@example.com') == false
+	assert is_valid_email('test@') == false
+	assert is_valid_email('a@b') == false // no dot in domain
+	assert is_valid_email('') == false
+}
+
+// =============================================================================
+// URL Decode Tests
+// =============================================================================
+
+fn test_url_decode_basic() {
+	assert url_decode('Hello%20World') == 'Hello World'
+	assert url_decode('test%2Fpath') == 'test/path'
+}
+
+fn test_url_decode_plus() {
+	assert url_decode('Hello+World') == 'Hello World'
+}
+
+fn test_url_decode_no_encoding() {
+	assert url_decode('plaintext') == 'plaintext'
+}
+
+fn test_url_decode_invalid_hex() {
+	// Invalid hex sequences should pass through
+	assert url_decode('%ZZ') == '%ZZ'
+	assert url_decode('%2') == '%2'
+}
