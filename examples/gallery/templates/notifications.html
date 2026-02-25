@@ -1,0 +1,5 @@
+<div id="notifications" hx-swap-oob="true">
+@for n in app.notifications
+<div class="notification @n.ftype">@n.message</div>
+@end
+</div>

@@ -8,11 +8,12 @@ import time
 
 // FileInfo represents uploaded file metadata
 struct FileInfo {
-	name     string
-	size     int
-	mime     string
-	data     string // base64 encoded
-	uploaded string
+	name      string
+	size      int
+	size_str  string // formatted size string (precomputed for template)
+	mimetype  string
+	data      string // base64 encoded
+	uploaded  string
 }
 
 // App inherits from vxui.Context
@@ -67,7 +68,8 @@ fn (mut app App) upload(message map[string]json2.Any) string {
 	file_info := FileInfo{
 		name:     filename
 		size:     decoded.len
-		mime:     mimetype
+		size_str: format_size(decoded.len)
+		mimetype: mimetype
 		data:     data
 		uploaded: time_now_str()
 	}
@@ -113,7 +115,7 @@ fn (mut app App) download(message map[string]json2.Any) string {
 				// Trigger download
 				(function() {
 					var link = document.createElement("a");
-					link.href = "data:${file.mime};base64,${file.data}";
+					link.href = "data:${file.mimetype};base64,${file.data}";
 					link.download = "${file.name}";
 					link.click();
 				})();
@@ -124,41 +126,15 @@ fn (mut app App) download(message map[string]json2.Any) string {
 	return '<div id="message" class="error">File not found</div>'
 }
 
-// render_file_list generates the HTML for the file list
+// render_file_list generates the HTML for the file list using $tmpl
 fn (mut app App) render_file_list() string {
-	mut html := '<ul id="file-list" hx-swap-oob="true">'
-
-	if app.files.len == 0 {
-		html += '<li class="empty">No files uploaded yet</li>'
-	} else {
-		for file in app.files {
-			html += '<li>
-				<div class="file-info">
-					<span class="file-name">${file.name}</span>
-					<span class="file-meta">${format_size(file.size)} | ${file.mime}</span>
-					<span class="file-time">${file.uploaded}</span>
-				</div>
-				<div class="file-actions">
-					<button hx-get="/download" hx-vals=\'{"filename": "${file.name}"}\' hx-target="#download-area">Download</button>
-					<button hx-post="/delete" hx-vals=\'{"filename": "${file.name}"}\' hx-target="#file-list" hx-swap="outerHTML" class="delete">Delete</button>
-				</div>
-			</li>'
-		}
-	}
-
-	html += '</ul>'
-
-	// Stats - calculate total size
+	// Calculate total size for template
 	mut total_size := 0
 	for file in app.files {
 		total_size += file.size
 	}
-	html += '<div id="stats" hx-swap-oob="true" class="stats">
-		<span>${app.files.len} files</span>
-		<span>Total: ${format_size(total_size)}</span>
-	</div>'
-
-	return html
+	total_size_str := format_size(total_size)
+	return $tmpl('templates/file_list.html')
 }
 
 // format_size formats bytes to human readable

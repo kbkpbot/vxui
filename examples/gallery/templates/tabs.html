@@ -1,0 +1,18 @@
+<div id="tabs-container" hx-swap-oob="true">
+	<div class="tabs">
+		<button class="tab @tab1_active" hx-post="/tabs/switch" hx-vals='{"tab":"tab1"}'>Tab 1</button>
+		<button class="tab @tab2_active" hx-post="/tabs/switch" hx-vals='{"tab":"tab2"}'>Tab 2</button>
+		<button class="tab @tab3_active" hx-post="/tabs/switch" hx-vals='{"tab":"tab3"}'>Tab 3</button>
+	</div>
+	<div class="tab-content">
+@if app.active_tab == 'tab1'
+		<h3>Tab 1 Content</h3><p>This is the first tab panel.</p>
+@else if app.active_tab == 'tab2'
+		<h3>Tab 2 Content</h3><p>This is the second tab panel.</p>
+@else if app.active_tab == 'tab3'
+		<h3>Tab 3 Content</h3><p>This is the third tab panel.</p>
+@else
+		<p>Select a tab</p>
+@end
+	</div>
+</div>

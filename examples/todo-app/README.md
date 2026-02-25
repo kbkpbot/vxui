@@ -39,5 +39,35 @@ This example shows how to:
 
 1. **Data Model**: `TodoItem` struct with id, text, and completed status
 2. **State Management**: Array of todos with auto-increment ID
-3. **Rendering**: HTML generation for the todo list with swap-oob updates
+3. **Rendering**: HTML generation using V's `$tmpl` template feature
 4. **Interactions**: Add, toggle, delete, and clear operations
+
+## Using $tmpl Templates
+
+This example demonstrates V's built-in `$tmpl` feature for cleaner HTML generation:
+
+```v
+fn (mut app App) render_todo_list() string {
+    active_count := app.todos.filter(!it.completed).len
+    completed_count := app.todos.filter(it.completed).len
+    return $tmpl('templates/todo_list.html')
+}
+```
+
+Template syntax (`templates/todo_list.html`):
+```html
+<ul id="todo-list" hx-swap-oob="true">
+@if app.todos.len == 0
+  <li class="empty">No todos yet!</li>
+@else
+  @for item in app.todos
+    <li>@item.text</li>
+  @end
+@end
+</ul>
+```
+
+**Benefits:**
+- HTML and V code are separated
+- Templates are compiled at build time (zero runtime overhead)
+- Supports `@if`, `@for`, `@else`, and direct struct field access

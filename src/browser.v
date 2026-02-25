@@ -285,9 +285,19 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 			cmd_args << '--disable-setuid-sandbox'
 		}
 
-		cmd_args << '--force-app-mode'
 		cmd_args << '--new-window'
-		cmd_args << '--app=file://${abs_path}?${url_params}'
+		cmd_args << '--allow-file-access-from-files'
+		cmd_args << '--enable-file-access-from-files'
+		cmd_args << '--enable-features=FileAccessAPI,NativeFileSystemAPI'
+		
+		// Use app mode unless disabled (app mode can block file dialogs)
+		if !browser_config.no_app_mode {
+			// Use kiosk mode instead of app mode for better file dialog support
+			cmd_args << '--kiosk'
+			cmd_args << 'file://${abs_path}?${url_params}'
+		} else {
+			cmd_args << 'file://${abs_path}?${url_params}'
+		}
 	} else {
 		// Firefox uses different approach
 		if window.width > 0 && window.height > 0 {

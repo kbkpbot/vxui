@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-02-26
+
+### Added
+
+- **$tmpl Template Support**: Examples now use V's built-in `$tmpl` for cleaner HTML generation
+  - All examples refactored to separate HTML templates from V code
+  - Templates located in `templates/` subdirectories
+  - Zero runtime overhead (compiled at build time)
+  - Supports `@if`, `@for`, `@else` and direct struct field access
+
+- **Browser Config Option**: New `no_app_mode` setting in `BrowserConfig`
+  - Set `no_app_mode = true` to disable kiosk mode
+  - Allows file dialogs to work properly in file-upload example
+  - Useful when native OS dialogs are needed
+
+### Changed
+
+- **Browser Launch Mode**: Changed from `--app` to `--kiosk` mode for Chrome
+  - Better fullscreen experience
+  - Use `no_app_mode = true` for standard window mode
+
+### Examples
+
+- `examples/file-upload`: Refactored with `$tmpl`, added `templates/file_list.html`
+- `examples/gallery`: Refactored with `$tmpl`, added template files for table, tabs, notifications, progress
+- `examples/test`: Refactored with `$tmpl`, added contact view/edit templates
+- `examples/todo-app`: Refactored with `$tmpl`, added `templates/todo_list.html`
+
 ## [0.6.2] - 2026-02-25
 
 ### Added

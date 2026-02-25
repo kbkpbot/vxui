@@ -1,0 +1,24 @@
+<ul id="file-list" hx-swap-oob="true">
+@if app.files.len == 0
+	<li class="empty">No files uploaded yet</li>
+@else
+	@for file in app.files
+	<li>
+		<div class="file-info">
+			<span class="file-name">@file.name</span>
+			<span class="file-meta">@file.size_str | @file.mimetype</span>
+			<span class="file-time">@file.uploaded</span>
+		</div>
+		<div class="file-actions">
+			<button hx-get="/download" hx-vals='{"filename": "@file.name"}' hx-target="#download-area">Download</button>
+			<button hx-post="/delete" hx-vals='{"filename": "@file.name"}' hx-target="#file-list" hx-swap="outerHTML" class="delete">Delete</button>
+		</div>
+	</li>
+	@end
+@end
+</ul>
+
+<div id="stats" hx-swap-oob="true" class="stats">
+	<span>@app.files.len files</span>
+	<span>Total: @total_size_str</span>
+</div>

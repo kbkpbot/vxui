@@ -1,0 +1,21 @@
+<div id="idMessage" hx-swap-oob="true">hello[@app.cnt], I am @source</div>
+
+<div id="outerHTML" hx-swap-oob="true" class="contact-info">
+	<div class="info-row">
+		<span class="info-label">First Name</span>
+		<span class="info-value">@app.first_name</span>
+	</div>
+	<div class="info-row">
+		<span class="info-label">Last Name</span>
+		<span class="info-value">@app.last_name</span>
+	</div>
+	<div class="info-row">
+		<span class="info-label">Email</span>
+		<span class="info-value">@app.email</span>
+	</div>
+	<div class="button-row">
+		<button id="edit" hx-post="/edit" class="btn btn-primary">
+			<span class="btn-icon">✏️</span> Edit
+		</button>
+	</div>
+</div>

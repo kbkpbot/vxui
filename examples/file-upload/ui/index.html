@@ -56,6 +56,7 @@
         }
 
         .drop-zone {
+            display: block;
             border: 3px dashed #ccc;
             border-radius: 12px;
             padding: 40px;
@@ -92,7 +93,15 @@
         }
 
         .file-input {
-            display: none;
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
         .stats {
@@ -228,7 +237,7 @@
         </header>
 
         <div class="upload-section">
-            <div class="drop-zone" id="dropZone">
+            <label for="fileInput" class="drop-zone" id="dropZone">
                 <div class="drop-zone-icon">📁</div>
                 <div class="drop-zone-text">
                     Drop files here or click to upload
@@ -238,7 +247,7 @@
                 <div class="progress-bar" id="progressBar">
                     <div class="progress-bar-fill" id="progressFill"></div>
                 </div>
-            </div>
+            </label>
         </div>
 
         <div id="stats" class="stats">
@@ -260,9 +269,6 @@
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
 
-        // Click to upload
-        dropZone.addEventListener('click', () => fileInput.click());
-
         // Drag and drop handlers
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -275,25 +281,28 @@
 
         dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             dropZone.classList.remove('dragover');
             handleFiles(e.dataTransfer.files);
         });
 
-        // File input change
+        // File input change - log timing
         fileInput.addEventListener('change', (e) => {
+            console.log('[TIMING] File selected at:', Date.now());
             handleFiles(e.target.files);
         });
 
         function handleFiles(files) {
             if (files.length === 0) return;
 
+            console.log('[TIMING] handleFiles start:', Date.now());
             progressBar.style.display = 'block';
             progressFill.style.width = '0%';
 
             let processed = 0;
             const total = files.length;
 
-            Array.from(files).forEach((file, index) => {
+            Array.from(files).forEach((file) => {
                 if (file.size > 10 * 1024 * 1024) {
                     alert(`File "${file.name}" is too large (max 10MB)`);
                     processed++;
@@ -301,15 +310,11 @@
                     return;
                 }
 
+                console.log('[TIMING] FileReader start:', Date.now(), file.name);
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    // Send to backend via htmx
-                    const formData = new FormData();
-                    formData.append('filename', file.name);
-                    formData.append('filedata', e.target.result);
-                    formData.append('mimetype', file.type || 'application/octet-stream');
-
-                    // Use htmx to send
+                    console.log('[TIMING] FileReader done:', Date.now());
+                    // Trigger upload event
                     htmx.trigger(document.body, 'upload-file', {
                         filename: file.name,
                         filedata: e.target.result,
@@ -334,48 +339,20 @@
             progressFill.style.width = percent + '%';
         }
 
-        // Listen for custom upload event and send via WebSocket
+        // Listen for custom upload event and send via vxui WebSocket
         document.body.addEventListener('upload-file', (e) => {
             const params = e.detail;
+            console.log('[TIMING] upload-file event:', Date.now());
             
-            // Create form and submit via htmx
-            fetch('/upload', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    parameters: {
-                        filename: params.filename,
-                        filedata: params.filedata,
-                        mimetype: params.mimetype
-                    }
-                })
-            }).then(response => response.text())
-              .then(html => {
-                  // Parse and update DOM
-                  const parser = new DOMParser();
-                  const doc = parser.parseFromString(html, 'text/html');
-                  
-                  // Update file list
-                  const fileList = doc.getElementById('file-list');
-                  if (fileList) {
-                      document.getElementById('file-list').innerHTML = fileList.innerHTML;
-                  }
-                  
-                  // Update message
-                  const message = doc.getElementById('message');
-                  if (message) {
-                      document.getElementById('message').innerHTML = message.innerHTML;
-                      document.getElementById('message').className = message.className;
-                  }
-                  
-                  // Update stats
-                  const stats = doc.getElementById('stats');
-                  if (stats) {
-                      document.getElementById('stats').innerHTML = stats.innerHTML;
-                  }
-              });
+            htmx.ajax('POST', '/upload', {
+                target: '#file-list',
+                swap: 'outerHTML',
+                values: {
+                    filename: params.filename,
+                    filedata: params.filedata,
+                    mimetype: params.mimetype || 'application/octet-stream'
+                }
+            });
         });
     </script>
 </body>

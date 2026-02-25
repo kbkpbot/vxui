@@ -289,6 +289,7 @@ pub mut:
 	headless         bool     // Run in headless mode (for testing)
 	devtools         bool     // Open DevTools automatically
 	no_sandbox       bool     // Disable sandbox (for root/CI)
+	no_app_mode      bool     // Disable app mode (allows file dialogs)
 	user_data_dir    string   // Custom user data directory
 	preferred_path   string   // Preferred browser path (skip detection)
 	remote_debug_port int     // Chrome remote debugging port (0 = disabled)

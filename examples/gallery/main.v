@@ -36,16 +36,17 @@ mut:
 }
 
 struct Item {
-	id     int
-	name   string
-	value  int
-	status string
+	id           int
+	name         string
+	value        int
+	status       string
+	status_class string // precomputed CSS class
 }
 
 struct Notification {
 	id      int
 	message string
-	type_   string
+	ftype   string
 }
 
 fn main() {
@@ -62,11 +63,11 @@ fn main() {
 
 	// Initialize sample data
 	app.items = [
-		Item{1, 'Alpha', 100, 'active'},
-		Item{2, 'Beta', 200, 'pending'},
-		Item{3, 'Gamma', 300, 'active'},
-		Item{4, 'Delta', 400, 'inactive'},
-		Item{5, 'Epsilon', 500, 'active'},
+		Item{1, 'Alpha', 100, 'active', 'status-active'},
+		Item{2, 'Beta', 200, 'pending', 'status-pending'},
+		Item{3, 'Gamma', 300, 'active', 'status-active'},
+		Item{4, 'Delta', 400, 'inactive', 'status-inactive'},
+		Item{5, 'Epsilon', 500, 'active', 'status-active'},
 	]
 
 	vxui.run(mut app, html_filename) or {
@@ -180,7 +181,7 @@ fn (mut app App) progress_increment(message map[string]json2.Any) string {
 }
 
 fn (app App) render_progress() string {
-	return '<div id="progress-bar" hx-swap-oob="true" class="progress-bar" style="width: ${app.progress}%"></div><span id="progress-result" hx-swap-oob="true">${app.progress}%</span>'
+	return $tmpl('templates/progress.html')
 }
 
 // =============================================================================
@@ -197,43 +198,10 @@ fn (mut app App) tabs_switch(message map[string]json2.Any) string {
 }
 
 fn (app App) render_tabs() string {
-	mut html := '<div id="tabs-container" hx-swap-oob="true">
-		<div class="tabs">
-			<button class="tab ${if app.active_tab == 'tab1' {
-		'active'
-	} else {
-		''
-	}}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab1"}\'>Tab 1</button>
-			<button class="tab ${if app.active_tab == 'tab2' {
-		'active'
-	} else {
-		''
-	}}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab2"}\'>Tab 2</button>
-			<button class="tab ${if app.active_tab == 'tab3' {
-		'active'
-	} else {
-		''
-	}}" hx-post="/tabs/switch" hx-vals=\'{"tab":"tab3"}\'>Tab 3</button>
-		</div>
-		<div class="tab-content">'
-
-	match app.active_tab {
-		'tab1' {
-			html += '<h3>Tab 1 Content</h3><p>This is the first tab panel.</p>'
-		}
-		'tab2' {
-			html += '<h3>Tab 2 Content</h3><p>This is the second tab panel.</p>'
-		}
-		'tab3' {
-			html += '<h3>Tab 3 Content</h3><p>This is the third tab panel.</p>'
-		}
-		else {
-			html += '<p>Select a tab</p>'
-		}
-	}
-
-	html += '</div></div>'
-	return html
+	tab1_active := if app.active_tab == 'tab1' { 'active' } else { '' }
+	tab2_active := if app.active_tab == 'tab2' { 'active' } else { '' }
+	tab3_active := if app.active_tab == 'tab3' { 'active' } else { '' }
+	return $tmpl('templates/tabs.html')
 }
 
 // =============================================================================
@@ -249,11 +217,18 @@ fn (mut app App) table_refresh(message map[string]json2.Any) string {
 fn (mut app App) table_add(message map[string]json2.Any) string {
 	id := if app.items.len > 0 { app.items.last().id + 1 } else { 1 }
 	statuses := ['active', 'pending', 'inactive']
+	status := statuses[rand.int_in_range(0, 3) or { 0 }]
+	status_class := match status {
+		'active' { 'status-active' }
+		'pending' { 'status-pending' }
+		else { 'status-inactive' }
+	}
 	app.items << Item{
-		id:     id
-		name:   'Item ${id}'
-		value:  rand.int_in_range(100, 999) or { 100 }
-		status: statuses[rand.int_in_range(0, 3) or { 0 }]
+		id:           id
+		name:         'Item ${id}'
+		value:        rand.int_in_range(100, 999) or { 100 }
+		status:       status
+		status_class: status_class
 	}
 	app.notify('Item added', 'success')
 	return app.render_table()
@@ -277,35 +252,7 @@ fn (mut app App) table_delete(message map[string]json2.Any) string {
 }
 
 fn (app App) render_table() string {
-	mut html := '<table id="data-table" hx-swap-oob="true">
-		<thead>
-			<tr>
-				<th>ID</th>
-				<th>Name</th>
-				<th>Value</th>
-				<th>Status</th>
-				<th>Actions</th>
-			</tr>
-		</thead>
-		<tbody>'
-
-	for item in app.items {
-		status_class := match item.status {
-			'active' { 'status-active' }
-			'pending' { 'status-pending' }
-			else { 'status-inactive' }
-		}
-		html += '<tr>
-			<td>${item.id}</td>
-			<td>${item.name}</td>
-			<td>${item.value}</td>
-			<td><span class="status ${status_class}">${item.status}</span></td>
-			<td><button class="btn-small btn-danger" hx-post="/table/delete" hx-vals=\'{"id":${item.id}}\' hx-target="#data-table" hx-swap="outerHTML">Delete</button></td>
-		</tr>'
-	}
-
-	html += '</tbody></table>'
-	return html
+	return $tmpl('templates/table.html')
 }
 
 // =============================================================================
@@ -342,12 +289,12 @@ fn (mut app App) modal_close(message map[string]json2.Any) string {
 // Notifications
 // =============================================================================
 
-fn (mut app App) notify(message string, type_ string) {
+fn (mut app App) notify(message string, ftype string) {
 	id := if app.notifications.len > 0 { app.notifications.last().id + 1 } else { 1 }
 	app.notifications << Notification{
 		id:      id
 		message: message
-		type_:   type_
+		ftype:   ftype
 	}
 	// Keep only last 5 notifications
 	if app.notifications.len > 5 {
@@ -371,12 +318,7 @@ fn (mut app App) notify_clear(message map[string]json2.Any) string {
 }
 
 fn (app App) render_notifications() string {
-	mut html := '<div id="notifications" hx-swap-oob="true">'
-	for n in app.notifications {
-		html += '<div class="notification ${n.type_}">${n.message}</div>'
-	}
-	html += '</div>'
-	return html
+	return $tmpl('templates/notifications.html')
 }
 
 // =============================================================================

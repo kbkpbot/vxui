@@ -1,0 +1,24 @@
+<div id="idMessage" hx-swap-oob="true">hello[@app.cnt], I am @source</div>
+
+<div id="outerHTML" hx-swap-oob="true" class="contact-info">
+	<div class="info-row">
+		<span class="info-label">First Name</span>
+		<input type="text" name="firstName" value="@app.first_name" style="flex:1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 12px; color: #fff;">
+	</div>
+	<div class="info-row">
+		<span class="info-label">Last Name</span>
+		<input type="text" name="lastName" value="@app.last_name" style="flex:1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 12px; color: #fff;">
+	</div>
+	<div class="info-row">
+		<span class="info-label">Email</span>
+		<input type="email" name="email" value="@app.email" style="flex:1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 12px; color: #fff;">
+	</div>
+	<div class="button-row">
+		<button class="btn btn-success" id="submit" hx-post="/submit">
+			<span class="btn-icon">✓</span> Submit
+		</button>
+		<button class="btn btn-outline" id="cancel" hx-post="/cancel">
+			<span class="btn-icon">✕</span> Cancel
+		</button>
+	</div>
+</div>

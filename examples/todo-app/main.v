@@ -94,57 +94,12 @@ fn (mut app App) clear_completed(message map[string]json2.Any) string {
 	return app.render_todo_list()
 }
 
-// render_todo_list generates the HTML for the todo list
+// render_todo_list generates the HTML for the todo list using $tmpl
 fn (mut app App) render_todo_list() string {
-	mut html := ''
-
-	// Stats
+	// Calculate stats for template
 	active_count := app.todos.filter(!it.completed).len
 	completed_count := app.todos.filter(it.completed).len
-
-	html += '<div id="stats" hx-swap-oob="true" class="stats">
-		<span>${active_count} items left</span>
-		<span>${completed_count} completed</span>
-	</div>'
-
-	// Error placeholder
-	html += '<div id="error" hx-swap-oob="true" class="error-hidden"></div>'
-
-	// Todo list
-	html += '<ul id="todo-list" hx-swap-oob="true">'
-
-	if app.todos.len == 0 {
-		html += '<li class="empty">No todos yet! Add one above.</li>'
-	} else {
-		for item in app.todos {
-			completed_class := if item.completed { 'completed' } else { '' }
-			check_text := if item.completed { 'Undo' } else { 'Complete' }
-
-			html += '<li class="${completed_class}">
-				<span class="todo-text">${item.text}</span>
-				<div class="todo-actions">
-					<button hx-post="/toggle" hx-vals=\'{"id": ${item.id}}\' hx-target="#todo-list" hx-swap="outerHTML">${check_text}</button>
-					<button hx-post="/delete" hx-vals=\'{"id": ${item.id}}\' hx-target="#todo-list" hx-swap="outerHTML" class="delete">Delete</button>
-				</div>
-			</li>'
-		}
-	}
-
-	html += '</ul>'
-
-	// Clear button (only show if there are completed items)
-	if completed_count > 0 {
-		html += '<div id="clear-btn" hx-swap-oob="true">
-			<button hx-post="/clear" hx-target="#todo-list" hx-swap="outerHTML">Clear Completed</button>
-		</div>'
-	} else {
-		html += '<div id="clear-btn" hx-swap-oob="true"></div>'
-	}
-
-	// Input field (clear after submit)
-	html += '<input id="todo-input" hx-swap-oob="true" type="text" name="text" placeholder="What needs to be done?" autofocus>'
-
-	return html
+	return $tmpl('templates/todo_list.html')
 }
 
 fn main() {

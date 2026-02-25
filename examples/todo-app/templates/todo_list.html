@@ -1,0 +1,40 @@
+<div id="stats" hx-swap-oob="true" class="stats">
+	<span>@active_count items left</span>
+	<span>@completed_count completed</span>
+</div>
+
+<div id="error" hx-swap-oob="true" class="error-hidden"></div>
+
+<ul id="todo-list" hx-swap-oob="true">
+@if app.todos.len == 0
+	<li class="empty">No todos yet! Add one above.</li>
+@else
+	@for item in app.todos
+		@if item.completed
+		<li class="completed">
+		@else
+		<li>
+		@end
+			<span class="todo-text">@item.text</span>
+			<div class="todo-actions">
+				@if item.completed
+				<button hx-post="/toggle" hx-vals='{"id": @item.id}' hx-target="#todo-list" hx-swap="outerHTML">Undo</button>
+				@else
+				<button hx-post="/toggle" hx-vals='{"id": @item.id}' hx-target="#todo-list" hx-swap="outerHTML">Complete</button>
+				@end
+				<button hx-post="/delete" hx-vals='{"id": @item.id}' hx-target="#todo-list" hx-swap="outerHTML" class="delete">Delete</button>
+			</div>
+		</li>
+	@end
+@end
+</ul>
+
+@if completed_count > 0
+<div id="clear-btn" hx-swap-oob="true">
+	<button hx-post="/clear" hx-target="#todo-list" hx-swap="outerHTML">Clear Completed</button>
+</div>
+@else
+<div id="clear-btn" hx-swap-oob="true"></div>
+@end
+
+<input id="todo-input" hx-swap-oob="true" type="text" name="text" placeholder="What needs to be done?" autofocus>

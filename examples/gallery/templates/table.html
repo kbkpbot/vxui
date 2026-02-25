@@ -1,0 +1,22 @@
+<table id="data-table" hx-swap-oob="true">
+	<thead>
+		<tr>
+			<th>ID</th>
+			<th>Name</th>
+			<th>Value</th>
+			<th>Status</th>
+			<th>Actions</th>
+		</tr>
+	</thead>
+	<tbody>
+	@for item in app.items
+	<tr>
+		<td>@item.id</td>
+		<td>@item.name</td>
+		<td>@item.value</td>
+		<td><span class="status @item.status_class">@item.status</span></td>
+		<td><button class="btn-small btn-danger" hx-post="/table/delete" hx-vals='{"id":@item.id}' hx-target="#data-table" hx-swap="outerHTML">Delete</button></td>
+	</tr>
+	@end
+	</tbody>
+</table>

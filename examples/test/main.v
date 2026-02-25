@@ -46,30 +46,9 @@ fn (mut app App) submit(message map[string]json2.Any) string {
 	}
 	app.cnt++
 
-	// this will replace the div "idMessage" and div "outerHTML"
-	// please add `hx-swap-oob="true"`
-	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am submit</div>
-	
-	<div id="outerHTML" hx-swap-oob="true" class="contact-info">
-		<div class="info-row">
-			<span class="info-label">First Name</span>
-			<span class="info-value">${app.first_name}</span>
-		</div>
-		<div class="info-row">
-			<span class="info-label">Last Name</span>
-			<span class="info-value">${app.last_name}</span>
-		</div>
-		<div class="info-row">
-			<span class="info-label">Email</span>
-			<span class="info-value">${app.email}</span>
-		</div>
-		<div class="button-row">
-			<button id="edit" hx-post="/edit" class="btn btn-primary">
-				<span class="btn-icon">✏️</span> Edit
-			</button>
-		</div>
-	</div>
-	'
+	// Use $tmpl for HTML rendering
+	source := 'submit'
+	return $tmpl('templates/contact_view.html')
 }
 
 fn (mut app App) edit(message map[string]json2.Any) string {
@@ -77,56 +56,15 @@ fn (mut app App) edit(message map[string]json2.Any) string {
 	tmp := message['parameters'] or { json2.Null{} }
 	app.logger.info(tmp.str())
 	app.cnt++
-	return '<div id="outerHTML" hx-swap-oob="true" class="contact-info">
-		<div class="info-row">
-			<span class="info-label">First Name</span>
-			<input type="text" name="firstName" value="${app.first_name}" style="flex:1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 12px; color: #fff;">
-		</div>
-		<div class="info-row">
-			<span class="info-label">Last Name</span>
-			<input type="text" name="lastName" value="${app.last_name}" style="flex:1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 12px; color: #fff;">
-		</div>
-		<div class="info-row">
-			<span class="info-label">Email</span>
-			<input type="email" name="email" value="${app.email}" style="flex:1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 8px 12px; color: #fff;">
-		</div>
-		<div class="button-row">
-			<button class="btn btn-success" id="submit" hx-post="/submit">
-				<span class="btn-icon">✓</span> Submit
-			</button>
-			<button class="btn btn-outline" id="cancel" hx-post="/cancel">
-				<span class="btn-icon">✕</span> Cancel
-			</button>
-		</div>
-	</div>'
+	source := 'edit'
+	return $tmpl('templates/contact_edit.html')
 }
 
 fn (mut app App) cancel(message map[string]json2.Any) string {
 	app.logger.info("I'm cancel function!")
 	app.cnt++
-
-	return '<div id="idMessage" hx-swap-oob="true">hello[${app.cnt}], I am cancel</div>
-	
-	<div id="outerHTML" hx-swap-oob="true" class="contact-info">
-		<div class="info-row">
-			<span class="info-label">First Name</span>
-			<span class="info-value">${app.first_name}</span>
-		</div>
-		<div class="info-row">
-			<span class="info-label">Last Name</span>
-			<span class="info-value">${app.last_name}</span>
-		</div>
-		<div class="info-row">
-			<span class="info-label">Email</span>
-			<span class="info-value">${app.email}</span>
-		</div>
-		<div class="button-row">
-			<button id="edit" hx-post="/edit" class="btn btn-primary">
-				<span class="btn-icon">✏️</span> Edit
-			</button>
-		</div>
-	</div>
-	'
+	source := 'cancel'
+	return $tmpl('templates/contact_view.html')
 }
 
 fn main() {
