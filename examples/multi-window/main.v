@@ -93,15 +93,12 @@ fn (app App) render_main_window() string {
     <title>${app.app_config.title}</title>
     <script src="./js/htmx.js"></script>
     <script src="./js/vxui-ws.js"></script>
-    <style id="dynamic-style" hx-swap-oob="true">
+    <style id="dynamic-style">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: ${app.app_config.bg_color};
-            color: #fff;
             min-height: 100vh;
             padding: 40px;
-            font-size: ${app.app_config.font_size}px;
         }
         .container {
             max-width: 800px;
@@ -113,15 +110,13 @@ fn (app App) render_main_window() string {
             align-items: center;
             margin-bottom: 40px;
             padding-bottom: 20px;
-            border-bottom: 2px solid ${app.app_config.accent_color};
+            border-bottom: 2px solid;
         }
         h1 {
-            color: ${app.app_config.accent_color};
             font-size: 2.5em;
         }
         .settings-btn {
             padding: 12px 24px;
-            background: ${app.app_config.accent_color};
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -152,12 +147,19 @@ fn (app App) render_main_window() string {
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             color: #888;
         }
-        .label {
-            color: ${app.app_config.accent_color};
-        }
     </style>
 </head>
 <body hx-ext="vxui-ws">
+    <!-- Inline style container for dynamic updates -->
+    <div id="style-container" hx-swap-oob="true" style="display: none;">
+        <style>
+            body { background: ${app.app_config.bg_color}; color: #fff; font-size: ${app.app_config.font_size}px; }
+            .header { border-bottom-color: ${app.app_config.accent_color}; }
+            h1 { color: ${app.app_config.accent_color}; }
+            .settings-btn { background: ${app.app_config.accent_color}; }
+            .label { color: ${app.app_config.accent_color}; }
+        </style>
+    </div>
     <div class="container">
         <div class="header">
             <h1 id="main-title" hx-swap-oob="true">${app.app_config.title}</h1>
@@ -181,71 +183,21 @@ fn (app App) render_main_window() string {
 
 // Render main window update (for OOB broadcast)
 fn (app App) render_main_window_oob() string {
-	// Update both the dynamic styles and the content
-	style_html := '<style id="dynamic-style" hx-swap-oob="true">
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: ${app.app_config.bg_color};
-            color: #fff;
-            min-height: 100vh;
-            padding: 40px;
-            font-size: ${app.app_config.font_size}px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid ${app.app_config.accent_color};
-        }
-        h1 {
-            color: ${app.app_config.accent_color};
-            font-size: 2.5em;
-        }
-        .settings-btn {
-            padding: 12px 24px;
-            background: ${app.app_config.accent_color};
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: transform 0.2s;
-        }
-        .settings-btn:hover {
-            transform: translateY(-2px);
-        }
-        .content-box {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            padding: 40px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .message-display {
-            font-size: 1.5em;
-            line-height: 1.6;
-            color: #ddd;
-            text-align: center;
-        }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            color: #888;
-        }
-        .label {
-            color: ${app.app_config.accent_color};
-        }
-    </style>'
+	// Update styles via style-container div
+	style_html := '<div id="style-container" hx-swap-oob="true" style="display: none;">
+        <style>
+            body { background: ${app.app_config.bg_color}; color: #fff; font-size: ${app.app_config.font_size}px; }
+            .header { border-bottom-color: ${app.app_config.accent_color}; }
+            h1 { color: ${app.app_config.accent_color}; }
+            .settings-btn { background: ${app.app_config.accent_color}; }
+            .label { color: ${app.app_config.accent_color}; }
+        </style>
+    </div>'
 
+	// Update title
+	title_html := '<h1 id="main-title" hx-swap-oob="true">${app.app_config.title}</h1>'
+
+	// Update content
 	content_html := '<div id="main-content" hx-swap-oob="true" class="content-box">
     <div class="message-display">${app.app_config.message}</div>
     <div class="info-row">
@@ -254,9 +206,6 @@ fn (app App) render_main_window_oob() string {
         <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
     </div>
 </div>'
-
-	// Update title
-	title_html := '<h1 id="main-title" hx-swap-oob="true">${app.app_config.title}</h1>'
 
 	return style_html + title_html + content_html
 }
