@@ -273,6 +273,12 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 			cmd_args << '--auto-open-devtools-for-tabs'
 		}
 
+		// Remote debugging port
+		if browser_config.remote_debug_port > 0 {
+			cmd_args << '--remote-debugging-port=${browser_config.remote_debug_port}'
+			cmd_args << '--remote-allow-origins=*'
+		}
+
 		// No sandbox (for root/CI environments)
 		if browser_config.no_sandbox {
 			cmd_args << '--no-sandbox'

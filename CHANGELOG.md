@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-02-25
+
+### Added
+
+- **OOB Update Command**: New `oob_update` command for broadcasting HTML updates to multiple clients
+  - Backend can push HTML fragments to all connected clients
+  - Supports CSS variable updates via data attributes (`data-bg`, `data-accent`, `data-font-size`)
+  - Automatically rebinds htmx event listeners after DOM updates
+- **Chrome Remote Debugging Support**: 
+  - New `remote_debug_port` option in `BrowserConfig`
+  - Allows connecting Chrome DevTools for debugging
+- **Multi-Window Example**: Enhanced `examples/multi-window` demo
+  - Beautiful glassmorphism UI design
+  - Settings window with live preview
+  - Real-time synchronization across multiple browser windows
+  - CSS variable-based theming
+
+### Changed
+
+- **JS File Organization**: All example JS files are now symlinks to `js/` directory
+  - Ensures consistency across all examples
+  - Single source of truth for `vxui-ws.js` and `htmx.js`
+- **WebSocket Close Code**: Fixed invalid close code (1006 → 1000) for stale connections
+
+### Fixed
+
+- **Broadcast CSS Updates**: CSS variables now update correctly when broadcasting to clients
+  - CSS must be defined in initial HTML for htmx body swaps
+  - Data attributes used to pass values for CSS variable updates
+
 ## [0.6.1] - 2026-02-24
 
 ### Changed

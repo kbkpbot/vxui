@@ -514,7 +514,7 @@ Usage:
             // Check if connection is stale (no pong for too long)
             if (lastPongTime && (Date.now() - lastPongTime > config.pongTimeout)) {
                 log('Connection stale, no pong received for', config.pongTimeout, 'ms')
-                socket.close(1006, 'Connection stale')
+                socket.close(1000, 'Connection stale')
                 return
             }
 
@@ -613,6 +613,73 @@ Usage:
                 setTimeout(function() {
                     location.reload()
                 }, 300)
+                break
+            
+            case 'oob_update':
+                // Out-of-band HTML update from server broadcast
+                // This allows the backend to push HTML updates to clients
+                log('Received oob_update command')
+                
+                if (msg.html) {
+                    // Use htmx's internal APIs to handle OOB swap
+                    var fragment = api.makeFragment(msg.html)
+                    var settleInfo = api.makeSettleInfo(document.body)
+                    
+                    // Find and process all OOB elements
+                    var oobElts = fragment.querySelectorAll('[hx-swap-oob], [data-hx-swap-oob]')
+                    
+                    // Collect target IDs and data attributes before swap
+                    var targetIds = []
+                    var cssVars = []
+                    
+                    oobElts.forEach(function(oobElement) {
+                        var id = oobElement.id
+                        if (id) {
+                            targetIds.push(id)
+                            
+                            // Collect CSS variable data attributes
+                            var bg = oobElement.getAttribute('data-bg')
+                            var accent = oobElement.getAttribute('data-accent')
+                            var fontSize = oobElement.getAttribute('data-font-size')
+                            
+                            if (bg || accent || fontSize) {
+                                cssVars.push({ id: id, bg: bg, accent: accent, fontSize: fontSize })
+                            }
+                        }
+                    })
+                    
+                    // Perform OOB swaps
+                    oobElts.forEach(function(oobElement) {
+                        var oobValue = oobElement.getAttribute('hx-swap-oob') || 
+                                       oobElement.getAttribute('data-hx-swap-oob')
+                        if (oobValue) {
+                            api.oobSwap(oobValue, oobElement, settleInfo, document)
+                        }
+                    })
+                    
+                    // Process new elements to bind htmx event listeners
+                    targetIds.forEach(function(id) {
+                        var newElement = document.getElementById(id)
+                        if (newElement && htmx.process) {
+                            htmx.process(newElement)
+                        }
+                    })
+                    
+                    // Update CSS variables from data attributes
+                    cssVars.forEach(function(vars) {
+                        if (vars.bg) {
+                            document.documentElement.style.setProperty('--bg-color', vars.bg)
+                        }
+                        if (vars.accent) {
+                            document.documentElement.style.setProperty('--accent-color', vars.accent)
+                        }
+                        if (vars.fontSize) {
+                            document.documentElement.style.setProperty('--font-size', vars.fontSize + 'px')
+                        }
+                    })
+                    
+                    log('Processed', oobElts.length, 'OOB elements')
+                }
                 break
         }
     }

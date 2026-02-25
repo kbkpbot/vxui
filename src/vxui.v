@@ -284,13 +284,14 @@ pub mut:
 // BrowserConfig holds browser startup configuration
 pub struct BrowserConfig {
 pub mut:
-	custom_args    []string // Additional custom arguments
-	profile_dir    string   // Custom profile directory (empty = default)
-	headless       bool     // Run in headless mode (for testing)
-	devtools       bool     // Open DevTools automatically
-	no_sandbox     bool     // Disable sandbox (for root/CI)
-	user_data_dir  string   // Custom user data directory
-	preferred_path string   // Preferred browser path (skip detection)
+	custom_args      []string // Additional custom arguments
+	profile_dir      string   // Custom profile directory (empty = default)
+	headless         bool     // Run in headless mode (for testing)
+	devtools         bool     // Open DevTools automatically
+	no_sandbox       bool     // Disable sandbox (for root/CI)
+	user_data_dir    string   // Custom user data directory
+	preferred_path   string   // Preferred browser path (skip detection)
+	remote_debug_port int     // Chrome remote debugging port (0 = disabled)
 }
 
 // BackoffStrategy for reconnection
