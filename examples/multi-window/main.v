@@ -206,34 +206,29 @@ fn (app App) render_main_window() string {
 
 // Render main window update (for OOB broadcast)
 fn (app App) render_main_window_oob() string {
-	// Return style updater and main wrapper as OOB updates
-	return '<div id="style-updater" hx-swap-oob="true" style="display: none;">
-        <style>
-            body { background: ${app.app_config.bg_color} !important; color: #fff !important; font-size: ${app.app_config.font_size}px !important; }
-            .main-wrapper .header { border-bottom-color: ${app.app_config.accent_color} !important; }
-            .main-wrapper h1 { color: ${app.app_config.accent_color} !important; }
-            .main-wrapper .settings-btn { background: ${app.app_config.accent_color} !important; }
-            .main-wrapper .label { color: ${app.app_config.accent_color} !important; }
-        </style>
-    </div>
-    <div id="main-wrapper" class="main-wrapper" hx-swap-oob="true">
-        <div class="container">
-            <div class="header">
-                <h1>${app.app_config.title}</h1>
-                <button class="settings-btn" hx-post="/open-settings" hx-swap="none">
-                    ⚙️ Settings
-                </button>
-            </div>
-            <div class="content-box">
-                <div class="message-display">${app.app_config.message}</div>
-                <div class="info-row">
-                    <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
-                    <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
-                    <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
+	accent_color := app.app_config.accent_color
+
+	return '<div hx-swap-oob="true">
+        <div id="main-wrapper" class="main-wrapper" style="--accent-color: ${accent_color}">
+            <div class="container">
+                <div class="header" style="border-bottom-color: ${accent_color}">
+                    <h1 style="color: ${accent_color}">${app.app_config.title}</h1>
+                    <button class="settings-btn" style="background: ${accent_color}" hx-post="/open-settings" hx-swap="none">
+                        ⚙️ Settings
+                    </button>
+                </div>
+                <div class="content-box">
+                    <div class="message-display">${app.app_config.message}</div>
+                    <div class="info-row">
+                        <span><span class="label" style="color: ${accent_color}">Background:</span> ${app.app_config.bg_color}</span>
+                        <span><span class="label" style="color: ${accent_color}">Accent:</span> ${accent_color}</span>
+                        <span><span class="label" style="color: ${accent_color}">Font Size:</span> ${app.app_config.font_size}px</span>
+                    </div>
                 </div>
             </div>
+            <div id="open-result"></div>
         </div>
-        <div id="open-result"></div>
+        <script>document.body.style.background = "${app.app_config.bg_color}"; document.body.style.fontSize = "${app.app_config.font_size}px";</script>
     </div>'
 }
 
