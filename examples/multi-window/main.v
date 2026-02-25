@@ -143,12 +143,17 @@ fn (mut app App) ping(message map[string]json2.Any) string {
 	client_id := params['client_id'] or { json2.Any('') }.str()
 
 	if client_id != '' {
+		is_new := client_id !in app.window_states
 		app.window_states[client_id] = WindowState{
 			id:        client_id
 			name:      'Window-${client_id[..8]}'
-			joined_at: app.window_states[client_id].joined_at
+			joined_at: if is_new { time.now().format_ss() } else { app.window_states[client_id].joined_at }
 			last_ping: time.now().format_ss()
 		}
+
+		// Broadcast connected windows update to all windows
+		windows_html := app.render_connected_windows()
+		app.broadcast(windows_html) or {}
 	}
 
 	return ''
@@ -197,11 +202,26 @@ fn (app App) render_message_items() string {
 	return html
 }
 
-fn main() {
-	mut app := App{
-		messages:      []
-		window_states: map[string]WindowState{}
+// Render connected windows list
+fn (app App) render_connected_windows() string {
+	mut html := '<div id="connected-windows" hx-swap-oob="true" class="windows-list">'
+	html += '<h3>Connected Windows (${app.window_states.len})</h3>'
+
+	if app.window_states.len == 0 {
+		html += '<p class="empty">No windows connected</p>'
+	} else {
+		html += '<ul>'
+		for _, state in app.window_states {
+			html += '<li><span class="window-name">${state.name}</span><span class="window-ping">Last seen: ${state.last_ping}</span></li>'
+		}
+		html += '</ul>'
 	}
+	html += '</div>'
+	return html
+}
+
+fn main() {
+	mut app := App{}
 
 	// Enable multi-client mode for multiple windows
 	app.config.multi_client = true
