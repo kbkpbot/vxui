@@ -884,11 +884,11 @@ pub fn (mut ctx Context) use(middleware Middleware) {
 	ctx.middlewares << middleware
 }
 
-// use_logger adds a logging middleware
+// use_logger adds a logging middleware that uses the context logger
 pub fn (mut ctx Context) use_logger() {
-	ctx.use(fn (mut mctx MiddlewareContext) MiddlewareResult {
+	ctx.use(fn [mut ctx] (mut mctx MiddlewareContext) MiddlewareResult {
 		t := time.now()
-		println('[${t.year}-${t.month:02}-${t.day:02} ${t.hour:02}:${t.minute:02}:${t.second:02}] ${mctx.request.verb} ${mctx.request.path}')
+		ctx.logger.info('[${t.year}-${t.month:02}-${t.day:02} ${t.hour:02}:${t.minute:02}:${t.second:02}] ${mctx.request.verb} ${mctx.request.path}')
 		return .continue_
 	})
 }
