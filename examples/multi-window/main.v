@@ -150,64 +150,72 @@ fn (app App) render_main_window() string {
     </style>
 </head>
 <body hx-ext="vxui-ws">
-    <!-- Inline style container for dynamic updates -->
-    <div id="style-container" hx-swap-oob="true" style="display: none;">
+    <!-- Hidden style container for dynamic CSS updates -->
+    <div id="style-updater" hx-swap-oob="true" style="display: none;">
         <style>
-            body { background: ${app.app_config.bg_color}; color: #fff; font-size: ${app.app_config.font_size}px; }
-            .header { border-bottom-color: ${app.app_config.accent_color}; }
-            h1 { color: ${app.app_config.accent_color}; }
-            .settings-btn { background: ${app.app_config.accent_color}; }
-            .label { color: ${app.app_config.accent_color}; }
+            body { background: ${app.app_config.bg_color} !important; color: #fff !important; font-size: ${app.app_config.font_size}px !important; }
+            .main-wrapper .header { border-bottom-color: ${app.app_config.accent_color} !important; }
+            .main-wrapper h1 { color: ${app.app_config.accent_color} !important; }
+            .main-wrapper .settings-btn { background: ${app.app_config.accent_color} !important; }
+            .main-wrapper .label { color: ${app.app_config.accent_color} !important; }
         </style>
     </div>
-    <div class="container">
-        <div class="header">
-            <h1 id="main-title" hx-swap-oob="true">${app.app_config.title}</h1>
-            <button class="settings-btn" hx-post="/open-settings" hx-swap="none">
-                ⚙️ Settings
-            </button>
-        </div>
-        <div id="main-content" class="content-box">
-            <div class="message-display">${app.app_config.message}</div>
-            <div class="info-row">
-                <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
-                <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
-                <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
+    
+    <!-- Main content wrapper for OOB updates -->
+    <div id="main-wrapper" class="main-wrapper" hx-swap-oob="true">
+        <div class="container">
+            <div class="header">
+                <h1>${app.app_config.title}</h1>
+                <button class="settings-btn" hx-post="/open-settings" hx-swap="none">
+                    ⚙️ Settings
+                </button>
+            </div>
+            <div class="content-box">
+                <div class="message-display">${app.app_config.message}</div>
+                <div class="info-row">
+                    <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
+                    <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
+                    <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
+                </div>
             </div>
         </div>
+        <div id="open-result"></div>
     </div>
-    <div id="open-result"></div>
 </body>
 </html>'
 }
 
 // Render main window update (for OOB broadcast)
 fn (app App) render_main_window_oob() string {
-	// Update styles via style-container div
-	style_html := '<div id="style-container" hx-swap-oob="true" style="display: none;">
+	// Return style updater and main wrapper as OOB updates
+	return '<div id="style-updater" hx-swap-oob="true" style="display: none;">
         <style>
-            body { background: ${app.app_config.bg_color}; color: #fff; font-size: ${app.app_config.font_size}px; }
-            .header { border-bottom-color: ${app.app_config.accent_color}; }
-            h1 { color: ${app.app_config.accent_color}; }
-            .settings-btn { background: ${app.app_config.accent_color}; }
-            .label { color: ${app.app_config.accent_color}; }
+            body { background: ${app.app_config.bg_color} !important; color: #fff !important; font-size: ${app.app_config.font_size}px !important; }
+            .main-wrapper .header { border-bottom-color: ${app.app_config.accent_color} !important; }
+            .main-wrapper h1 { color: ${app.app_config.accent_color} !important; }
+            .main-wrapper .settings-btn { background: ${app.app_config.accent_color} !important; }
+            .main-wrapper .label { color: ${app.app_config.accent_color} !important; }
         </style>
-    </div>'
-
-	// Update title
-	title_html := '<h1 id="main-title" hx-swap-oob="true">${app.app_config.title}</h1>'
-
-	// Update content
-	content_html := '<div id="main-content" hx-swap-oob="true" class="content-box">
-    <div class="message-display">${app.app_config.message}</div>
-    <div class="info-row">
-        <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
-        <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
-        <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
     </div>
-</div>'
-
-	return style_html + title_html + content_html
+    <div id="main-wrapper" class="main-wrapper" hx-swap-oob="true">
+        <div class="container">
+            <div class="header">
+                <h1>${app.app_config.title}</h1>
+                <button class="settings-btn" hx-post="/open-settings" hx-swap="none">
+                    ⚙️ Settings
+                </button>
+            </div>
+            <div class="content-box">
+                <div class="message-display">${app.app_config.message}</div>
+                <div class="info-row">
+                    <span><span class="label">Background:</span> ${app.app_config.bg_color}</span>
+                    <span><span class="label">Accent:</span> ${app.app_config.accent_color}</span>
+                    <span><span class="label">Font Size:</span> ${app.app_config.font_size}px</span>
+                </div>
+            </div>
+        </div>
+        <div id="open-result"></div>
+    </div>'
 }
 
 // Render settings window HTML
