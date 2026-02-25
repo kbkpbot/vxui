@@ -65,20 +65,41 @@ fn (mut app App) broadcast_handler(message map[string]json2.Any) string {
 fn (mut app App) increment_counter(message map[string]json2.Any) string {
 	app.shared_counter++
 
-	// Broadcast counter update to all windows
-	counter_html := '<div id="shared-counter" hx-swap-oob="true"><span class="counter-value">${app.shared_counter}</span><span class="counter-info">Last updated by Window-${app.get_client_count()}</span></div>'
-	app.broadcast(counter_html) or {}
+	// Get current client ID from message
+	params := message['parameters'] or { json2.Null{} }.as_map()
+	client_id := params['client_id'] or { json2.Any('') }.str()
 
-	return '<div id="counter-result" hx-swap-oob="true">Counter incremented!</div>'
+	// Create counter update HTML
+	counter_html := '<div id="shared-counter" hx-swap-oob="true"><span class="counter-value">${app.shared_counter}</span><span class="counter-info">Last updated by Window-${app.get_client_count()}</span></div>'
+
+	// Broadcast to all OTHER windows
+	if client_id != '' {
+		app.broadcast_except(counter_html, client_id) or {}
+	}
+
+	// Return update for current window (both counter and result message)
+	return counter_html + '<div id="counter-result" hx-swap-oob="true">Counter incremented!</div>'
 }
 
 // Reset counter
 @['/counter/reset']
 fn (mut app App) reset_counter(message map[string]json2.Any) string {
 	app.shared_counter = 0
+
+	// Get current client ID
+	params := message['parameters'] or { json2.Null{} }.as_map()
+	client_id := params['client_id'] or { json2.Any('') }.str()
+
+	// Create counter update HTML
 	counter_html := '<div id="shared-counter" hx-swap-oob="true"><span class="counter-value">0</span><span class="counter-info">Counter reset</span></div>'
-	app.broadcast(counter_html) or {}
-	return ''
+
+	// Broadcast to all OTHER windows
+	if client_id != '' {
+		app.broadcast_except(counter_html, client_id) or {}
+	}
+
+	// Return update for current window
+	return counter_html
 }
 
 // Clear all messages
