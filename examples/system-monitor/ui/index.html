@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vxui System Monitor</title>
+  <link rel="stylesheet" href="./stylesheet.css"/>
+  <script src="./js/htmx.js"></script>
+  <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+  <header>
+    <h1>系统监控</h1>
+    <div id="clients" class="clients">在线窗口：--</div>
+  </header>
+
+  <section class="gauges">
+    <!-- 占位：首帧广播后即被真实仪表替换 -->
+    <div id="gauge-cpu" class="gauge"><div class="gauge-label">等待数据…</div></div>
+    <div id="gauge-mem" class="gauge"><div class="gauge-label">等待数据…</div></div>
+    <div id="gauge-load" class="gauge"><div class="gauge-label">等待数据…</div></div>
+  </section>
+
+  <section id="history" class="history">
+    <div class="history-title">CPU 历史 <span>--</span></div>
+  </section>
+</body>
+</html>

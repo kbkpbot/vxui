@@ -1,0 +1,32 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+	background: #12161f;
+	color: #dfe6ee;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	min-height: 100vh;
+	padding: 24px;
+}
+header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+header h1 { font-size: 22px; font-weight: 600; }
+.clients { margin-left: auto; color: #8b98a9; font-size: 14px; }
+
+.gauges { display: flex; gap: 32px; justify-content: center; margin: 24px 0; }
+.gauge { position: relative; width: 180px; height: 180px; }
+.gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: #232b38; stroke-width: 10;
+	stroke-dasharray: 326.73; stroke-dashoffset: 0; }
+.ring-fg { fill: none; stroke-width: 10; stroke-linecap: round;
+	stroke-dasharray: 326.73; transition: stroke-dashoffset .6s ease; }
+.gauge-value {
+	position: absolute; top: 44%; left: 0; width: 100%;
+	text-align: center; font-size: 26px; font-weight: 700;
+}
+.gauge-label { position: absolute; top: 62%; left: 0;
+	width: 100%; text-align: center; color: #8b98a9; font-size: 13px; }
+
+.history { background: #181f2b; border-radius: 10px; padding: 16px; max-width: 640px;
+	margin: 0 auto; }
+.history-title { display: flex; justify-content: space-between;
+	margin-bottom: 8px; color: #8b98a9; font-size: 14px; }
+.history-title span { color: #38ef7d; }
+.history svg { width: 100%; height: 120px; background: #12161f; border-radius: 6px; }
