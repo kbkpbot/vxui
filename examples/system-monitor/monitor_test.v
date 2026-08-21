@@ -13,6 +13,13 @@ fn test_parse_cpu_line() {
 		CpuSnapshot{}
 	}
 	assert garbage_is_none
+	// historical 5-field kernel format must return none, not index out of bounds
+	mut short_is_none := false
+	parse_cpu_line('cpu 1 1 1 1') or {
+		short_is_none = true
+		CpuSnapshot{}
+	}
+	assert short_is_none
 }
 
 fn test_cpu_percent() {

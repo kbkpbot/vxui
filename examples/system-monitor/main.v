@@ -25,7 +25,7 @@ pub:
 
 fn parse_cpu_line(line string) ?CpuSnapshot {
 	fields := line.split(' ').filter(it.len > 0)
-	if fields.len < 5 || fields[0] != 'cpu' {
+	if fields.len < 6 || fields[0] != 'cpu' {
 		return none
 	}
 	mut total := u64(0)
