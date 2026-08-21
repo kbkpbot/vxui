@@ -44,8 +44,7 @@ fn test_new_error_detail() {
 }
 
 fn test_new_error_detail_with_details() {
-	err := new_error_detail_with_details(VxuiError.client_not_found, 'Client not found',
-		{
+	err := new_error_detail_with_details(VxuiError.client_not_found, 'Client not found', {
 		'id': 'abc'
 	})
 	assert err.code == VxuiError.client_not_found
@@ -256,27 +255,6 @@ fn test_browser_config_custom() {
 	assert config.no_sandbox == true
 }
 
-fn test_reconnect_config_defaults() {
-	config := ReconnectConfig{}
-	assert config.enabled == true
-	assert config.max_attempts == 5
-	assert config.base_delay_ms == 1000
-	assert config.max_delay_ms == 30000
-	assert config.strategy == BackoffStrategy.full_jitter
-}
-
-fn test_reconnect_config_custom() {
-	config := ReconnectConfig{
-		enabled:       false
-		max_attempts:  10
-		base_delay_ms: 2000
-		strategy:      BackoffStrategy.exponential
-	}
-	assert config.enabled == false
-	assert config.max_attempts == 10
-	assert config.strategy == BackoffStrategy.exponential
-}
-
 fn test_rate_limit_config_defaults() {
 	config := RateLimitConfig{}
 	assert config.enabled == true
@@ -294,13 +272,6 @@ fn test_rate_limit_config_custom() {
 	assert config.enabled == false
 	assert config.max_requests == 50
 	assert config.window_ms == 30000
-}
-
-fn test_request_config_defaults() {
-	config := RequestConfig{}
-	assert config.timeout_ms == 30000
-	assert config.retry_count == 0
-	assert config.retry_delay_ms == 1000
 }
 
 fn test_log_config_defaults() {
@@ -725,17 +696,6 @@ fn test_packed_app_list_files() {
 }
 
 // =============================================================================
-// BackoffStrategy Tests
-// =============================================================================
-
-fn test_backoff_strategy_enum() {
-	assert int(BackoffStrategy.constant) == 0
-	assert int(BackoffStrategy.linear) == 1
-	assert int(BackoffStrategy.exponential) == 2
-	assert int(BackoffStrategy.full_jitter) == 3
-}
-
-// =============================================================================
 // on_event Test
 // =============================================================================
 
@@ -1105,11 +1065,6 @@ fn test_config_full_setup() {
 			max_requests: 50
 			window_ms:    30000
 		}
-		reconnect:           ReconnectConfig{
-			enabled:      true
-			max_attempts: 3
-			strategy:     .exponential
-		}
 	}
 
 	assert config.app_name == 'test-app'
@@ -1117,7 +1072,6 @@ fn test_config_full_setup() {
 	assert config.browser.headless == true
 	assert config.js_sandbox.enabled == true
 	assert config.rate_limit.max_requests == 50
-	assert config.reconnect.strategy == BackoffStrategy.exponential
 }
 
 // =============================================================================
@@ -1208,8 +1162,7 @@ fn test_error_with_cause() {
 
 fn test_error_chain() {
 	// Test error with details
-	inner := new_error_detail_with_details(VxuiError.client_not_found, 'Client abc not found',
-		{
+	inner := new_error_detail_with_details(VxuiError.client_not_found, 'Client abc not found', {
 		'id': 'abc'
 	})
 

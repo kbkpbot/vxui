@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Module Layout**: Moved all V sources from `src/` to the module root
+  - Required by newer V compilers that no longer support `src/` as a virtual module root
+  - Examples now compile again (`v run main.v` inside any `examples/*/`)
+- **Internal Context Access**: Generic entry points (`run`, `init`, server callbacks) now access
+  the embedded `Context` through an internal `context_of()` helper instead of promoted field
+  access, keeping `Context` internals private while remaining compatible with cross-module
+  generic instantiation
+- **Config Wiring**: `ws_ping_interval_ms` and `ws_pong_timeout_ms` are now actually used by the
+  runtime (previously hardcoded to 30s/60s)
+- **Broadcast Resilience**: `broadcast`, `broadcast_except` and `trigger_hot_reload` skip
+  per-client write failures instead of aborting the whole loop on the first stale connection
+
+### Fixed
+
+- **rpcID Collisions (JS)**: `generateRpcID()` now combines `Date.now()` with a counter so
+  simultaneous htmx requests in the same millisecond no longer overwrite each other in
+  `pendingRequests`
+
+### Removed
+
+- **Dead Config**: Removed `ReconnectConfig`, `RequestConfig` and `BackoffStrategy`
+  (and `Config.reconnect` / `Config.request`) — they were never implemented; reconnection
+  lives entirely in `vxui-ws.js`. Re-add alongside a real implementation if needed.
+- **Dead Code**: Removed unused `ResponseOption` type and `VxuiErrorDetail.err()`
+  (errors are now returned as structured `VxuiErrorDetail` directly, preserving `code`/`details`)
+
 ## [0.6.3] - 2026-02-26
 
 ### Added

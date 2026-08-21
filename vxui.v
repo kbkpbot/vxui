@@ -77,11 +77,6 @@ pub fn (e VxuiErrorDetail) str() string {
 	return e.msg()
 }
 
-// err returns this as an IError
-pub fn (e VxuiErrorDetail) err() IError {
-	return error(e.str())
-}
-
 // full_message returns the full error message including cause chain
 pub fn (e VxuiErrorDetail) full_message() string {
 	mut result := e.message
@@ -206,13 +201,10 @@ pub:
 // Response represents a type-safe response
 pub struct Response {
 pub mut:
-	status  int = 200
-	headers map[string]string
+	status  int               = 200
+	headers map[string]string = {}
 	body    string
 }
-
-// ResponseOption is a function that modifies Response
-pub type ResponseOption = fn (mut Response)
 
 // =============================================================================
 // Middleware System
@@ -248,22 +240,22 @@ pub mut:
 	max_result_size    int  = 1024 * 1024 // Max result size in bytes (1MB)
 	allow_eval         bool // Allow eval() in frontend (dangerous!)
 	allowed_apis       []string = [// Allowed API patterns
-	'document.*',
-	'window.location.*',
-	'console.*',
-	'localStorage.*',
-	'sessionStorage.*',
-]
+		'document.*',
+		'window.location.*',
+		'console.*',
+		'localStorage.*',
+		'sessionStorage.*',
+	]
 	forbidden_patterns []string = [// Forbidden patterns
-	'eval(',
-	'Function(',
-	'setTimeout(',
-	'setInterval(',
-	'XMLHttpRequest',
-	'fetch(',
-	'WebSocket',
-	'import(',
-]
+		'eval(',
+		'Function(',
+		'setTimeout(',
+		'setInterval(',
+		'XMLHttpRequest',
+		'fetch(',
+		'WebSocket',
+		'import(',
+	]
 }
 
 // WindowConfig holds window configuration
@@ -284,33 +276,15 @@ pub mut:
 // BrowserConfig holds browser startup configuration
 pub struct BrowserConfig {
 pub mut:
-	custom_args      []string // Additional custom arguments
-	profile_dir      string   // Custom profile directory (empty = default)
-	headless         bool     // Run in headless mode (for testing)
-	devtools         bool     // Open DevTools automatically
-	no_sandbox       bool     // Disable sandbox (for root/CI)
-	no_app_mode      bool     // Disable app mode (allows file dialogs)
-	user_data_dir    string   // Custom user data directory
-	preferred_path   string   // Preferred browser path (skip detection)
-	remote_debug_port int     // Chrome remote debugging port (0 = disabled)
-}
-
-// BackoffStrategy for reconnection
-pub enum BackoffStrategy {
-	constant
-	linear
-	exponential
-	full_jitter
-}
-
-// ReconnectConfig holds WebSocket reconnection settings
-pub struct ReconnectConfig {
-pub mut:
-	enabled       bool            = true
-	max_attempts  int             = 5
-	base_delay_ms int             = 1000
-	max_delay_ms  int             = 30000
-	strategy      BackoffStrategy = .full_jitter
+	custom_args       []string // Additional custom arguments
+	profile_dir       string   // Custom profile directory (empty = default)
+	headless          bool     // Run in headless mode (for testing)
+	devtools          bool     // Open DevTools automatically
+	no_sandbox        bool     // Disable sandbox (for root/CI)
+	no_app_mode       bool     // Disable app mode (allows file dialogs)
+	user_data_dir     string   // Custom user data directory
+	preferred_path    string   // Preferred browser path (skip detection)
+	remote_debug_port int      // Chrome remote debugging port (0 = disabled)
 }
 
 // RateLimitConfig holds rate limiting settings
@@ -320,14 +294,6 @@ pub mut:
 	max_requests   int  = 100   // Max requests per window
 	window_ms      int  = 60000 // Window in milliseconds (1 minute)
 	block_duration int  = 30000 // Block duration in ms when limit exceeded
-}
-
-// RequestConfig holds per-request settings
-pub struct RequestConfig {
-pub mut:
-	timeout_ms     int = 30000 // Request timeout in milliseconds
-	retry_count    int // Number of retries on failure
-	retry_delay_ms int = 1000 // Delay between retries
 }
 
 // LogConfig holds logging settings
@@ -354,7 +320,6 @@ pub mut:
 	close_timer_ms      int = 5000  // Close app after N ms with no browser
 	ws_ping_interval_ms int = 30000 // WebSocket ping interval
 	ws_pong_timeout_ms  int = 60000 // Timeout for pong response
-	reconnect           ReconnectConfig // Reconnection settings
 
 	// Security settings
 	token        string // Security token (auto-generated if empty)
@@ -369,9 +334,6 @@ pub mut:
 	js_timeout int = 5000 // Default timeout for run_js()
 	js_poll_ms int = 10   // Polling interval for JS result
 	js_sandbox JsSandboxConfig // JS execution sandbox
-
-	// Request settings
-	request RequestConfig // Per-request configuration
 
 	// Window settings
 	window WindowConfig
@@ -466,27 +428,36 @@ mut:
 // Initialization
 // =============================================================================
 
+// context_of returns the embedded Context of a user app struct.
+// The embedded field name `Context` is public, so this works across module
+// boundaries while the Context internals stay private. Callers always pass
+// `mut app`, so the reference is guaranteed to outlive the call.
+fn context_of[T](mut app T) &Context {
+	return unsafe { &app.Context }
+}
+
 // init initializes the vxui framework
 fn init[T](mut app T) ! {
-	app.ws_port = get_free_port()!
+	mut ctx := context_of(mut app)
+	ctx.ws_port = get_free_port()!
 
 	// Generate security token if not set
-	if app.config.token == '' {
-		app.config.token = generate_token()
+	if ctx.config.token == '' {
+		ctx.config.token = generate_token()
 	}
 
 	// Initialize maps
-	app.clients = map[string]Client{}
-	app.js_callbacks = map[string]chan string{}
-	app.event_handlers = map[EventType][]EventHandler{}
-	app.middlewares = []Middleware{}
-	app.rate_counters = map[string]RateCounter{}
-	app.client_remove_chan = chan ClientRemoveMsg{cap: 100}
+	ctx.clients = map[string]Client{}
+	ctx.js_callbacks = map[string]chan string{}
+	ctx.event_handlers = map[EventType][]EventHandler{}
+	ctx.middlewares = []Middleware{}
+	ctx.rate_counters = map[string]RateCounter{}
+	ctx.client_remove_chan = chan ClientRemoveMsg{cap: 100}
 
 	// Setup logger
-	app.logger.set_level(app.config.log.level)
+	ctx.logger.set_level(ctx.config.log.level)
 
-	app.ws = startup_ws_server(mut app, .ip, app.ws_port)!
+	ctx.ws = startup_ws_server(mut app, mut ctx, .ip, ctx.ws_port)!
 }
 
 // generate_token creates a random security token
@@ -513,33 +484,34 @@ fn generate_request_id() string {
 // =============================================================================
 
 // startup_ws_server starts the websocket server at `listen_port`
-fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&websocket.Server {
+fn startup_ws_server[T](mut app T, mut ctx &Context, family net.AddrFamily, listen_port int) !&websocket.Server {
 	mut s := websocket.new_server(family, listen_port, '')
-	s.set_ping_interval(30)
+	ping_interval_secs := ctx.config.ws_ping_interval_ms / 1000
+	s.set_ping_interval(if ping_interval_secs < 1 { 1 } else { ping_interval_secs })
 
-	s.on_connect(fn [mut app] [T](mut s websocket.ServerClient) !bool {
-		app.trigger_event(EventType.client_connecting, '', 'Client connecting...', {},
-			none, none, none)
+	s.on_connect(fn [mut ctx] (mut s websocket.ServerClient) !bool {
+		ctx.trigger_event(EventType.client_connecting, '', 'Client connecting...', {}, none, none,
+			none)
 
 		// Check client limit
-		app.mu.rlock()
-		client_count := app.clients.len
-		app.mu.runlock()
+		ctx.mu.rlock()
+		client_count := ctx.clients.len
+		ctx.mu.runlock()
 
-		if !app.config.multi_client && client_count > 0 {
-			app.logger.warn('Rejecting connection: multi_client is disabled')
+		if !ctx.config.multi_client && client_count > 0 {
+			ctx.logger.warn('Rejecting connection: multi_client is disabled')
 			return false
 		}
 
-		if app.config.max_clients > 0 && client_count >= app.config.max_clients {
-			app.logger.warn('Rejecting connection: max_clients limit reached')
+		if ctx.config.max_clients > 0 && client_count >= ctx.config.max_clients {
+			ctx.logger.warn('Rejecting connection: max_clients limit reached')
 			return false
 		}
 
 		return true
 	})!
 
-	s.on_message(fn [mut app] [T](mut ws websocket.Client, msg &websocket.Message) ! {
+	s.on_message(fn [mut app, mut ctx] [T](mut ws websocket.Client, msg &websocket.Message) ! {
 		match msg.opcode {
 			.pong {
 				ws.write_string('pong')!
@@ -547,40 +519,40 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 			else {
 				raw_message := json2.decode[json2.Any](msg.payload.bytestr())!
 				message := raw_message.as_map()
-				app.logger.debug('Received message: ${message}')
+				ctx.logger.debug('Received message: ${message}')
 
 				// Handle authentication
 				if cmd := message['cmd'] {
 					if cmd.str() == 'auth' {
-						handle_auth(mut app, mut ws, message) or {
+						ctx.handle_auth(mut ws, message) or {
 							auth_err := new_error_detail(.auth_failed, 'Auth failed: ${err}')
-							app.logger.error(auth_err.message)
-							app.trigger_event(EventType.error, '', auth_err.message, message,
-								none, none, auth_err)
+							ctx.logger.error(auth_err.message)
+							ctx.trigger_event(EventType.error, '', auth_err.message, message, none,
+								none, auth_err)
 							ws.close(1008, 'Authentication failed')!
 						}
 						return
 					}
 					if cmd.str() == 'js_result' {
-						handle_js_result(mut app, message)
+						ctx.handle_js_result(message)
 						return
 					}
 					if cmd.str() == 'pong' {
-						handle_pong(mut app, message)
+						ctx.handle_pong(message)
 						return
 					}
 					if cmd.str() == 'client_close' {
 						// Client is closing, send removal request to channel
 						client_id := message['client_id'] or { json2.Any('') }.str()
-						app.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
+						ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
 						return
 					}
 				}
 
 				// Verify token for regular messages
 				if client_token := message['token'] {
-					if client_token.str() != app.config.token {
-						app.logger.warn('Invalid token from client')
+					if client_token.str() != ctx.config.token {
+						ctx.logger.warn('Invalid token from client')
 						ws.close(1008, 'Invalid token')!
 						return
 					}
@@ -588,13 +560,14 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 
 				if rpc_id := message['rpcID'] {
 					// Get client_id for rate limiting
-					client_id := find_client_id_by_connection(mut app, ws)
+					client_id := ctx.find_client_id_by_connection(ws)
 
 					// Check rate limit
-					if app.config.rate_limit.enabled && client_id != '' {
-						if !app.check_rate_limit(client_id) {
-							app.trigger_event(EventType.middleware_error, client_id, 'Rate limit exceeded',
-								message, none, none, new_error_detail(.rate_limited, 'Rate limit exceeded'))
+					if ctx.config.rate_limit.enabled && client_id != '' {
+						if !ctx.check_rate_limit(client_id) {
+							ctx.trigger_event(EventType.middleware_error, client_id,
+								'Rate limit exceeded', message, none, none, new_error_detail(.rate_limited,
+								'Rate limit exceeded'))
 							err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"rate_limited", "message":"Rate limit exceeded"}'
 							ws.write(err_resp.bytes(), .text_frame)!
 							return
@@ -605,20 +578,19 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 					req := build_request(message, client_id)
 
 					// Execute middlewares
-					mut ctx := MiddlewareContext{
+					mut mctx := MiddlewareContext{
 						request:  req
 						response: Response{}
 					}
 
 					mut middleware_passed := true
-					for middleware in app.middlewares {
-						result := middleware(mut ctx)
+					for middleware in ctx.middlewares {
+						result := middleware(mut mctx)
 						if result != .continue_ {
 							middleware_passed = false
 							if result == .error {
-								app.trigger_event(EventType.middleware_error, client_id,
-									'Middleware rejected', message, req, ctx.response,
-									ctx.err)
+								ctx.trigger_event(EventType.middleware_error, client_id,
+									'Middleware rejected', message, req, mctx.response, mctx.err)
 							}
 							break
 						}
@@ -631,15 +603,15 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 					}
 
 					// Trigger before_request event
-					app.trigger_event(EventType.before_request, client_id, '', message,
-						req, none, none)
+					ctx.trigger_event(EventType.before_request, client_id, '', message, req, none,
+						none)
 
 					// Handle message
-					response := handle_request(mut app, ctx.request, message)!
+					response := handle_request(mut app, ctx, mctx.request, message)!
 
 					// Trigger after_request event
-					app.trigger_event(EventType.after_request, client_id, '', message,
-						req, response, none)
+					ctx.trigger_event(EventType.after_request, client_id, '', message, req,
+						response, none)
 
 					json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response.body)}}'
 					ws.write(json_response.bytes(), .text_frame)!
@@ -648,23 +620,13 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		}
 	})
 
-	s.on_close(fn [mut app] [T](mut ws websocket.Client, code int, reason string) ! {
-		app.logger.info('Client disconnected: code=${code}, reason=${reason}')
-
-		app.mu.rlock()
-		mut client_id_to_remove := ''
-		for id, client in app.clients {
-			// SAFETY: nil comparison only, no dereference
-			if client.connection or { unsafe { nil } } == ws {
-				client_id_to_remove = id
-				break
-			}
-		}
-		app.mu.runlock()
+	s.on_close(fn [mut ctx] (mut ws websocket.Client, code int, reason string) ! {
+		ctx.logger.info('Client disconnected: code=${code}, reason=${reason}')
 
 		// Send removal request to channel (serialized processing)
+		client_id_to_remove := ctx.find_client_id_by_connection(ws)
 		if client_id_to_remove != '' {
-			app.client_remove_chan <- ClientRemoveMsg{client_id_to_remove, 'on_close'}
+			ctx.client_remove_chan <- ClientRemoveMsg{client_id_to_remove, 'on_close'}
 		}
 	})
 
@@ -673,17 +635,17 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 }
 
 // find_client_id_by_connection finds client ID by WebSocket connection
-fn find_client_id_by_connection[T](mut app T, ws websocket.Client) string {
-	app.mu.rlock()
+fn (ctx &Context) find_client_id_by_connection(ws websocket.Client) string {
+	ctx.mu.rlock()
 
-	for id, client in app.clients {
+	for id, client in ctx.clients {
 		// SAFETY: nil comparison only, no dereference
 		if client.connection or { unsafe { nil } } == ws {
-			app.mu.runlock()
+			ctx.mu.runlock()
 			return id
 		}
 	}
-	app.mu.runlock()
+	ctx.mu.runlock()
 	return ''
 }
 
@@ -773,63 +735,63 @@ fn (mut ctx Context) check_rate_limit(client_id string) bool {
 }
 
 // handle_auth processes client authentication
-fn handle_auth[T](mut app T, mut ws websocket.Client, message map[string]json2.Any) ! {
+fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]json2.Any) ! {
 	client_token := message['token'] or { json2.Null{} }
 
-	if client_token.str() != app.config.token {
-		return new_error_detail(.auth_invalid_token, 'Invalid token').err()
+	if client_token.str() != ctx.config.token {
+		return new_error_detail(.auth_invalid_token, 'Invalid token')
 	}
 
 	client_id := generate_client_id()
 
-	app.mu.lock()
-	app.clients[client_id] = Client{
+	ctx.mu.lock()
+	ctx.clients[client_id] = Client{
 		id:            client_id
-		token:         app.config.token
+		token:         ctx.config.token
 		connected:     time.now()
 		last_ping:     time.now()
 		request_count: 0
 		connection:    ws
 	}
-	app.mu.unlock()
+	ctx.mu.unlock()
 
-	app.logger.info('Client authenticated: ${client_id}')
-	app.trigger_event(EventType.client_connected, client_id, 'Client authenticated', {},
-		none, none, none)
+	ctx.logger.info('Client authenticated: ${client_id}')
+	ctx.trigger_event(EventType.client_connected, client_id, 'Client authenticated', {}, none,
+		none, none)
 
 	mut response := map[string]json2.Any{}
 	response['cmd'] = json2.Any('auth_ok')
 	response['client_id'] = json2.Any(client_id)
-	if app.config.js_sandbox.enabled {
-		response['js_sandbox'] = json2.encode(app.config.js_sandbox)
+	if ctx.config.js_sandbox.enabled {
+		response['js_sandbox'] = json2.encode(ctx.config.js_sandbox)
 	}
 	ws.write(json2.encode(response).bytes(), .text_frame)!
 }
 
 // handle_pong processes heartbeat pong responses
-fn handle_pong[T](mut app T, message map[string]json2.Any) {
+fn (mut ctx Context) handle_pong(message map[string]json2.Any) {
 	client_id := message['client_id'] or { json2.Any('') }.str()
-	app.mu.lock()
-	if client := app.clients[client_id] {
+	ctx.mu.lock()
+	if client := ctx.clients[client_id] {
 		mut updated_client := client
 		updated_client.last_ping = time.now()
-		app.clients[client_id] = updated_client
+		ctx.clients[client_id] = updated_client
 	}
-	app.mu.unlock()
-	app.logger.debug('Received pong from client: ${client_id}')
+	ctx.mu.unlock()
+	ctx.logger.debug('Received pong from client: ${client_id}')
 }
 
 // handle_js_result processes JavaScript execution results
-fn handle_js_result[T](mut app T, message map[string]json2.Any) {
+fn (mut ctx Context) handle_js_result(message map[string]json2.Any) {
 	js_id := message['js_id'] or { return }.str()
 	result := message['result'] or { json2.Any('') }.str()
 
-	app.mu.lock()
-	if ch := app.js_callbacks[js_id] {
+	ctx.mu.lock()
+	if ch := ctx.js_callbacks[js_id] {
 		ch <- result
-		app.js_callbacks.delete(js_id)
+		ctx.js_callbacks.delete(js_id)
 	}
-	app.mu.unlock()
+	ctx.mu.unlock()
 }
 
 // start_server_in_thread_and_wait_till_it_is_ready_to_accept_connections spawns the server
@@ -915,8 +877,8 @@ pub fn (mut ctx Context) use_auth(check_fn fn (string) bool) {
 // =============================================================================
 
 // handle_request processes a request through routes
-fn handle_request[T](mut app T, req Request, message map[string]json2.Any) !Response {
-	for key, val in app.routes {
+fn handle_request[T](mut app T, ctx &Context, req Request, message map[string]json2.Any) !Response {
+	for key, val in ctx.routes {
 		if val.path == req.path && (req.verb in val.verb || Verb.any_verb in val.verb) {
 			result := fire_call[T](mut app, key, message) or {
 				return Response{
@@ -948,8 +910,7 @@ pub fn fire_call[T](mut app T, method_name string, message map[string]json2.Any)
 			return error('Method ${method_name} must return string')
 		}
 	}
-	return new_error_detail_with_details(VxuiError.route_not_found, 'Method not found',
-		{
+	return new_error_detail_with_details(VxuiError.route_not_found, 'Method not found', {
 		'method': method_name
 	})
 }
@@ -966,8 +927,8 @@ pub fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 	for x in attrs {
 		if x.starts_with('/') {
 			if path != '' {
-				return new_error_detail_with_details(VxuiError.route_not_found, 'Cannot assign multiple paths to a route',
-					{
+				return new_error_detail_with_details(VxuiError.route_not_found,
+					'Cannot assign multiple paths to a route', {
 					'function': name
 				})
 			} else {
@@ -977,8 +938,7 @@ pub fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 			if x.to_lower() in verb_strings.keys() {
 				verbs << verb_strings[x.to_lower()]
 			} else {
-				return new_error_detail_with_details(VxuiError.invalid_method, 'Unknown verb',
-					{
+				return new_error_detail_with_details(VxuiError.invalid_method, 'Unknown verb', {
 					'function': name
 					'verb':     x
 				})
@@ -999,8 +959,8 @@ pub fn generate_routes[T](app &T) !map[string]Route {
 	mut routes := map[string]Route{}
 	$for method in T.methods {
 		verbs, route_path := parse_attrs(method.name, method.attrs) or {
-			return new_error_detail_with_cause(VxuiError.attribute_parse_error, 'Error parsing method attributes',
-				err)
+			return new_error_detail_with_cause(VxuiError.attribute_parse_error,
+				'Error parsing method attributes', err)
 		}
 		routes[method.name] = Route{
 			verb: verbs
@@ -1016,41 +976,43 @@ pub fn generate_routes[T](app &T) !map[string]Route {
 
 // run opens the `html_filename` in browser and starts the event loop
 pub fn run[T](mut app T, html_filename string) ! {
-	app.trigger_event(EventType.before_start, '', 'Starting application', {}, none, none,
-		none)
+	mut ctx := context_of(mut app)
+
+	ctx.trigger_event(EventType.before_start, '', 'Starting application', {}, none, none, none)
 
 	init(mut app)!
 
-	app.routes = generate_routes(app)!
+	ctx.routes = generate_routes(app)!
 
 	// Start client removal handler goroutine (serializes removal to prevent races)
-	spawn app.process_client_removals()
+	spawn fn [mut ctx] () {
+		ctx.process_client_removals()
+	}()
 
 	// Apply dev mode settings
-	if app.config.dev.enabled {
-		app.config.browser.devtools = app.config.dev.auto_devtools
-		app.logger.info('Development mode enabled')
+	if ctx.config.dev.enabled {
+		ctx.config.browser.devtools = ctx.config.dev.auto_devtools
+		ctx.logger.info('Development mode enabled')
 	}
 
-	start_browser_with_config(html_filename, app.ws_port, app.config.token, app.config.window,
-		app.config.browser)!
+	start_browser_with_config(html_filename, ctx.ws_port, ctx.config.token, ctx.config.window,
+		ctx.config.browser)!
 
-	app.logger.info('Browser started, waiting for connections on port ${app.ws_port}...')
-	app.logger.debug('Token: ${app.config.token}')
+	ctx.logger.info('Browser started, waiting for connections on port ${ctx.ws_port}...')
+	ctx.logger.debug('Token: ${ctx.config.token}')
 
-	app.trigger_event(EventType.after_start, '', 'Application started', {}, none, none,
-		none)
+	ctx.trigger_event(EventType.after_start, '', 'Application started', {}, none, none, none)
 
 	// Hot reload: track file modification times
 	mut file_mtimes := map[string]time.Time{}
-	mut watch_dirs := app.config.dev.watch_dirs.clone()
+	mut watch_dirs := ctx.config.dev.watch_dirs.clone()
 	if watch_dirs.len == 0 {
 		// Default to the directory containing the HTML file
 		watch_dirs << os.dir(os.abs_path(html_filename))
 	}
 
-	if app.config.dev.enabled && app.config.dev.hot_reload {
-		app.logger.info('Hot reload watching: ${watch_dirs}')
+	if ctx.config.dev.enabled && ctx.config.dev.hot_reload {
+		ctx.logger.info('Hot reload watching: ${watch_dirs}')
 		file_mtimes = scan_file_mtimes(watch_dirs)
 	}
 
@@ -1065,16 +1027,16 @@ pub fn run[T](mut app T, html_filename string) ! {
 	mut had_clients := false // Track if we ever had clients
 
 	for {
-		ws_state = app.ws.get_state()
+		ws_state = ctx.ws.get_state()
 
-		app.mu.rlock()
+		ctx.mu.rlock()
 
-		client_count := app.clients.len
+		client_count := ctx.clients.len
 
-		app.mu.runlock()
+		ctx.mu.runlock()
 
 		if ws_state == .closed {
-			app.logger.info('WebSocket server closed')
+			ctx.logger.info('WebSocket server closed')
 
 			break
 		}
@@ -1083,7 +1045,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 			// If we had clients before and now none, exit immediately
 
 			if had_clients {
-				app.logger.info('All clients disconnected, shutting down')
+				ctx.logger.info('All clients disconnected, shutting down')
 
 				break
 			}
@@ -1092,8 +1054,8 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 			elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
 
-			if elapsed_ms > app.config.close_timer_ms {
-				app.logger.info('No clients connected for ${app.config.close_timer_ms}ms, shutting down')
+			if elapsed_ms > ctx.config.close_timer_ms {
+				ctx.logger.info('No clients connected for ${ctx.config.close_timer_ms}ms, shutting down')
 
 				break
 			}
@@ -1110,24 +1072,24 @@ pub fn run[T](mut app T, html_filename string) ! {
 		now := time.now()
 
 		if client_count > 0
-			&& now.unix_milli() - last_ping_time.unix_milli() >= app.config.ws_ping_interval_ms {
+			&& now.unix_milli() - last_ping_time.unix_milli() >= ctx.config.ws_ping_interval_ms {
 			last_ping_time = now
 
 			app.ping_all_clients()
 
-			app.logger.debug('Sent heartbeat ping to all clients')
+			ctx.logger.debug('Sent heartbeat ping to all clients')
 		}
 
 		// Hot reload check
 
-		if app.config.dev.enabled && app.config.dev.hot_reload && client_count > 0 {
-			if now.unix_milli() - last_hot_reload_check.unix_milli() >= app.config.dev.watch_ms {
+		if ctx.config.dev.enabled && ctx.config.dev.hot_reload && client_count > 0 {
+			if now.unix_milli() - last_hot_reload_check.unix_milli() >= ctx.config.dev.watch_ms {
 				last_hot_reload_check = now
 				new_mtimes := scan_file_mtimes(watch_dirs)
 				if has_files_changed(file_mtimes, new_mtimes) {
-					app.logger.info('Files changed, triggering hot reload')
+					ctx.logger.info('Files changed, triggering hot reload')
 					file_mtimes = new_mtimes.clone()
-					app.trigger_hot_reload() or { app.logger.warn('Hot reload failed: ${err}') }
+					app.trigger_hot_reload() or { ctx.logger.warn('Hot reload failed: ${err}') }
 				}
 			}
 		}
@@ -1135,11 +1097,11 @@ pub fn run[T](mut app T, html_filename string) ! {
 		time.sleep(10 * time.millisecond)
 	}
 
-	app.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {},
-		none, none, none)
+	ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
+		none)
 
-	app.ws.free()
-	app.logger.info('vxui shutdown complete')
+	ctx.ws.free()
+	ctx.logger.info('vxui shutdown complete')
 }
 
 // run_with_config runs the app with unified configuration
@@ -1157,7 +1119,7 @@ fn (mut ctx Context) check_client_timeouts() {
 	now := time.now()
 
 	for id, client in ctx.clients {
-		if now.unix_milli() - client.last_ping.unix_milli() > 60000 {
+		if now.unix_milli() - client.last_ping.unix_milli() > ctx.config.ws_pong_timeout_ms {
 			stale_clients << id
 		}
 	}
@@ -1165,8 +1127,7 @@ fn (mut ctx Context) check_client_timeouts() {
 	for id in stale_clients {
 		ctx.clients.delete(id)
 		ctx.logger.warn('Removed stale client: ${id}')
-		ctx.trigger_event(EventType.client_disconnected, id, 'Client timeout', {}, none,
-			none, none)
+		ctx.trigger_event(EventType.client_disconnected, id, 'Client timeout', {}, none, none, none)
 	}
 	ctx.mu.unlock()
 }
@@ -1192,18 +1153,9 @@ pub fn run_packed[T](mut app T, mut packed PackedApp, entry_file string) ! {
 
 // run_embedded is a convenience function for running with embedded HTML
 pub fn run_embedded[T](mut app T, html_data []u8, filename string) ! {
-	temp_dir := os.join_path(os.temp_dir(), 'vxui_${os.now_unix()}')
-	os.mkdir_all(temp_dir)!
-
-	html_path := os.join_path(temp_dir, filename)
-	os.write_file(html_path, html_data.bytestr())!
-
-	run(mut app, html_path) or {
-		os.rmdir_all(temp_dir) or {}
-		return err
-	}
-
-	os.rmdir_all(temp_dir) or {}
+	mut packed := new_packed_app()
+	packed.add_file(filename, html_data)
+	run_packed(mut app, mut packed, filename)!
 }
 
 // =============================================================================
@@ -1215,7 +1167,7 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 	ctx.mu.rlock()
 	if ctx.clients.len == 0 {
 		ctx.mu.runlock()
-		return new_error_detail(.no_clients, 'No connected clients').err()
+		return new_error_detail(.no_clients, 'No connected clients')
 	}
 
 	// SAFETY: nil is used as sentinel value for optional pointer
@@ -1229,7 +1181,7 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 	} else {
 		client := ctx.clients[client_id] or {
 			ctx.mu.runlock()
-			return new_error_detail(.client_not_found, 'Client not found: ${client_id}').err()
+			return new_error_detail(.client_not_found, 'Client not found: ${client_id}')
 		}
 		// SAFETY: nil comparison only, no dereference
 		client_conn = client.connection or { unsafe { nil } }
@@ -1238,12 +1190,12 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 
 	// SAFETY: nil comparison only, no dereference
 	if client_conn == unsafe { nil } {
-		return new_error_detail(.no_valid_connection, 'No valid client connection').err()
+		return new_error_detail(.no_valid_connection, 'No valid client connection')
 	}
 
 	if ctx.config.js_sandbox.enabled {
 		validate_js_code(js_code, ctx.config.js_sandbox) or {
-			return new_error_detail(.js_validation_failed, 'JS validation failed: ${err}').err()
+			return new_error_detail(.js_validation_failed, 'JS validation failed: ${err}')
 		}
 	}
 
@@ -1291,11 +1243,11 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 		ch.close()
 
 		if !got_result {
-			return new_error_detail(.js_timeout, 'JavaScript execution timeout').err()
+			return new_error_detail(.js_timeout, 'JavaScript execution timeout')
 		}
 
 		if ctx.config.js_sandbox.enabled && result.len > ctx.config.js_sandbox.max_result_size {
-			return new_error_detail(.js_result_too_large, 'Result exceeds maximum size').err()
+			return new_error_detail(.js_result_too_large, 'Result exceeds maximum size')
 		}
 
 		return result
@@ -1313,7 +1265,7 @@ fn validate_js_code(code string, sandbox JsSandboxConfig) ! {
 	code_lower := code.to_lower()
 	for pattern in sandbox.forbidden_patterns {
 		if code_lower.contains(pattern.to_lower()) {
-			return new_error_detail(.js_validation_failed, 'Forbidden pattern found: ${pattern}').err()
+			return new_error_detail(.js_validation_failed, 'Forbidden pattern found: ${pattern}')
 		}
 	}
 }
@@ -1367,11 +1319,11 @@ pub fn (mut ctx Context) close_client(client_id string) ! {
 	ctx.mu.lock()
 	client := ctx.clients[client_id] or {
 		ctx.mu.unlock()
-		return new_error_detail(.client_not_found, 'Client not found: ${client_id}').err()
+		return new_error_detail(.client_not_found, 'Client not found: ${client_id}')
 	}
 	mut conn := client.connection or {
 		ctx.mu.unlock()
-		return new_error_detail(.no_valid_connection, 'Client has no connection').err()
+		return new_error_detail(.no_valid_connection, 'Client has no connection')
 	}
 
 	ctx.clients.delete(client_id)
@@ -1379,32 +1331,17 @@ pub fn (mut ctx Context) close_client(client_id string) ! {
 
 	conn.close(1000, 'Closed by server')!
 	ctx.logger.info('Closed client: ${client_id}')
-	ctx.trigger_event(EventType.client_disconnected, client_id, 'Closed by server', {},
-		none, none, none)
+	ctx.trigger_event(EventType.client_disconnected, client_id, 'Closed by server', {}, none, none,
+		none)
 }
 
 // =============================================================================
 // Broadcasting
 // =============================================================================
 
-// broadcast sends a message to all connected clients
-pub fn (mut ctx Context) broadcast(message string) ! {
-	ctx.mu.rlock()
-	mut connections := []&websocket.Client{}
-	for _, client in ctx.clients {
-		if conn := client.connection {
-			connections << conn
-		}
-	}
-	ctx.mu.runlock()
-
-	for mut conn in connections {
-		conn.write_string(message)!
-	}
-}
-
-// broadcast_except sends a message to all clients except one
-pub fn (mut ctx Context) broadcast_except(message string, except_client_id string) ! {
+// client_connections returns the connections of all clients except `except_client_id`
+// (pass '' to include everyone). The lock is released before writing.
+fn (mut ctx Context) client_connections(except_client_id string) []&websocket.Client {
 	ctx.mu.rlock()
 	mut connections := []&websocket.Client{}
 	for id, client in ctx.clients {
@@ -1415,9 +1352,23 @@ pub fn (mut ctx Context) broadcast_except(message string, except_client_id strin
 		}
 	}
 	ctx.mu.runlock()
+	return connections
+}
 
-	for mut conn in connections {
-		conn.write_string(message)!
+// broadcast sends a message to all connected clients.
+// A write failure on one client (e.g. a stale connection) is skipped
+// so the remaining clients still receive the message.
+pub fn (mut ctx Context) broadcast(message string) ! {
+	for mut conn in ctx.client_connections('') {
+		conn.write_string(message) or { continue }
+	}
+}
+
+// broadcast_except sends a message to all clients except one.
+// Per-client write failures are skipped, see broadcast().
+pub fn (mut ctx Context) broadcast_except(message string, except_client_id string) ! {
+	for mut conn in ctx.client_connections(except_client_id) {
+		conn.write_string(message) or { continue }
 	}
 }
 
@@ -1426,11 +1377,11 @@ pub fn (mut ctx Context) send_to_client(client_id string, message string) ! {
 	ctx.mu.rlock()
 	client := ctx.clients[client_id] or {
 		ctx.mu.runlock()
-		return new_error_detail(.client_not_found, 'Client not found: ${client_id}').err()
+		return new_error_detail(.client_not_found, 'Client not found: ${client_id}')
 	}
 	mut conn := client.connection or {
 		ctx.mu.runlock()
-		return new_error_detail(.no_valid_connection, 'Client has no connection').err()
+		return new_error_detail(.no_valid_connection, 'Client has no connection')
 	}
 
 	ctx.mu.runlock()
@@ -1447,11 +1398,11 @@ pub fn (mut ctx Context) ping_client(client_id string) ! {
 	ctx.mu.rlock()
 	client := ctx.clients[client_id] or {
 		ctx.mu.runlock()
-		return new_error_detail(.client_not_found, 'Client not found: ${client_id}').err()
+		return new_error_detail(.client_not_found, 'Client not found: ${client_id}')
 	}
 	mut conn := client.connection or {
 		ctx.mu.runlock()
-		return new_error_detail(.no_valid_connection, 'Client has no connection').err()
+		return new_error_detail(.no_valid_connection, 'Client has no connection')
 	}
 
 	ctx.mu.runlock()
@@ -1464,21 +1415,12 @@ pub fn (mut ctx Context) ping_client(client_id string) ! {
 
 // ping_all_clients sends a ping to all connected clients
 pub fn (mut ctx Context) ping_all_clients() {
-	ctx.mu.rlock()
-	mut connections := []&websocket.Client{}
-	for _, client in ctx.clients {
-		if conn := client.connection {
-			connections << conn
-		}
-	}
-	ctx.mu.runlock()
-
 	mut cmd := map[string]json2.Any{}
 	cmd['cmd'] = json2.Any('ping')
 	cmd['timestamp'] = json2.Any(time.now().unix_milli())
 	msg := json2.encode(cmd)
 
-	for mut conn in connections {
+	for mut conn in ctx.client_connections('') {
 		conn.write(msg.bytes(), .text_frame) or {}
 	}
 }
@@ -1561,24 +1503,16 @@ pub fn (ctx Context) get_config() Config {
 // Hot Reload Support
 // =============================================================================
 
-// trigger_hot_reload sends a reload command to all connected clients
+// trigger_hot_reload sends a reload command to all connected clients.
+// Per-client write failures are skipped, see broadcast().
 pub fn (mut ctx Context) trigger_hot_reload() ! {
-	ctx.mu.rlock()
-	mut connections := []&websocket.Client{}
-	for _, client in ctx.clients {
-		if conn := client.connection {
-			connections << conn
-		}
-	}
-	ctx.mu.runlock()
-
 	mut cmd := map[string]json2.Any{}
 	cmd['cmd'] = json2.Any('reload')
 	cmd['timestamp'] = json2.Any(time.now().unix_milli())
 	msg := json2.encode(cmd)
 
-	for mut conn in connections {
-		conn.write(msg.bytes(), .text_frame)!
+	for mut conn in ctx.client_connections('') {
+		conn.write(msg.bytes(), .text_frame) or { continue }
 	}
 }
 

@@ -2,52 +2,12 @@ module vxui
 
 import rand
 import net
+import net.urllib
 
-// url_decode decodes URL-encoded strings
+// url_decode decodes URL-encoded strings ('+' becomes space).
+// Invalid escape sequences are left untouched, matching lenient browser behaviour.
 fn url_decode(s string) string {
-	mut result := []u8{}
-	mut i := 0
-	bytes := s.bytes()
-	for i < bytes.len {
-		if bytes[i] == `%` && i + 2 < bytes.len {
-			// Try to parse hex
-			mut hex := ''
-			hex += bytes[i + 1].ascii_str()
-			hex += bytes[i + 2].ascii_str()
-			if val := hex_to_byte(hex) {
-				result << val
-				i += 3
-				continue
-			}
-		}
-		if bytes[i] == `+` {
-			result << ` `
-			i++
-			continue
-		}
-		result << bytes[i]
-		i++
-	}
-	return result.bytestr()
-}
-
-// hex_to_byte converts a 2-char hex string to a byte
-fn hex_to_byte(hex string) ?u8 {
-	if hex.len != 2 {
-		return none
-	}
-	mut result := u8(0)
-	for c in hex.to_lower().bytes() {
-		result <<= 4
-		if c >= u8(`0`) && c <= u8(`9`) {
-			result |= c - u8(`0`)
-		} else if c >= u8(`a`) && c <= u8(`f`) {
-			result |= c - u8(`a`) + 10
-		} else {
-			return none
-		}
-	}
-	return result
+	return urllib.query_unescape(s) or { s }
 }
 
 // sanitize_path validates and sanitizes the file path
@@ -62,8 +22,8 @@ pub fn sanitize_path(path string) !string {
 	for check_path in [path, decoded, decoded2] {
 		// Check for dangerous patterns
 		if check_path.contains('..') || check_path.contains('~') {
-			return new_error_detail_with_details(VxuiError.path_traversal, 'Path traversal detected',
-				{
+			return new_error_detail_with_details(VxuiError.path_traversal,
+				'Path traversal detected', {
 				'path': path
 			})
 		}
@@ -74,8 +34,8 @@ pub fn sanitize_path(path string) !string {
 	encoded_patterns := ['%2e%2e', '%252e%252e', '..%2f', '..%5c', '%2e%2e%2f', '%2e%2e%5c']
 	for pattern in encoded_patterns {
 		if lower_path.contains(pattern) {
-			return new_error_detail_with_details(VxuiError.path_traversal, 'Encoded path traversal detected',
-				{
+			return new_error_detail_with_details(VxuiError.path_traversal,
+				'Encoded path traversal detected', {
 				'path':    path
 				'pattern': pattern
 			})
@@ -94,8 +54,8 @@ pub fn sanitize_path(path string) !string {
 
 	// Prevent null byte injection
 	if path.contains('\x00') || decoded.contains('\x00') {
-		return new_error_detail_with_details(VxuiError.null_byte_detected, 'Null byte detected in path',
-			{
+		return new_error_detail_with_details(VxuiError.null_byte_detected,
+			'Null byte detected in path', {
 			'path': path
 		})
 	}
@@ -116,8 +76,8 @@ pub fn sanitize_path(path string) !string {
 				}
 			}
 			if !is_allowed {
-				return new_error_detail_with_details(VxuiError.hidden_file_access, 'Hidden file access not allowed',
-					{
+				return new_error_detail_with_details(VxuiError.hidden_file_access,
+					'Hidden file access not allowed', {
 					'path': path
 					'file': part
 				})
@@ -141,8 +101,8 @@ pub fn get_free_port() !u16 {
 		}
 		attempts++
 	}
-	return new_error_detail_with_details(VxuiError.port_not_available, 'Failed to find a free port',
-		{
+	return new_error_detail_with_details(VxuiError.port_not_available,
+		'Failed to find a free port', {
 		'attempts': max_attempts.str()
 	})
 }

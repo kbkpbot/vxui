@@ -108,10 +108,12 @@ Usage:
     }
 
     /**
-     * Generate unique RPC ID (integer for vxui backend compatibility)
+     * Generate unique RPC ID (integer for vxui backend compatibility).
+     * Combines timestamp with a per-millisecond counter so simultaneous
+     * requests (e.g. several htmx triggers on page load) never collide.
      */
     function generateRpcID() {
-        return Date.now()
+        return Date.now() * 1000 + (++rpcCounter % 1000)
     }
 
     /**

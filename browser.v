@@ -108,7 +108,7 @@ fn calculate_center_position(window_width int, window_height int) (int, int) {
 }
 
 // get_browser_args returns browser-specific arguments
-fn get_browser_args(browser_name string, config BrowserConfig) []string {
+fn get_browser_args(browser_name string) []string {
 	base_args := [
 		'--no-first-run',
 		'--disable-breakpad',
@@ -181,8 +181,7 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 
 	// Ensure the file exists
 	if !os.exists(abs_path) {
-		return new_error_detail_with_details(VxuiError.file_not_found, 'HTML file not found',
-			{
+		return new_error_detail_with_details(VxuiError.file_not_found, 'HTML file not found', {
 			'path': abs_path
 		})
 	}
@@ -232,12 +231,12 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		os.join_path(os.home_dir(), '.vxui', 'browser_profile')
 	}
 	os.mkdir_all(profile_path) or {
-		return new_error_detail_with_cause(VxuiError.profile_create_failed, 'Failed to create profile directory',
-			err)
+		return new_error_detail_with_cause(VxuiError.profile_create_failed,
+			'Failed to create profile directory', err)
 	}
 
 	// Build command arguments
-	mut cmd_args := get_browser_args(browser_name, browser_config)
+	mut cmd_args := get_browser_args(browser_name)
 
 	// Add custom arguments first
 	if browser_config.custom_args.len > 0 {
@@ -248,9 +247,6 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 
 	// Add window size for Chrome-based browsers
 	if is_chrome_based {
-		win_width := if window.width > 0 { window.width } else { 800 }
-		win_height := if window.height > 0 { window.height } else { 600 }
-
 		if window.width > 0 && window.height > 0 {
 			cmd_args << '--window-size=${window.width},${window.height}'
 		}
@@ -259,6 +255,8 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		mut pos_x := window.x
 		mut pos_y := window.y
 		if window.x < 0 || window.y < 0 {
+			win_width := if window.width > 0 { window.width } else { 800 }
+			win_height := if window.height > 0 { window.height } else { 600 }
 			pos_x, pos_y = calculate_center_position(win_width, win_height)
 		}
 		cmd_args << '--window-position=${pos_x},${pos_y}'
@@ -289,7 +287,7 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		cmd_args << '--allow-file-access-from-files'
 		cmd_args << '--enable-file-access-from-files'
 		cmd_args << '--enable-features=FileAccessAPI,NativeFileSystemAPI'
-		
+
 		// Use app mode unless disabled (app mode can block file dialogs)
 		if !browser_config.no_app_mode {
 			// Use kiosk mode instead of app mode for better file dialog support
