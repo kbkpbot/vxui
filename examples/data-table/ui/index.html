@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>vxui Data Table</title>
+  <link rel="stylesheet" href="./stylesheet.css"/>
+  <script src="./js/htmx.js"></script>
+  <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+  <h1>员工数据表 <small>服务端分页 / 搜索 / 排序</small></h1>
+  <div class="toolbar">
+    <input type="search" name="q" placeholder="搜索姓名 / 部门…"
+           hx-post="/query" hx-trigger="load, keyup changed delay:300ms"
+           hx-include="[name='status'],[name='sort'],[name='dir']" hx-target="#tbody-zone">
+    <select name="status" hx-post="/query" hx-trigger="change"
+            hx-include="[name='q'],[name='sort'],[name='dir']" hx-target="#tbody-zone">
+      <option value="">全部状态</option>
+      <option value="在职">在职</option>
+      <option value="休假">休假</option>
+      <option value="离职">离职</option>
+    </select>
+    <input type="hidden" name="sort" value="">
+    <input type="hidden" name="dir" value="">
+  </div>
+  <table>
+    <thead><tr>
+      <th><button hx-post="/query" hx-vals='{"sort":"id"}' hx-include="[name='q'],[name='status'],[name='dir']">ID ▾</button></th>
+      <th><button hx-post="/query" hx-vals='{"sort":"name"}' hx-include="[name='q'],[name='status'],[name='dir']">姓名 ▾</button></th>
+      <th><button hx-post="/query" hx-vals='{"sort":"dept"}' hx-include="[name='q'],[name='status'],[name='dir']">部门 ▾</button></th>
+      <th><button hx-post="/query" hx-vals='{"sort":"salary"}' hx-include="[name='q'],[name='status'],[name='dir']">薪资 ▾</button></th>
+      <th><button hx-post="/query" hx-vals='{"sort":"hired"}' hx-include="[name='q'],[name='status'],[name='dir']">入职日期 ▾</button></th>
+      <th><button hx-post="/query" hx-vals='{"sort":"status"}' hx-include="[name='q'],[name='status'],[name='dir']">状态 ▾</button></th>
+    </tr></thead>
+    <tbody id="tbody-zone"><tr><td colspan="6">加载中…</td></tr></tbody>
+  </table>
+  <div id="pager"></div>
+</body>
+</html>
