@@ -106,14 +106,14 @@ mut:
 // esc escapes text for safe embedding into HTML attributes and JSON payloads
 fn esc(s string) string {
 	mut out := s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-	out = out.replace('"', '&quot;')
+	out = out.replace('"', '&quot;').replace("'", '&#39;')
 	return out
 }
 
 // vals_json builds the hx-vals payload carrying the full query state
 fn vals_json(page int, p QueryParams) string {
 	dir := if p.desc { 'desc' } else { 'asc' }
-	return '{"page":${page},"q":"${esc(p.q)}","status":"${esc(p.status)}","sort":"${p.sort_col}","dir":"${dir}"}'
+	return '{"page":${page},"q":"${esc(p.q)}","status":"${esc(p.status)}","sort":"${esc(p.sort_col)}","dir":"${dir}"}'
 }
 
 // qp_from_message parses QueryParams out of request parameters
