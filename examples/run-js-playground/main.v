@@ -52,7 +52,8 @@ fn (mut app App) run_and_log(title string, js string, timeout_ms int, cid string
 			err.msg()
 		}
 	}
-	app.broadcast(log_entry(ok, title, result)) or {}
+	payload := {'cmd': 'oob_update', 'html': log_entry(ok, title, result)}
+	app.broadcast(json2.encode(payload)) or {}
 }
 
 @['/title']
