@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vxui Chat</title>
+  <link rel="stylesheet" href="./stylesheet.css"/>
+  <script src="./js/htmx.js"></script>
+  <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+  <input type="hidden" id="cid" name="cid" value="">
+  <aside>
+    <h2>在线用户</h2>
+    <ul id="user-list"><li class="count">0 人在线</li></ul>
+  </aside>
+  <main>
+    <div id="messages"></div>
+    <form id="join-form" hx-post="/join" hx-swap="none">
+      <input name="nick" placeholder="输入昵称加入" maxlength="20" required>
+      <button>加入</button>
+    </form>
+    <form id="chat-form" class="hidden" hx-post="/send" hx-swap="none">
+      <input name="text" placeholder="说点什么…" maxlength="200" autocomplete="off">
+      <button>发送</button>
+    </form>
+  </main>
+  <script>
+    document.body.addEventListener('vxui:authenticated', function () {
+      setInterval(function () {
+        var c = window.vxuiWs && window.vxuiWs.getClientId()
+        if (c) { document.getElementById('cid').value = c }
+      }, 1000)
+    })
+    document.getElementById('join-form').addEventListener('htmx:afterRequest', function () {
+      this.classList.add('hidden')
+      document.getElementById('chat-form').classList.remove('hidden')
+    })
+  </script>
+</body>
+</html>

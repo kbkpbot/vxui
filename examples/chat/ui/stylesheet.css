@@ -1,0 +1,20 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { display: flex; height: 100vh; background: #12161f; color: #dfe6ee;
+	font-family: -apple-system, 'Segoe UI', sans-serif; }
+aside { width: 220px; background: #181f2b; padding: 16px; }
+aside h2 { font-size: 15px; color: #8b98a9; margin-bottom: 12px; }
+#user-list { list-style: none; }
+#user-list li { padding: 6px 8px; border-radius: 6px; }
+#user-list li:hover { background: #232b38; }
+#user-list .count { color: #8b98a9; font-size: 12px; margin-top: 8px; }
+main { flex: 1; display: flex; flex-direction: column; padding: 16px; }
+#messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.msg { padding: 8px 12px; border-radius: 8px; background: #1c2532; max-width: 70%; }
+.msg.system { align-self: center; background: transparent; color: #8b98a9; font-size: 13px; }
+.msg b { color: #4fc3f7; }
+form { display: flex; gap: 8px; margin-top: 12px; }
+form input { flex: 1; background: #1c2532; border: 1px solid #2a3444; color: #dfe6ee;
+	border-radius: 6px; padding: 10px 12px; }
+form button { background: #11998e; border: 0; color: #fff; border-radius: 6px;
+	padding: 10px 18px; cursor: pointer; }
+.hidden { display: none; }
