@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vxui run_js Playground</title>
+  <link rel="stylesheet" href="./stylesheet.css"/>
+  <script src="./js/htmx.js"></script>
+  <script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws" style="--accent:#38ef7d">
+  <header><h1>run_js Playground</h1>
+    <span class="hint">左侧按钮由后端执行 JS 并把结果广播到所有窗口的日志面板</span>
+  </header>
+  <div class="layout">
+    <nav>
+      <button hx-post="/title" hx-swap="none">读取页面标题</button>
+      <button hx-post="/scroll-top" hx-swap="none">平滑滚顶</button>
+      <button hx-post="/toast" hx-swap="none">弹出 Toast</button>
+      <button hx-post="/accent" hx-swap="none">随机主题色</button>
+      <button hx-post="/ua" hx-swap="none">获取 UA</button>
+      <button hx-post="/timeout-demo" hx-swap="none" class="danger">超时演示（预期失败）</button>
+      <hr>
+      <label>执行目标窗口
+        <select name="cid" id="target">
+          <option value="">第一个窗口</option>
+        </select>
+      </label>
+      <button id="refresh-targets" class="ghost">刷新目标列表</button>
+    </nav>
+    <section id="console-wrap">
+      <div id="console"></div>
+    </section>
+  </div>
+  <script>
+    // 把选中的目标 cid 注入所有按钮请求（hx-vals 动态化）
+    document.body.addEventListener('htmx:configRequest', function (e) {
+      if (e.detail.path !== '/targets') {
+        e.detail.parameters['cid'] = document.getElementById('target').value
+      }
+    })
+    document.getElementById('refresh-targets').addEventListener('click', function () {
+      var sel = document.getElementById('target')
+      var cur = sel.value
+      // 框架暂未暴露完整 client 列表给页面；保留“第一个窗口”默认项
+      sel.innerHTML = '<option value="">第一个窗口</option>'
+      sel.value = cur
+    })
+  </script>
+</body>
+</html>
