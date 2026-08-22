@@ -17,6 +17,7 @@ mut:
 // define some const values here
 const default_first_page_html_file = './ui/index.html'
 
+@['/get']
 fn (mut app App) get(message map[string]json2.Any) string {
 	// generate random hashrate for last 24 hour
 	// main.js will call this function every second

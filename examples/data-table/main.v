@@ -156,7 +156,7 @@ fn (mut app TableApp) query(message map[string]json2.Any) string {
 }
 
 @['/reset-sort']
-fn (mut app TableApp) reset_sort(message map[string]json2.Any) string {
+fn (mut app TableApp) reset_sort(_ map[string]json2.Any) string {
 	p := QueryParams{page: 1}
 	page_rows, total := apply_query(app.rows, p)
 	return render_table(page_rows, total, p)

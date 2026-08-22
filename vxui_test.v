@@ -549,6 +549,54 @@ fn test_route_struct() {
 	assert Verb.get in route.verb
 }
 
+// RoutingTestApp exercises attribute-gated route registration:
+// helpers WITHOUT attributes must never become routes, and their signatures
+// must not influence compilation of fire_call/generate_routes.
+struct RoutingTestApp {
+	Context
+mut:
+	calls int
+}
+
+@['/tagged']
+fn (mut app RoutingTestApp) tagged_handler(message map[string]json2.Any) string {
+	app.calls++
+	return 'tagged-ok'
+}
+
+// untagged message-signature method: NOT a route under attr-gating
+fn (mut app RoutingTestApp) untagged_handler(message map[string]json2.Any) string {
+	return 'untagged'
+}
+
+// untagged void helper with a custom signature: must not become a route
+fn (mut app RoutingTestApp) track_call(x int) {
+	app.calls += x
+}
+
+fn test_generate_routes_registers_only_tagged_methods() {
+	mut app := RoutingTestApp{}
+	routes := generate_routes(app)!
+	assert 'tagged_handler' in routes
+	assert routes['tagged_handler'].path == '/tagged'
+	// untagged methods are not registered, neither by fn name nor path alias
+	assert 'untagged_handler' !in routes
+	assert '/untagged_handler' !in routes
+	assert 'track_call' !in routes
+}
+
+fn test_fire_call_rejects_untagged_method() {
+	mut app := RoutingTestApp{}
+	result := fire_call(mut app, 'tagged_handler', {})!
+	assert result == 'tagged-ok'
+	// untagged methods are unreachable through dispatch
+	res := fire_call(mut app, 'untagged_handler', {}) or {
+		assert err.code() == int(VxuiError.route_not_found)
+		'blocked'
+	}
+	assert res == 'blocked'
+}
+
 fn test_parse_attrs_empty() {
 	verbs, path := parse_attrs('test', []) or {
 		assert false

@@ -129,7 +129,8 @@ fn (mut app App) submit(message map[string]json2.Any) string {
     return '<div id="result" hx-swap-oob="true">Count: ${app.counter}</div>'
 }
 
-// 3. If attribute is omitted, function name is used as path
+// 3. Methods WITHOUT attributes are plain helpers: they are NOT routed
+//    and cannot be called from the frontend
 fn (mut app App) hello(message map[string]json2.Any) string {
     return '<div>Hello from vxui!</div>'
 }
@@ -200,6 +201,15 @@ pub mut:
 - `['/path']` - Specify route path
 - `['get']`, `['post']`, `['put']`, `['delete']`, `['patch']` - Specify HTTP verb
 - Can be combined: `['/api', 'post']`
+
+**Routing rules:**
+
+- Only methods carrying at least one attribute are registered as routes.
+  Untagged methods are plain helpers — they are never reachable from the frontend.
+- Handler signature must be `fn (mut app App) name(message map[string]json2.Any) string`.
+- Helper methods on the app struct should return void or non-string types
+  (or take no parameters). A string-returning helper with custom parameters
+  will fail to compile due to a V comptime limitation in method dispatch.
 
 ---
 

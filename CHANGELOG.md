@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Routing: attribute-gated only** — methods without `@[...]` attributes are no longer
+  registered as routes. Previously every method became callable (untagged methods used
+  `/method_name` implicitly), which made helper methods on the app struct either break
+  compilation (string-returning helpers with custom parameters) or leak as hidden void
+  routes. Tag your handlers explicitly (`@['/path']`, a verb, or both); see AGENTS.md.
+  Examples `test` and `enchart` were migrated to explicit tags.
 - **Module Layout**: Moved all V sources from `src/` to the module root
   - Required by newer V compilers that no longer support `src/` as a virtual module root
   - Examples now compile again (`v run main.v` inside any `examples/*/`)
@@ -23,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **chat example**: nickname no longer double-escaped in the leave broadcast
+- **data-table example**: silenced unused-parameter notice on `/reset-sort`
+- **system-monitor example**: removed dead `last_sample` field
 - **rpcID Collisions (JS)**: `generateRpcID()` now combines `Date.now()` with a counter so
   simultaneous htmx requests in the same millisecond no longer overwrite each other in
   `pendingRequests`

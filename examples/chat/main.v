@@ -103,7 +103,8 @@ fn main() {
 		}
 		app.nicknames.delete(e.client_id)
 		app.mu.unlock()
-		app.system_broadcast(bubble('system', '${esc(nick)} 离开了聊天室'))
+		// 昵称在 join 时已转义存储，这里直接使用，避免二次转义
+		app.system_broadcast(bubble('system', '${nick} 离开了聊天室'))
 	})
 
 	vxui.run(mut app, default_page_html_file)!

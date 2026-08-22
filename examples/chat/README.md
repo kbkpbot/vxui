@@ -8,7 +8,6 @@
 |-----|------|
 | `multi_client` / `broadcast` | 消息扇出到所有窗口 |
 | `on_event(.client_disconnected)` | 断连清理昵称并广播离开消息 |
-| `get_clients` | 在线列表基础 |
 
 ## 实现要点
 

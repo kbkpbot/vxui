@@ -93,13 +93,12 @@ fn read_loadavg() f64 {
 struct App {
 	vxui.Context
 mut:
-	history     []f64
-	has_proc    bool
-	last_sample f64 // unix ms of previous cpu sample
-	prev        CpuSnapshot
-	mem         MemInfo
-	load        f64
-	cpu         f64
+	history  []f64
+	has_proc bool
+	prev     CpuSnapshot
+	mem      MemInfo
+	load     f64
+	cpu      f64
 }
 
 // start_sampler runs in its own goroutine; samples once per second and

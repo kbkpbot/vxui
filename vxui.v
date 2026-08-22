@@ -899,9 +899,16 @@ fn handle_request[T](mut app T, ctx &Context, req Request, message map[string]js
 }
 
 // fire_call calls the method
+// Only methods carrying route attributes (@['/path'] and/or a verb) are
+// dispatchable; untagged helper methods are invisible to routing.
+//
+// NOTE on V comptime limits: the dispatch call is instantiated for every
+// string-returning method regardless of attributes. Helpers on the app struct
+// should therefore return void/non-string, or take no parameters — a
+// string-returning helper with custom parameters will not compile.
 pub fn fire_call[T](mut app T, method_name string, message map[string]json2.Any) !string {
 	$for method in T.methods {
-		if method.name == method_name {
+		if method.attrs.len > 0 && method.name == method_name {
 			$if method.return_type is string {
 				return app.$method(message)
 			}
@@ -958,13 +965,17 @@ pub fn parse_attrs(name string, attrs []string) !([]Verb, string) {
 pub fn generate_routes[T](app &T) !map[string]Route {
 	mut routes := map[string]Route{}
 	$for method in T.methods {
-		verbs, route_path := parse_attrs(method.name, method.attrs) or {
-			return new_error_detail_with_cause(VxuiError.attribute_parse_error,
-				'Error parsing method attributes', err)
-		}
-		routes[method.name] = Route{
-			verb: verbs
-			path: route_path
+		// Only attribute-tagged methods become routes; untagged methods are
+		// plain helpers and must not be reachable from the frontend.
+		if method.attrs.len > 0 {
+			verbs, route_path := parse_attrs(method.name, method.attrs) or {
+				return new_error_detail_with_cause(VxuiError.attribute_parse_error,
+					'Error parsing method attributes', err)
+			}
+			routes[method.name] = Route{
+				verb: verbs
+				path: route_path
+			}
 		}
 	}
 	return routes

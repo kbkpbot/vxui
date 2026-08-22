@@ -30,6 +30,7 @@ fn (mut app App) test(message map[string]json2.Any) string {
 
 // if ommit the attr, the function name will act as a path
 // `submit` function will handle `/submit` path
+@['/submit']
 fn (mut app App) submit(message map[string]json2.Any) string {
 	app.logger.info("I'm submit function!")
 	mut tmp := message['parameters'] or { json2.Null{} }
@@ -51,6 +52,7 @@ fn (mut app App) submit(message map[string]json2.Any) string {
 	return $tmpl('templates/contact_view.html')
 }
 
+@['/edit']
 fn (mut app App) edit(message map[string]json2.Any) string {
 	app.logger.info("I'm edit function!")
 	tmp := message['parameters'] or { json2.Null{} }
@@ -60,6 +62,7 @@ fn (mut app App) edit(message map[string]json2.Any) string {
 	return $tmpl('templates/contact_edit.html')
 }
 
+@['/cancel']
 fn (mut app App) cancel(message map[string]json2.Any) string {
 	app.logger.info("I'm cancel function!")
 	app.cnt++
