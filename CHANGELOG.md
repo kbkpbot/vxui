@@ -57,6 +57,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Audit: pre-auth command surface closed (Critical)** — `js_result`/`pong`/`client_close`
+  ran before the token gate, so any local web page could drive-by connect to the loopback
+  port and forge run_js results, keep zombie clients alive, or evict real ones. Now only
+  the `auth` handshake is reachable without a token; vxui-ws.js sends its token on all
+  three commands
+- **Audit: loopback gate now checks the PEER address** (`TcpConn.peer_addr()`) instead of
+  the local endpoint it was dialed on, and recognizes `::ffff:127.` IPv4-mapped forms
+- **Audit: rate limiter re-hardened** — `blocked_until` is cleared when a punishment
+  block is consumed; without this the limiter stayed permanently bypassed after the
+  first block (pinned by a steady-traffic regression test)
+- **JS lifecycle races** — per-attempt socket generation id guards stale onopen/onclose
+  handlers from clobbering a newer connection; `retryCount` resets on full auth success
+  instead of mere TCP open, so an open/flap server can no longer churn reconnects
+  forever
 - **Rate limiter**: a completed punishment block now grants a fresh window — previously
   the leftover over-limit count re-blocked the client in short pulses until the original
   window slid, making `block_duration` meaningless

@@ -510,10 +510,11 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 			none)
 
 		// Loopback gate: the server binds all interfaces, so unless the user
-		// explicitly opted in, only local processes may connect.
+		// explicitly opted in, only local processes may connect. Use the PEER
+		// address — sock.address() is the local endpoint we were dialed on.
 		if !ctx.config.allow_remote {
 			mut peer := '?'
-			if a := s.client.conn.sock.address() {
+			if a := s.client.conn.peer_addr() {
 				peer = a.str().all_before_last(':')
 			}
 			if !addr_is_loopback(peer) {
@@ -552,7 +553,11 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		message := raw_message.as_map()
 		ctx.logger.debug('Received message: ${message}')
 
-		// Handle authentication
+		// The auth handshake is the ONLY command reachable without a token.
+		// Everything else — including js_result/pong/client_close, which used
+		// to bypass the gate — requires a valid token; otherwise any local
+		// web page could drive-by connect to the loopback port and forge
+		// results, keep zombie clients alive or evict real ones.
 		if cmd := message['cmd'] {
 			if cmd.str() == 'auth' {
 				ctx.handle_auth(mut ws, message) or {
@@ -564,6 +569,17 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 				}
 				return
 			}
+		}
+
+		// Verify token for every non-auth message. When require_auth is on
+		// (the default) a missing token is rejected just like a wrong one.
+		if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
+			ctx.logger.warn('Unauthorized message rejected (missing or invalid token)')
+			ws.close(1008, 'Invalid token')!
+			return
+		}
+
+		if cmd := message['cmd'] {
 			if cmd.str() == 'js_result' {
 				ctx.handle_js_result(message)
 				return
@@ -578,19 +594,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 				ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
 				return
 			}
-		}
-
-		// Verify token for regular messages. When require_auth is on
-		// (the default) a missing token is rejected just like a wrong
-		// one — previously messages without a token field sailed through.
-		if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
-			ctx.logger.warn('Unauthorized message rejected (missing or invalid token)')
-			ws.close(1008, 'Invalid token')!
-			return
-		}
-
-		// Authenticated utility command: enumerate connected clients
-		if cmd := message['cmd'] {
+			// Authenticated utility command: enumerate connected clients
 			if cmd.str() == 'get_clients' {
 				mut ids := []json2.Any{}
 				for id in ctx.get_clients() {
@@ -763,6 +767,7 @@ fn (mut ctx Context) check_rate_limit(client_id string) bool {
 		&& now.unix_milli() >= counter.blocked_until.unix_milli()) {
 		counter.count = 0
 		counter.window_start = now
+		counter.blocked_until = time.Time{}
 	}
 
 	counter.count++
@@ -783,6 +788,7 @@ fn (mut ctx Context) check_rate_limit(client_id string) bool {
 // addr_is_loopback reports whether the peer address is a loopback interface
 fn addr_is_loopback(addr string) bool {
 	return addr == '::1' || addr == '[::1]' || addr.starts_with('127.')
+		|| addr.starts_with('::ffff:127.')
 }
 
 // message_token_valid decides whether a regular (non-cmd) message may pass.

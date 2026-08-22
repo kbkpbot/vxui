@@ -40,6 +40,7 @@ Usage:
     var lastPongTime = null
     var cachedClients = []
     var connectTimeoutTimer = null
+    var socketGeneration = 0  // per-attempt id; stale socket handlers bail out
 
     // Configuration
     var config = {
@@ -561,6 +562,7 @@ Usage:
             case 'auth_ok':
                 isAuthenticated = true
                 clientId = msg.client_id
+                retryCount = 0  // reconnect budget resets only on full auth success
                 
                 // Update sandbox config from server
                 if (msg.js_sandbox) {
@@ -601,6 +603,7 @@ Usage:
                 var execution = executeJsSafely(msg.script)
                 var response = {
                     cmd: 'js_result',
+                    token: token,
                     js_id: msg.js_id,
                     result: execution.result,
                     error: execution.error
@@ -612,6 +615,7 @@ Usage:
                 // Respond to server ping
                 var pongResponse = {
                     cmd: 'pong',
+                    token: token,
                     client_id: clientId,
                     timestamp: Date.now()
                 }
@@ -717,6 +721,7 @@ Usage:
         if (socket && socket.readyState === WebSocket.OPEN) {
             var closeMsg = {
                 cmd: 'client_close',
+                token: token,
                 client_id: clientId
             }
             socket.send(JSON.stringify(closeMsg))
@@ -763,13 +768,15 @@ Usage:
                 }
             }, config.connectTimeout)
 
+            var gen = ++socketGeneration
+
             socket.onopen = function(e) {
+                if (gen !== socketGeneration) { return } // stale socket event
                 log('WebSocket connected')
                 isConnecting = false
                 clearTimeout(connectTimeoutTimer)
-                retryCount = 0
                 socketWrapper = { socket: socket }
-                
+
                 // Send authentication
                 sendAuth()
 
@@ -777,6 +784,7 @@ Usage:
             }
 
             socket.onclose = function(e) {
+                if (gen !== socketGeneration) { return } // stale socket event
                 log('WebSocket closed', e.code, e.reason)
                 isConnecting = false
                 isAuthenticated = false

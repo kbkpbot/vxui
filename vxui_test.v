@@ -311,8 +311,11 @@ fn test_rate_limit_block_expires() {
 	assert ctx.check_rate_limit('c1')
 	assert !ctx.check_rate_limit('c1')
 	time.sleep(70 * time.millisecond)
-	// block duration elapsed -> allowed again
+	// block duration elapsed -> fresh window granted
 	assert ctx.check_rate_limit('c1')
+	// REGRESSION: the fresh window must be enforced too — under steady traffic
+	// the limiter must not stay permanently bypassed after one block
+	assert !ctx.check_rate_limit('c1')
 }
 
 fn test_rate_limit_window_reset() {
@@ -662,6 +665,7 @@ fn test_addr_is_loopback() {
 	assert addr_is_loopback('127.9.9.9')
 	assert addr_is_loopback('::1')
 	assert addr_is_loopback('[::1]')
+	assert addr_is_loopback('::ffff:127.0.0.1') // IPv4-mapped form
 	assert !addr_is_loopback('192.168.1.10')
 	assert !addr_is_loopback('10.0.0.5')
 	assert !addr_is_loopback('')
@@ -763,6 +767,18 @@ fn test_websocket_integration_auth_rpc_and_reject() {
 	cl_bad.write_string('{"rpcID":1,"verb":"get","path":"/tagged"}')!
 	time.sleep(300 * time.millisecond)
 	assert after_req.len == 0 // handler never ran for the rejected message
+
+	// --- 1b. pre-auth commands are no longer reachable without a token
+	mut cl_pre := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
+	cl_pre.connect()!
+	cl_pre.write_string('{"cmd":"pong","client_id":"ghost"}')!
+	time.sleep(300 * time.millisecond)
+	// server closed the socket over the token-less pong: an auth retry on the
+	// same dead connection can therefore not register either
+	cl_pre.write_string('{"cmd":"auth","token":"it-token"}')!
+	time.sleep(300 * time.millisecond)
+	assert ctx.clients.len == 0
+	cl_pre.close(1000, 'done') or {}
 
 	// --- 2. auth handshake registers the client
 	mut cl_ok := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
