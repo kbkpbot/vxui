@@ -755,6 +755,72 @@ fn test_on_event() {
 	assert ctx.event_handlers[EventType.client_connected].len == 1
 }
 
+// new_test_context builds a Context with initialized maps/channels,
+// mirroring what init() does for a real app.
+fn new_test_context() Context {
+	mut ctx := Context{}
+	ctx.clients = map[string]Client{}
+	ctx.js_callbacks = map[string]chan string{}
+	ctx.event_handlers = map[EventType][]EventHandler{}
+	ctx.middlewares = []Middleware{}
+	ctx.rate_counters = map[string]RateCounter{}
+	ctx.client_remove_chan = chan ClientRemoveMsg{cap: 8}
+	return ctx
+}
+
+// Regression: client_disconnected handlers must be able to call Context APIs
+// (get_clients/broadcast/...) — events must fire OUTSIDE the write lock,
+// otherwise any handler touching the lock deadlocks.
+fn test_disconnect_events_fire_outside_lock() {
+	mut ctx := new_test_context()
+
+	mut handler_ran := chan bool{cap: 4}
+	ctx.on_event(.client_disconnected, fn [mut ctx, mut handler_ran] (e EventData) {
+		// These acquire mu internally; called while holding mu they deadlock.
+		_ := ctx.get_clients()
+		_ := ctx.get_client_count()
+		handler_ran <- true
+	})
+
+	stale := Client{
+		id:        'stale-1'
+		connected: time.now().add(-(2 * time.minute))
+		last_ping: time.now().add(-(2 * time.minute))
+	}
+	live := Client{
+		id:        'live-1'
+		connected: time.now()
+		last_ping: time.now()
+	}
+	ctx.clients['stale-1'] = stale
+	ctx.clients['live-1'] = live
+
+	// 1. timeout sweep removes the stale client and fires the event unlocked
+	ctx.check_client_timeouts()
+	assert 'stale-1' !in ctx.clients
+	assert 'live-1' in ctx.clients
+
+	// 2. removal channel path fires the event unlocked too
+	ctx.client_remove_chan <- ClientRemoveMsg{'live-1', 'test'}
+	spawn fn [mut ctx] () {
+		ctx.process_client_removals()
+	}()
+	time.sleep(100 * time.millisecond)
+	assert 'live-1' !in ctx.clients
+
+	// both events observed, handlers ran to completion
+	for _ in 0 .. 2 {
+		select {
+			ok := <-handler_ran {
+				assert ok
+			}
+			10 * time.second {
+				assert false, 'disconnect handler never completed (deadlock?)'
+			}
+		}
+	}
+}
+
 // =============================================================================
 // use Middleware Test
 // =============================================================================

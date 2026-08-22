@@ -848,11 +848,11 @@ pub fn (mut ctx Context) use(middleware Middleware) {
 	ctx.middlewares << middleware
 }
 
-// use_logger adds a logging middleware
+// use_logger adds a logging middleware that routes request lines through
+// the framework logger (respecting its level/output config) instead of stdout
 pub fn (mut ctx Context) use_logger() {
-	ctx.use(fn (mut mctx MiddlewareContext) MiddlewareResult {
-		t := time.now()
-		println('[${t.year}-${t.month:02}-${t.day:02} ${t.hour:02}:${t.minute:02}:${t.second:02}] ${mctx.request.verb} ${mctx.request.path}')
+	ctx.use(fn [ctx] (mut mctx MiddlewareContext) MiddlewareResult {
+		ctx.logger.info('${mctx.request.verb} ${mctx.request.path}')
 		return .continue_
 	})
 }
@@ -1138,9 +1138,14 @@ fn (mut ctx Context) check_client_timeouts() {
 	for id in stale_clients {
 		ctx.clients.delete(id)
 		ctx.logger.warn('Removed stale client: ${id}')
-		ctx.trigger_event(EventType.client_disconnected, id, 'Client timeout', {}, none, none, none)
 	}
 	ctx.mu.unlock()
+
+	// Fire events AFTER releasing the lock: handlers may call back into
+	// Context APIs (broadcast/get_clients/...) and do network IO.
+	for id in stale_clients {
+		ctx.trigger_event(EventType.client_disconnected, id, 'Client timeout', {}, none, none, none)
+	}
 }
 
 // =============================================================================
@@ -1371,7 +1376,10 @@ fn (mut ctx Context) client_connections(except_client_id string) []&websocket.Cl
 // so the remaining clients still receive the message.
 pub fn (mut ctx Context) broadcast(message string) ! {
 	for mut conn in ctx.client_connections('') {
-		conn.write_string(message) or { continue }
+		conn.write_string(message) or {
+			ctx.logger.debug('broadcast: client write failed, skipped: ${err}')
+			continue
+		}
 	}
 }
 
@@ -1379,7 +1387,10 @@ pub fn (mut ctx Context) broadcast(message string) ! {
 // Per-client write failures are skipped, see broadcast().
 pub fn (mut ctx Context) broadcast_except(message string, except_client_id string) ! {
 	for mut conn in ctx.client_connections(except_client_id) {
-		conn.write_string(message) or { continue }
+		conn.write_string(message) or {
+			ctx.logger.debug('broadcast_except: client write failed, skipped: ${err}')
+			continue
+		}
 	}
 }
 
@@ -1442,15 +1453,21 @@ pub fn (mut ctx Context) process_client_removals() {
 	for {
 		msg := <-ctx.client_remove_chan or { break }
 		ctx.mu.lock()
-		if msg.client_id in ctx.clients {
+		existed := msg.client_id in ctx.clients
+		if existed {
 			ctx.clients.delete(msg.client_id)
 			ctx.logger.info('Client removed (${msg.from_msg}): ${msg.client_id}')
-			ctx.trigger_event(EventType.client_disconnected, msg.client_id, 'Client disconnected',
-				{}, none, none, none)
 		} else {
 			ctx.logger.debug('Client already removed (${msg.from_msg}): ${msg.client_id}')
 		}
 		ctx.mu.unlock()
+
+		// Fire the event AFTER releasing the lock: handlers may call back
+		// into Context APIs (broadcast/get_clients/...) and do network IO.
+		if existed {
+			ctx.trigger_event(EventType.client_disconnected, msg.client_id, 'Client disconnected',
+				{}, none, none, none)
+		}
 	}
 }
 
@@ -1523,7 +1540,10 @@ pub fn (mut ctx Context) trigger_hot_reload() ! {
 	msg := json2.encode(cmd)
 
 	for mut conn in ctx.client_connections('') {
-		conn.write(msg.bytes(), .text_frame) or { continue }
+		conn.write(msg.bytes(), .text_frame) or {
+			ctx.logger.debug('hot reload: client write failed, skipped: ${err}')
+			continue
+		}
 	}
 }
 

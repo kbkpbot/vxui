@@ -247,6 +247,15 @@ See [`examples/element-plus/`](examples/element-plus/) for Vue 3 + Element Plus 
 - Backend-driven notifications via `run_js()`
 - Demonstrates vxui with modern Vue 3 ecosystem
 
+### More Examples
+
+- [`examples/system-monitor/`](examples/system-monitor/) — real-time dashboard: backend
+  pushes CPU/RAM/load via `broadcast` + `oob_update`, multi-window sync
+- [`examples/chat/`](examples/chat/) — multi-window chat room: broadcast + lifecycle events
+- [`examples/run-js-playground/`](examples/run-js-playground/) — backend-driven frontend:
+  `run_js` demos incl. timeout/error paths
+- [`examples/data-table/`](examples/data-table/) — server-side pagination/search/sort table
+
 Run examples:
 
 ```bash

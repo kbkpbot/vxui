@@ -216,7 +216,13 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		$if macos {
 			// Safari doesn't support command-line arguments, use 'open' command
 			url := 'file://${abs_path}?${url_params}'
-			os.execute('open -a Safari "${url}"')
+			res := os.execute('open -a Safari "${url}"')
+			if res.exit_code != 0 {
+				return new_error_detail_with_details(VxuiError.browser_not_found,
+					'Failed to launch Safari', {
+					'stderr': res.output.trim_space()
+				})
+			}
 			return
 		}
 		return new_error_detail(VxuiError.browser_not_found, 'Safari is only supported on macOS')

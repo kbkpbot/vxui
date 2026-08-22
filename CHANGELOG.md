@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Lock hygiene**: `client_disconnected` events now fire AFTER releasing the context
+  write lock in both the timeout sweep and the removal channel loop — handlers can call
+  back into Context APIs (`broadcast`, `get_clients`, ...) and do network IO without
+  holding up the removal pipeline or risking recursive-lock deadlocks on pthread-backed
+  platforms
+- **Safari launch (macOS)**: a failed `open -a Safari` is now returned as a structured
+  error instead of being silently ignored
+- **data-table example**: filtering while on a high page now clamps to the last valid
+  page (pager state matches served rows) instead of rendering an empty view
 - **chat example**: nickname no longer double-escaped in the leave broadcast
 - **data-table example**: silenced unused-parameter notice on `/reset-sort`
 - **system-monitor example**: removed dead `last_sample` field

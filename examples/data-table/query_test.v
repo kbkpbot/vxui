@@ -45,6 +45,25 @@ fn test_pagination_and_total() {
 	assert page2[0].id == 21
 }
 
+fn test_page_clamped_when_filter_shrinks_result() {
+	mut all := []Employee{cap: 25}
+	for i in 1 .. 26 {
+		all << Employee{id: i, name: 'E${i}', dept: '研发', salary: i * 100,
+			hired: '2020-01-01', status: '在职'}
+	}
+	// user is on page 2, then searches 'E2' which only matches 7 rows;
+	// the view should clamp to the last valid page instead of going empty
+	rows, total := apply_query(all, QueryParams{q: 'e2', page: 2, page_size: 20})
+	assert total == 7
+	assert rows.len == 7
+	assert rows[0].id == 2
+
+	// a filter matching nothing still yields an empty page with total 0
+	empty, etotal := apply_query(all, QueryParams{q: 'zzz', page: 3, page_size: 20})
+	assert empty.len == 0
+	assert etotal == 0
+}
+
 fn test_default_params() {
 	rows, _ := apply_query(sample(), QueryParams{})
 	assert rows.len == 4 // 默认按 id 升序、不过滤

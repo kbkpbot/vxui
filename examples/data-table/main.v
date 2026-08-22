@@ -60,9 +60,15 @@ fn apply_query(rows []Employee, p QueryParams) ([]Employee, int) {
 	if q.desc {
 		filtered.reverse_in_place()
 	}
-	start := (q.page - 1) * q.page_size
+	mut start := (q.page - 1) * q.page_size
 	if start >= filtered.len {
-		return []Employee{}, filtered.len
+		if filtered.len == 0 {
+			return []Employee{}, 0
+		}
+		// the filter shrank the result set while the user was on a high page:
+		// clamp to the last valid page instead of rendering an empty view
+		max_page := (filtered.len + q.page_size - 1) / q.page_size
+		start = (max_page - 1) * q.page_size
 	}
 	mut end := start + q.page_size
 	if end > filtered.len {
@@ -106,7 +112,7 @@ mut:
 // esc escapes text for safe embedding into HTML attributes and JSON payloads
 fn esc(s string) string {
 	mut out := s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-	out = out.replace('"', '&quot;').replace("'", '&#39;')
+	out = out.replace('"', '&quot;').replace("'", '&#x27;')
 	return out
 }
 
@@ -133,17 +139,20 @@ fn qp_from_message(message map[string]json2.Any) QueryParams {
 // render_table renders tbody content for given page rows plus pager OOB
 fn render_table(page_rows []Employee, total int, p QueryParams) string {
 	max_page := if total == 0 { 1 } else { (total + p.page_size - 1) / p.page_size }
+	// apply_query clamps overflows to the last valid page; mirror it here so
+	// the pager state matches the rows actually served
+	page := if p.page > max_page { max_page } else { p.page }
 	mut trs := ''
 	for r in page_rows {
 		tag_cls := if r.status == '在职' { 'ok' } else { 'off' }
 		trs += '<tr><td>${r.id}</td><td>${r.name}</td><td>${r.dept}</td><td>${r.salary}</td><td>${r.hired}</td><td><span class="tag ${tag_cls}">${r.status}</span></td></tr>'
 	}
-	prev_disabled := if p.page <= 1 { ' disabled' } else { '' }
-	next_disabled := if p.page >= max_page { ' disabled' } else { '' }
+	prev_disabled := if page <= 1 { ' disabled' } else { '' }
+	next_disabled := if page >= max_page { ' disabled' } else { '' }
 	pager := '<div id="pager" hx-swap-oob="true">' +
-		'<button hx-post="/query" hx-vals=\'' + vals_json(p.page - 1, p) + '\'' + prev_disabled + '>上一页</button>' +
-		'<span>第 ${p.page} / ${max_page} 页 · 共 ${total} 条</span>' +
-		'<button hx-post="/query" hx-vals=\'' + vals_json(p.page + 1, p) + '\'' + next_disabled + '>下一页</button>' +
+		'<button hx-post="/query" hx-vals=\'' + vals_json(page - 1, p) + '\'' + prev_disabled + '>上一页</button>' +
+		'<span>第 ${page} / ${max_page} 页 · 共 ${total} 条</span>' +
+		'<button hx-post="/query" hx-vals=\'' + vals_json(page + 1, p) + '\'' + next_disabled + '>下一页</button>' +
 		'</div>'
 	return '<tbody id="tbody-zone" hx-swap-oob="innerHTML">' + trs + '</tbody>' + pager
 }
