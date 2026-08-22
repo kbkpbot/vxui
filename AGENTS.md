@@ -273,10 +273,10 @@ app.set_window_position(100, 100)
 app.set_window_title('My App')
 
 // Configure via WindowConfig
-app.window = vxui.WindowConfig{
-    width: 1200
+app.Context.config.window = vxui.WindowConfig{
+    width:  1200
     height: 800
-    resizable: true
+    title:  'My App' // applied to the page when a client connects
 }
 ```
 

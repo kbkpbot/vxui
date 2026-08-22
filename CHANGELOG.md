@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Security gates** — the WebSocket server now (1) rejects connections from
+  non-loopback interfaces unless `config.allow_remote = true`, and (2) enforces
+  `config.require_auth` on every regular message: a missing token is rejected with
+  1008 just like a wrong one. Previously the server bound all interfaces and
+  token-less messages sailed through — anyone on the LAN could invoke app routes.
+- **Client enumeration**: authenticated `get_clients` command replies `clients`
+  with connected ids; vxui-ws.js exposes `requestClients()` / `getClients()` plus a
+  `vxui:clients` event. run-js-playground's target dropdown is now populated for real.
+- **Window/page title**: `window.title` (or a customized `app_name`) is applied to
+  the page via `document.title` when a client connects.
+- **JS reconnect cap**: reconnection stops after `maxReconnectAttempts` (default 10)
+  and surfaces a persistent "reconnect failed" state + `vxui:reconnectFailed` event.
+
 ### Changed
 
 - **Routing: attribute-gated only** — methods without `@[...]` attributes are no longer
@@ -15,6 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compilation (string-returning helpers with custom parameters) or leak as hidden void
   routes. Tag your handlers explicitly (`@['/path']`, a verb, or both); see AGENTS.md.
   Examples `test` and `enchart` were migrated to explicit tags.
+- **Server callbacks re-derive their Context from the captured app on every event**
+  instead of capturing a second Context pointer — fixes routes silently returning 404
+  when the two pointers diverged (caught by the new WebSocket integration tests).
+- **Config honesty sweep**
+  - `LogConfig`: removed never-implemented `max_file_size`/`rotate_files`/
+    `show_timestamp`/`show_level`; `output` ('stderr' | 'stdout' | file path) is now
+    actually wired up
+  - `WindowConfig`: removed never-implemented `resizable`/`min_width`/`min_height`/
+    `frameless`/`transparent` and the `set_resizable()` setter; `set_window_title()`
+    now genuinely works (see title injection above)
+  - `BrowserConfig.preferred_path` is now honored by browser detection
+- **Heartbeat unification**: the odd text-`pong` reply to protocol-level pong frames is
+  gone; application liveness uses only the JSON cmd ping/pong
 - **Module Layout**: Moved all V sources from `src/` to the module root
   - Required by newer V compilers that no longer support `src/` as a virtual module root
   - Examples now compile again (`v run main.v` inside any `examples/*/`)

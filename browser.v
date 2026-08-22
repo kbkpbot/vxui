@@ -187,7 +187,7 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 	}
 
 	// Detect browser path based on platform
-	browser_path := find_browser_path()
+	browser_path := find_browser_path_with_preferred(browser_config.preferred_path)
 
 	if browser_path == '' {
 		return new_error_detail(VxuiError.browser_not_found, 'No supported browser found')
@@ -332,7 +332,13 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 }
 
 // find_browser_path finds browser path based on current platform
-fn find_browser_path() string {
+// find_browser_path finds browser path based on current platform.
+// `preferred` (BrowserConfig.preferred_path) wins when it exists on disk;
+// otherwise platform-specific candidates are probed in order.
+fn find_browser_path_with_preferred(preferred string) string {
+	if preferred != '' && os.exists(preferred) {
+		return preferred
+	}
 	$if linux {
 		return find_browser_path_linux()
 	} $else $if macos {
@@ -341,6 +347,10 @@ fn find_browser_path() string {
 		return find_browser_path_windows()
 	}
 	return ''
+}
+
+fn find_browser_path() string {
+	return find_browser_path_with_preferred('')
 }
 
 // find_browser_path_linux finds browser on Linux

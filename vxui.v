@@ -258,19 +258,17 @@ pub mut:
 	]
 }
 
-// WindowConfig holds window configuration
+// WindowConfig holds window configuration.
+// NOTE: only size/position/title are actually enforced by the browser launch;
+// the previous resizable/min-size/frameless fields never had any effect and
+// were removed (see CHANGELOG).
 pub struct WindowConfig {
 pub mut:
-	width       int  = 800
-	height      int  = 600
-	x           int  = -1 // -1 means center
-	y           int  = -1
-	min_width   int  = 100
-	min_height  int  = 100
-	resizable   bool = true
-	frameless   bool
-	transparent bool
-	title       string
+	width  int = 800
+	height int = 600
+	x      int = -1 // -1 means center
+	y      int = -1 // -1 means center
+	title  string // window/page title; falls back to config.app_name when set
 }
 
 // BrowserConfig holds browser startup configuration
@@ -296,22 +294,21 @@ pub mut:
 	block_duration int  = 30000 // Block duration in ms when limit exceeded
 }
 
-// LogConfig holds logging settings
+// LogConfig holds logging settings.
+// `output` accepts 'stderr' (default), 'stdout', or a file path.
+// The previous max_file_size/rotate_files/show_* fields never had any
+// effect and were removed (see CHANGELOG).
 pub struct LogConfig {
 pub mut:
-	level          log.Level = .info
-	output         string    = 'stderr' // 'stderr', 'stdout', or file path
-	max_file_size  int       = 10485760 // 10MB
-	rotate_files   int       = 5
-	show_timestamp bool      = true
-	show_level     bool      = true
+	level  log.Level = .info
+	output string    = 'stderr'
 }
 
 // Config is the unified configuration for vxui
 pub struct Config {
 pub mut:
 	// Application settings
-	app_name string = 'vxui-app'
+	app_name string = default_app_name
 
 	// Development settings
 	dev DevConfig // Development mode settings
@@ -324,6 +321,7 @@ pub mut:
 	// Security settings
 	token        string // Security token (auto-generated if empty)
 	require_auth bool = true // Require token authentication
+	allow_remote bool // Accept connections from non-loopback interfaces (default false)
 
 	// Client settings
 	multi_client bool // Allow multiple browser clients
@@ -378,6 +376,10 @@ pub mut:
 // =============================================================================
 
 // verb_strings maps string to Verb enum
+// default_app_name is the fallback window/page title marker; a user-changed
+// app_name (or an explicit window.title) is pushed to connected clients
+const default_app_name = 'vxui-app'
+
 const verb_strings = {
 	'get':    Verb.get
 	'post':   .post
@@ -454,10 +456,22 @@ fn init[T](mut app T) ! {
 	ctx.rate_counters = map[string]RateCounter{}
 	ctx.client_remove_chan = chan ClientRemoveMsg{cap: 100}
 
-	// Setup logger
+	// Setup logger (level + output destination)
 	ctx.logger.set_level(ctx.config.log.level)
+	match ctx.config.log.output {
+		'stderr' {
+			ctx.logger.set_output_stream(os.stderr())
+		}
+		'stdout', '' {
+			// library default writes to the console
+		}
+		else {
+			// treat anything else as a file path
+			ctx.logger.set_output_path(ctx.config.log.output)
+		}
+	}
 
-	ctx.ws = startup_ws_server(mut app, mut ctx, .ip, ctx.ws_port)!
+	ctx.ws = startup_ws_server(mut app, .ip, ctx.ws_port)!
 }
 
 // generate_token creates a random security token
@@ -483,15 +497,30 @@ fn generate_request_id() string {
 // WebSocket Server
 // =============================================================================
 
-// startup_ws_server starts the websocket server at `listen_port`
-fn startup_ws_server[T](mut app T, mut ctx &Context, family net.AddrFamily, listen_port int) !&websocket.Server {
+// startup_ws_server starts the websocket server at `listen_port`.
+// Callbacks derive the Context from the captured app on every invocation so
+// they can never observe a stale/aliased Context instance.
+fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&websocket.Server {
 	mut s := websocket.new_server(family, listen_port, '')
-	ping_interval_secs := ctx.config.ws_ping_interval_ms / 1000
-	s.set_ping_interval(if ping_interval_secs < 1 { 1 } else { ping_interval_secs })
+	s.set_ping_interval(1)
 
-	s.on_connect(fn [mut ctx] (mut s websocket.ServerClient) !bool {
+	s.on_connect(fn [mut app] [T](mut s websocket.ServerClient) !bool {
+		mut ctx := context_of(mut app)
 		ctx.trigger_event(EventType.client_connecting, '', 'Client connecting...', {}, none, none,
 			none)
+
+		// Loopback gate: the server binds all interfaces, so unless the user
+		// explicitly opted in, only local processes may connect.
+		if !ctx.config.allow_remote {
+			mut peer := '?'
+			if a := s.client.conn.sock.address() {
+				peer = a.str().all_before_last(':')
+			}
+			if !addr_is_loopback(peer) {
+				ctx.logger.warn('Rejecting non-loopback connection from ${peer} (set config.allow_remote = true to permit)')
+				return false
+			}
+		}
 
 		// Check client limit
 		ctx.mu.rlock()
@@ -511,116 +540,129 @@ fn startup_ws_server[T](mut app T, mut ctx &Context, family net.AddrFamily, list
 		return true
 	})!
 
-	s.on_message(fn [mut app, mut ctx] [T](mut ws websocket.Client, msg &websocket.Message) ! {
-		match msg.opcode {
-			.pong {
-				ws.write_string('pong')!
+	s.on_message(fn [mut app] [T](mut ws websocket.Client, msg &websocket.Message) ! {
+		mut ctx := context_of(mut app)
+		if msg.opcode == .pong {
+			// protocol-level pong: the websocket library answers control
+			// pings itself; nothing to do here. Application liveness uses
+			// the JSON cmd ping/pong below.
+			return
+		}
+		raw_message := json2.decode[json2.Any](msg.payload.bytestr())!
+		message := raw_message.as_map()
+		ctx.logger.debug('Received message: ${message}')
+
+		// Handle authentication
+		if cmd := message['cmd'] {
+			if cmd.str() == 'auth' {
+				ctx.handle_auth(mut ws, message) or {
+					auth_err := new_error_detail(.auth_failed, 'Auth failed: ${err}')
+					ctx.logger.error(auth_err.message)
+					ctx.trigger_event(EventType.error, '', auth_err.message, message, none, none,
+						auth_err)
+					ws.close(1008, 'Authentication failed')!
+				}
+				return
 			}
-			else {
-				raw_message := json2.decode[json2.Any](msg.payload.bytestr())!
-				message := raw_message.as_map()
-				ctx.logger.debug('Received message: ${message}')
+			if cmd.str() == 'js_result' {
+				ctx.handle_js_result(message)
+				return
+			}
+			if cmd.str() == 'pong' {
+				ctx.handle_pong(message)
+				return
+			}
+			if cmd.str() == 'client_close' {
+				// Client is closing, send removal request to channel
+				client_id := message['client_id'] or { json2.Any('') }.str()
+				ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
+				return
+			}
+		}
 
-				// Handle authentication
-				if cmd := message['cmd'] {
-					if cmd.str() == 'auth' {
-						ctx.handle_auth(mut ws, message) or {
-							auth_err := new_error_detail(.auth_failed, 'Auth failed: ${err}')
-							ctx.logger.error(auth_err.message)
-							ctx.trigger_event(EventType.error, '', auth_err.message, message, none,
-								none, auth_err)
-							ws.close(1008, 'Authentication failed')!
-						}
-						return
-					}
-					if cmd.str() == 'js_result' {
-						ctx.handle_js_result(message)
-						return
-					}
-					if cmd.str() == 'pong' {
-						ctx.handle_pong(message)
-						return
-					}
-					if cmd.str() == 'client_close' {
-						// Client is closing, send removal request to channel
-						client_id := message['client_id'] or { json2.Any('') }.str()
-						ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
-						return
-					}
+		// Verify token for regular messages. When require_auth is on
+		// (the default) a missing token is rejected just like a wrong
+		// one — previously messages without a token field sailed through.
+		if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
+			ctx.logger.warn('Unauthorized message rejected (missing or invalid token)')
+			ws.close(1008, 'Invalid token')!
+			return
+		}
+
+		// Authenticated utility command: enumerate connected clients
+		if cmd := message['cmd'] {
+			if cmd.str() == 'get_clients' {
+				mut ids := []json2.Any{}
+				for id in ctx.get_clients() {
+					ids << json2.Any(id)
 				}
+				mut resp := map[string]json2.Any{}
+				resp['cmd'] = json2.Any('clients')
+				resp['ids'] = json2.Any(ids)
+				ws.write(json2.encode(resp).bytes(), .text_frame)!
+				return
+			}
+		}
 
-				// Verify token for regular messages
-				if client_token := message['token'] {
-					if client_token.str() != ctx.config.token {
-						ctx.logger.warn('Invalid token from client')
-						ws.close(1008, 'Invalid token')!
-						return
-					}
-				}
+		if rpc_id := message['rpcID'] {
+			// Get client_id for rate limiting
+			client_id := ctx.find_client_id_by_connection(ws)
 
-				if rpc_id := message['rpcID'] {
-					// Get client_id for rate limiting
-					client_id := ctx.find_client_id_by_connection(ws)
-
-					// Check rate limit
-					if ctx.config.rate_limit.enabled && client_id != '' {
-						if !ctx.check_rate_limit(client_id) {
-							ctx.trigger_event(EventType.middleware_error, client_id,
-								'Rate limit exceeded', message, none, none, new_error_detail(.rate_limited,
-								'Rate limit exceeded'))
-							err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"rate_limited", "message":"Rate limit exceeded"}'
-							ws.write(err_resp.bytes(), .text_frame)!
-							return
-						}
-					}
-
-					// Build type-safe request
-					req := build_request(message, client_id)
-
-					// Execute middlewares
-					mut mctx := MiddlewareContext{
-						request:  req
-						response: Response{}
-					}
-
-					mut middleware_passed := true
-					for middleware in ctx.middlewares {
-						result := middleware(mut mctx)
-						if result != .continue_ {
-							middleware_passed = false
-							if result == .error {
-								ctx.trigger_event(EventType.middleware_error, client_id,
-									'Middleware rejected', message, req, mctx.response, mctx.err)
-							}
-							break
-						}
-					}
-
-					if !middleware_passed {
-						err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"middleware_rejected"}'
-						ws.write(err_resp.bytes(), .text_frame)!
-						return
-					}
-
-					// Trigger before_request event
-					ctx.trigger_event(EventType.before_request, client_id, '', message, req, none,
-						none)
-
-					// Handle message
-					response := handle_request(mut app, ctx, mctx.request, message)!
-
-					// Trigger after_request event
-					ctx.trigger_event(EventType.after_request, client_id, '', message, req,
-						response, none)
-
-					json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response.body)}}'
-					ws.write(json_response.bytes(), .text_frame)!
+			// Check rate limit
+			if ctx.config.rate_limit.enabled && client_id != '' {
+				if !ctx.check_rate_limit(client_id) {
+					ctx.trigger_event(EventType.middleware_error, client_id, 'Rate limit exceeded',
+						message, none, none, new_error_detail(.rate_limited, 'Rate limit exceeded'))
+					err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"rate_limited", "message":"Rate limit exceeded"}'
+					ws.write(err_resp.bytes(), .text_frame)!
+					return
 				}
 			}
+
+			// Build type-safe request
+			req := build_request(message, client_id)
+
+			// Execute middlewares
+			mut mctx := MiddlewareContext{
+				request:  req
+				response: Response{}
+			}
+
+			mut middleware_passed := true
+			for middleware in ctx.middlewares {
+				result := middleware(mut mctx)
+				if result != .continue_ {
+					middleware_passed = false
+					if result == .error {
+						ctx.trigger_event(EventType.middleware_error, client_id,
+							'Middleware rejected', message, req, mctx.response, mctx.err)
+					}
+					break
+				}
+			}
+
+			if !middleware_passed {
+				err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"middleware_rejected"}'
+				ws.write(err_resp.bytes(), .text_frame)!
+				return
+			}
+
+			// Trigger before_request event
+			ctx.trigger_event(EventType.before_request, client_id, '', message, req, none, none)
+
+			// Handle message
+			response := handle_request(mut app, ctx, mctx.request, message)!
+
+			// Trigger after_request event
+			ctx.trigger_event(EventType.after_request, client_id, '', message, req, response, none)
+
+			json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response.body)}}'
+			ws.write(json_response.bytes(), .text_frame)!
 		}
 	})
 
-	s.on_close(fn [mut ctx] (mut ws websocket.Client, code int, reason string) ! {
+	s.on_close(fn [mut app] [T](mut ws websocket.Client, code int, reason string) ! {
+		mut ctx := context_of(mut app)
 		ctx.logger.info('Client disconnected: code=${code}, reason=${reason}')
 
 		// Send removal request to channel (serialized processing)
@@ -734,6 +776,21 @@ fn (mut ctx Context) check_rate_limit(client_id string) bool {
 	return true
 }
 
+// addr_is_loopback reports whether the peer address is a loopback interface
+fn addr_is_loopback(addr string) bool {
+	return addr == '::1' || addr == '[::1]' || addr.starts_with('127.')
+}
+
+// message_token_valid decides whether a regular (non-cmd) message may pass.
+// With require_auth enabled (default) a missing token is a rejection, not a bypass.
+fn message_token_valid(message map[string]json2.Any, require_auth bool, token string) bool {
+	if !require_auth {
+		return true
+	}
+	t := message['token'] or { return false }
+	return t.str() == token
+}
+
 // handle_auth processes client authentication
 fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]json2.Any) ! {
 	client_token := message['token'] or { json2.Null{} }
@@ -766,6 +823,22 @@ fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]jso
 		response['js_sandbox'] = json2.encode(ctx.config.js_sandbox)
 	}
 	ws.write(json2.encode(response).bytes(), .text_frame)!
+
+	// Apply the configured window/page title on the freshly connected client
+	effective_title := if ctx.config.window.title != '' {
+		ctx.config.window.title
+	} else if ctx.config.app_name != default_app_name {
+		ctx.config.app_name
+	} else {
+		''
+	}
+	if effective_title != '' {
+		mut title_cmd := map[string]json2.Any{}
+		title_cmd['cmd'] = json2.Any('run_js')
+		title_cmd['js_id'] = json2.Any('title-${client_id}')
+		title_cmd['script'] = json2.Any("document.title = '${escape_js(effective_title)}'")
+		ws.write(json2.encode(title_cmd).bytes(), .text_frame)!
+	}
 }
 
 // handle_pong processes heartbeat pong responses
@@ -1490,11 +1563,6 @@ pub fn (mut ctx Context) set_window_position(x int, y int) {
 // set_window_title sets the window title
 pub fn (mut ctx Context) set_window_title(title string) {
 	ctx.config.window.title = title
-}
-
-// set_resizable sets whether the window can be resized
-pub fn (mut ctx Context) set_resizable(resizable bool) {
-	ctx.config.window.resizable = resizable
 }
 
 // set_js_sandbox configures JavaScript execution security

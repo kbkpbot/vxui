@@ -42,9 +42,20 @@
     document.getElementById('refresh-targets').addEventListener('click', function () {
       var sel = document.getElementById('target')
       var cur = sel.value
-      // 框架暂未暴露完整 client 列表给页面；保留“第一个窗口”默认项
-      sel.innerHTML = '<option value="">第一个窗口</option>'
-      sel.value = cur
+      document.body.addEventListener('vxui:clients', function h(e) {
+        document.body.removeEventListener('vxui:clients', h)
+        var ids = e.detail.ids || []
+        sel.innerHTML = '<option value="">第一个窗口</option>' +
+          ids.map(function (id) {
+            return '<option value="' + id + '">' + id + '</option>'
+          }).join('')
+        if (ids.indexOf(cur) >= 0 || cur === '') { sel.value = cur }
+      })
+      window.vxuiWs.requestClients()
+    })
+    // 首次认证后自动拉取一次目标列表
+    document.body.addEventListener('vxui:authenticated', function () {
+      setTimeout(function () { window.vxuiWs.requestClients() }, 200)
     })
   </script>
 </body>

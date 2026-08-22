@@ -1,6 +1,7 @@
 module vxui
 
 import time
+import net.websocket
 import x.json2
 
 // =============================================================================
@@ -217,17 +218,15 @@ fn test_window_config_defaults() {
 	assert config.height == 600
 	assert config.x == -1
 	assert config.y == -1
-	assert config.resizable == true
 }
 
 fn test_window_config_custom() {
 	config := WindowConfig{
-		width:     1920
-		height:    1080
-		x:         100
-		y:         50
-		resizable: false
-		title:     'My App'
+		width:  1920
+		height: 1080
+		x:      100
+		y:      50
+		title:  'My App'
 	}
 	assert config.width == 1920
 	assert config.height == 1080
@@ -278,8 +277,6 @@ fn test_log_config_defaults() {
 	config := LogConfig{}
 	assert config.level == .info
 	assert config.output == 'stderr'
-	assert config.max_file_size == 10485760
-	assert config.rotate_files == 5
 }
 
 // =============================================================================
@@ -382,12 +379,6 @@ fn test_set_window_title() {
 	mut ctx := Context{}
 	ctx.set_window_title('My Application')
 	assert ctx.config.window.title == 'My Application'
-}
-
-fn test_set_resizable() {
-	mut ctx := Context{}
-	ctx.set_resizable(false)
-	assert ctx.config.window.resizable == false
 }
 
 fn test_set_js_sandbox() {
@@ -552,8 +543,9 @@ fn test_route_struct() {
 // RoutingTestApp exercises attribute-gated route registration:
 // helpers WITHOUT attributes must never become routes, and their signatures
 // must not influence compilation of fire_call/generate_routes.
+@[heap]
 struct RoutingTestApp {
-	Context
+	vxui.Context
 mut:
 	calls int
 }
@@ -595,6 +587,141 @@ fn test_fire_call_rejects_untagged_method() {
 		'blocked'
 	}
 	assert res == 'blocked'
+}
+
+// =============================================================================
+// Security Gate Tests
+// =============================================================================
+
+fn test_addr_is_loopback() {
+	assert addr_is_loopback('127.0.0.1')
+	assert addr_is_loopback('127.9.9.9')
+	assert addr_is_loopback('::1')
+	assert addr_is_loopback('[::1]')
+	assert !addr_is_loopback('192.168.1.10')
+	assert !addr_is_loopback('10.0.0.5')
+	assert !addr_is_loopback('')
+	assert !addr_is_loopback('?')
+}
+
+fn test_message_token_valid() {
+	msg_with := {'token': json2.Any('secret'), 'rpcID': json2.Any(i64(1))}
+	msg_without := {'rpcID': json2.Any(i64(1))}
+	msg_wrong := {'token': json2.Any('nope')}
+
+	// default posture: auth required
+	assert message_token_valid(msg_with, true, 'secret')
+	assert !message_token_valid(msg_without, true, 'secret')
+	assert !message_token_valid(msg_wrong, true, 'secret')
+	// explicit opt-out keeps working
+	assert message_token_valid(msg_without, false, 'secret')
+}
+
+// =============================================================================
+// WebSocket Integration Tests (real client against the real server loop)
+// =============================================================================
+
+fn new_ws_test_app(port u16) !&RoutingTestApp {
+	mut app := &RoutingTestApp{}
+	app.ws_port = port
+	app.config.token = 'it-token'
+	app.config.close_timer_ms = 60_000
+	app.clients = map[string]Client{}
+	app.js_callbacks = map[string]chan string{}
+	app.event_handlers = map[EventType][]EventHandler{}
+	app.middlewares = []Middleware{}
+	app.rate_counters = map[string]RateCounter{}
+	app.client_remove_chan = chan ClientRemoveMsg{cap: 8}
+	app.routes = generate_routes(app)!
+	return app
+}
+
+// wait_for polls cond up to timeout_ms; returns true once satisfied
+fn wait_for(timeout_ms int, cond fn () bool) bool {
+	deadline := time.now().unix_milli() + i64(timeout_ms)
+	for time.now().unix_milli() < deadline {
+		if cond() {
+			return true
+		}
+		time.sleep(10 * time.millisecond)
+	}
+	return cond()
+}
+
+fn test_handle_request_matches_tagged_route_directly() {
+	mut app := new_ws_test_app(0)!
+	mut ctx := unsafe { &app.Context }
+	req := Request{
+		path:      '/tagged'
+		verb:      .get
+		raw_message: {}
+	}
+	resp := handle_request(mut app, ctx, req, {})!
+	assert resp.status == 200
+	assert resp.body == 'tagged-ok'
+}
+
+fn test_websocket_integration_auth_rpc_and_reject() {
+	port := get_free_port()!
+	mut app := new_ws_test_app(u16(port))!
+	mut ctx := unsafe { &app.Context }
+
+	mut after_req := chan string{cap: 8}
+	ctx.on_event(.after_request, fn [mut after_req, mut ctx] (e EventData) {
+		body := if r := e.response { r.body } else { '<no response>' }
+		mut keys := []string{}
+		for k, _ in ctx.routes {
+			keys << '${k}=${ctx.routes[k].path}'
+		}
+		rp := if r := e.request { '${r.path}|${r.verb}|${r.id}' } else { '<no req>' }
+		after_req <- 'routes[${keys.join(',')}|n=${ctx.routes.len}] req=${rp} body=${body}'
+	})
+
+	startup_ws_server(mut app, .ip, port)!
+	// production ordering (run() does the same): routes are generated after
+	// the server is up, mirroring init→startup→generate_routes
+	app.routes = generate_routes(app)!
+
+	spawn fn [mut ctx] () {
+		ctx.process_client_removals()
+	}()
+
+	// --- 1. RPC message WITHOUT a token field must be rejected and closed
+	mut cl_bad := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
+	cl_bad.connect()!
+	cl_bad.write_string('{"rpcID":1,"verb":"get","path":"/tagged"}')!
+	time.sleep(300 * time.millisecond)
+	assert after_req.len == 0 // handler never ran for the rejected message
+
+	// --- 2. auth handshake registers the client
+	mut cl_ok := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
+	cl_ok.connect()!
+	cl_ok.write_string('{"cmd":"auth","token":"it-token"}')!
+	assert wait_for(2000, fn [ctx] () bool {
+		return ctx.clients.len == 1
+	})
+
+	// --- 3. authenticated rpcID roundtrip reaches the handler
+	cl_ok.write_string('{"rpcID":2,"token":"it-token","verb":"get","path":"/tagged"}')!
+	select {
+		payload := <-after_req {
+			dump(payload)
+			assert payload.contains('body=tagged-ok'), 'unexpected: ${payload}'
+		}
+		3 * time.second {
+			assert false, 'after_request never fired for authenticated rpc'
+		}
+	}
+	assert app.calls >= 1
+
+	// --- 4. wrong token on an open socket gets it rejected too
+	cl_ok.write_string('{"rpcID":3,"token":"wrong","verb":"get","path":"/tagged"}')!
+	time.sleep(300 * time.millisecond)
+	assert after_req.len == 0
+
+	cl_ok.close(1000, 'done') or {}
+	cl_bad.close(1000, 'done') or {}
+	ctx.ws.free()
 }
 
 fn test_parse_attrs_empty() {
@@ -1159,10 +1286,9 @@ fn test_config_full_setup() {
 		js_timeout:          3000
 		js_poll_ms:          20
 		window:              WindowConfig{
-			width:     1920
-			height:    1080
-			resizable: true
-			title:     'Test App'
+			width:  1920
+			height: 1080
+			title:  'Test App'
 		}
 		browser:             BrowserConfig{
 			headless:   true

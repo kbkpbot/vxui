@@ -38,6 +38,7 @@ Usage:
     var token = null
     var heartbeatInterval = null
     var lastPongTime = null
+    var cachedClients = []
 
     // Configuration
     var config = {
@@ -45,6 +46,7 @@ Usage:
         connectTimeout: 5000,
         heartbeatInterval: 30000,  // 30 seconds
         pongTimeout: 60000,        // 60 seconds without pong = stale connection
+        maxReconnectAttempts: 10,  // <=0 means retry forever
         debug: false,
         // UI notification settings
         showConnectionStatus: true,  // Show connection status overlay
@@ -169,6 +171,15 @@ Usage:
             return maxDelay * Math.random()
         }
         return 1000
+    }
+
+    /**
+     * Whether another reconnect attempt should be made.
+     * After config.maxReconnectAttempts failures the UI settles into a
+     * persistent "reconnect failed" state instead of retrying forever.
+     */
+    function canReconnect() {
+        return config.maxReconnectAttempts <= 0 || retryCount < config.maxReconnectAttempts
     }
 
     // =============================================================================
@@ -574,6 +585,11 @@ Usage:
                 startHeartbeat()
                 processQueue()
                 
+                // Prime the cached client list
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ cmd: 'get_clients', token: token }))
+                }
+                
                 // Show connected status briefly
                 flashStatus('Connected', 'connected', 1500)
                 
@@ -606,6 +622,13 @@ Usage:
                 // Server acknowledged our ping
                 lastPongTime = Date.now()
                 log('Received pong from server')
+                break
+            
+            case 'clients':
+                // Server-side client list (response to get_clients)
+                cachedClients = (msg.ids || []).map(function(x) { return String(x) })
+                api.triggerEvent(document.body, 'vxui:clients', { ids: cachedClients })
+                log('Received client list:', cachedClients)
                 break
             
             case 'reload':
@@ -754,6 +777,13 @@ Usage:
 
                 // Auto reconnect for abnormal closure
                 if ([1006, 1012, 1013].indexOf(e.code) >= 0) {
+                    if (!canReconnect()) {
+                        showStatus('Reconnect failed — reload the page', 'error')
+                        api.triggerEvent(document.body, 'vxui:reconnectFailed', {
+                            attempts: retryCount
+                        })
+                        return
+                    }
                     var delay = getReconnectDelay()
                     log('Reconnecting in', delay, 'ms')
                     setTimeout(function() {
@@ -1057,6 +1087,15 @@ Usage:
         setSandboxConfig: function(newConfig) {
             Object.assign(jsSandbox, newConfig)
         },
+        // Client enumeration: ask the backend for connected client ids.
+        // The reply arrives asynchronously via the 'vxui:clients' event;
+        // getClients() returns the most recently received list.
+        requestClients: function() {
+            if (socket && socket.readyState === WebSocket.OPEN && isAuthenticated) {
+                socket.send(JSON.stringify({ cmd: 'get_clients', token: token }))
+            }
+        },
+        getClients: function() { return cachedClients },
         runJs: function(script) {
             var result = executeJsSafely(script)
             return result.error ? { error: result.error } : { result: result.result }

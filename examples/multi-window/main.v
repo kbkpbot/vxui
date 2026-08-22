@@ -81,7 +81,6 @@ fn (mut app App) open_settings(message map[string]json2.Any) string {
 			width:     340
 			height:    480
 			title:     'Settings'
-			resizable: false
 		}) or {
 			eprintln('Failed to open settings: ${err}')
 		}
@@ -639,7 +638,6 @@ fn main() {
 		width:     800
 		height:    550
 		title:     'Multi-Window Demo'
-		resizable: true
 	}
 	// Enable Chrome remote debugging for development (connect via localhost:9222)
 	app.Context.config.browser.remote_debug_port = 9222
