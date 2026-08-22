@@ -57,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Rate limiter**: a completed punishment block now grants a fresh window — previously
+  the leftover over-limit count re-blocked the client in short pulses until the original
+  window slid, making `block_duration` meaningless
+- **JS connect timeout**: stalled WebSocket handshakes now abort after
+  `config.connectTimeout` (ms) and fall into the reconnect path instead of freezing the
+  message queue forever; `connectTimeout` was previously declared but never used
 - **Lock hygiene**: `client_disconnected` events now fire AFTER releasing the context
   write lock in both the timeout sweep and the removal channel loop — handlers can call
   back into Context APIs (`broadcast`, `get_clients`, ...) and do network IO without

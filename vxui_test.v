@@ -280,6 +280,70 @@ fn test_log_config_defaults() {
 }
 
 // =============================================================================
+// Rate Limit Tests
+// =============================================================================
+
+fn test_rate_limit_blocks_after_max_requests() {
+	mut ctx := new_test_context()
+	ctx.config.rate_limit = RateLimitConfig{
+		enabled:        true
+		max_requests:   3
+		window_ms:      60_000
+		block_duration: 30_000
+	}
+	assert ctx.check_rate_limit('c1')
+	assert ctx.check_rate_limit('c1')
+	assert ctx.check_rate_limit('c1')
+	// 4th request inside the window is blocked
+	assert !ctx.check_rate_limit('c1')
+	// other clients are unaffected
+	assert ctx.check_rate_limit('c2')
+}
+
+fn test_rate_limit_block_expires() {
+	mut ctx := new_test_context()
+	ctx.config.rate_limit = RateLimitConfig{
+		enabled:        true
+		max_requests:   1
+		window_ms:      60_000
+		block_duration: 40
+	}
+	assert ctx.check_rate_limit('c1')
+	assert !ctx.check_rate_limit('c1')
+	time.sleep(70 * time.millisecond)
+	// block duration elapsed -> allowed again
+	assert ctx.check_rate_limit('c1')
+}
+
+fn test_rate_limit_window_reset() {
+	mut ctx := new_test_context()
+	ctx.config.rate_limit = RateLimitConfig{
+		enabled:        true
+		max_requests:   2
+		window_ms:      60
+		block_duration: 5_000
+	}
+	assert ctx.check_rate_limit('c1')
+	assert ctx.check_rate_limit('c1')
+	time.sleep(90 * time.millisecond)
+	// window slid -> fresh budget
+	assert ctx.check_rate_limit('c1')
+	assert ctx.check_rate_limit('c1')
+	assert !ctx.check_rate_limit('c1')
+}
+
+fn test_rate_limit_zero_max_never_blocks() {
+	mut ctx := new_test_context()
+	ctx.config.rate_limit = RateLimitConfig{
+		enabled:      true
+		max_requests: 0
+	}
+	for _ in 0 .. 50 {
+		assert ctx.check_rate_limit('c1')
+	}
+}
+
+// =============================================================================
 // Client Tests
 // =============================================================================
 
@@ -545,7 +609,7 @@ fn test_route_struct() {
 // must not influence compilation of fire_call/generate_routes.
 @[heap]
 struct RoutingTestApp {
-	vxui.Context
+	Context
 mut:
 	calls int
 }
@@ -605,9 +669,16 @@ fn test_addr_is_loopback() {
 }
 
 fn test_message_token_valid() {
-	msg_with := {'token': json2.Any('secret'), 'rpcID': json2.Any(i64(1))}
-	msg_without := {'rpcID': json2.Any(i64(1))}
-	msg_wrong := {'token': json2.Any('nope')}
+	msg_with := {
+		'token': json2.Any('secret')
+		'rpcID': json2.Any(i64(1))
+	}
+	msg_without := {
+		'rpcID': json2.Any(i64(1))
+	}
+	msg_wrong := {
+		'token': json2.Any('nope')
+	}
 
 	// default posture: auth required
 	assert message_token_valid(msg_with, true, 'secret')
@@ -652,8 +723,8 @@ fn test_handle_request_matches_tagged_route_directly() {
 	mut app := new_ws_test_app(0)!
 	mut ctx := unsafe { &app.Context }
 	req := Request{
-		path:      '/tagged'
-		verb:      .get
+		path:        '/tagged'
+		verb:        .get
 		raw_message: {}
 	}
 	resp := handle_request(mut app, ctx, req, {})!

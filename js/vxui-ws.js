@@ -39,6 +39,7 @@ Usage:
     var heartbeatInterval = null
     var lastPongTime = null
     var cachedClients = []
+    var connectTimeoutTimer = null
 
     // Configuration
     var config = {
@@ -750,9 +751,22 @@ Usage:
             // Show connecting status
             showStatus('Connecting...', 'connecting')
 
+            // Abort stalled handshakes: without this a hung TCP connect keeps
+            // the queue frozen forever (config.connectTimeout, ms)
+            clearTimeout(connectTimeoutTimer)
+            connectTimeoutTimer = setTimeout(function () {
+                if (!socket || socket.readyState !== WebSocket.OPEN) {
+                    log('Connect timeout after', config.connectTimeout, 'ms')
+                    try { if (socket) { socket.close() } } catch (e2) { /* noop */ }
+                    socket = null
+                    isConnecting = false
+                }
+            }, config.connectTimeout)
+
             socket.onopen = function(e) {
                 log('WebSocket connected')
                 isConnecting = false
+                clearTimeout(connectTimeoutTimer)
                 retryCount = 0
                 socketWrapper = { socket: socket }
                 
@@ -766,6 +780,7 @@ Usage:
                 log('WebSocket closed', e.code, e.reason)
                 isConnecting = false
                 isAuthenticated = false
+                clearTimeout(connectTimeoutTimer)
                 socket = null
                 socketWrapper = null
                 stopHeartbeat()

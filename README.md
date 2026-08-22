@@ -265,6 +265,28 @@ v run main.v
 
 ## ✨ Features
 
+### Security Model
+
+The WebSocket server listens on `localhost` semantics by default and every
+request is token-authenticated:
+
+- A random token is generated per run and passed to the page via URL; clients
+  must present it (`require_auth = true` is the default — messages without a
+  valid token are disconnected with code 1008)
+- Connections from **non-loopback interfaces are rejected** unless you
+  explicitly opt in:
+
+```v
+fn main() {
+    mut app := App{}
+    // Allow LAN/remote browsers to connect (default: loopback only)
+    app.config.allow_remote = true
+    // Optional: pin the token instead of the auto-generated one
+    // app.config.token = 'my-secret'
+    vxui.run(mut app, './ui/index.html')!
+}
+```
+
 ### Execute JavaScript from Backend
 
 Use `run_js()` to execute JavaScript in the browser and get results:

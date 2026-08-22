@@ -755,8 +755,12 @@ fn (mut ctx Context) check_rate_limit(client_id string) bool {
 		return false
 	}
 
-	// Reset window if expired
-	if now.unix_milli() - counter.window_start.unix_milli() > ctx.config.rate_limit.window_ms {
+	// Reset window if it slid past its size, or if a punishment block just
+	// completed — otherwise the leftover over-limit count would re-block the
+	// client in short pulses until the original window finally slid.
+	if now.unix_milli() - counter.window_start.unix_milli() > ctx.config.rate_limit.window_ms
+		|| (!counter.blocked_until.is_zero()
+		&& now.unix_milli() >= counter.blocked_until.unix_milli()) {
 		counter.count = 0
 		counter.window_start = now
 	}
