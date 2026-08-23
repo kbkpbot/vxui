@@ -334,6 +334,10 @@ pub mut:
 
 	// Client settings
 	multi_client bool // Allow multiple browser clients
+	// When multi_client is off, let a NEW successful authentication evict
+	// stale sessions instead of letting a restored/crashed browser tab hold
+	// the single slot forever.
+	evict_on_new bool
 	max_clients  int = 10 // Maximum concurrent clients (0 = unlimited)
 	rate_limit   RateLimitConfig // Rate limiting settings
 
@@ -537,7 +541,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		client_count := ctx.clients.len
 		ctx.mu.runlock()
 
-		if !ctx.config.multi_client && client_count > 0 {
+		if !ctx.config.multi_client && !ctx.config.evict_on_new && client_count > 0 {
 			ctx.logger.warn('Rejecting connection: multi_client is disabled')
 			return false
 		}
@@ -851,6 +855,25 @@ fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]jso
 	}
 	if client_token.str() != ctx.config.token {
 		return new_error_detail(.auth_invalid_token, 'invalid token')
+	}
+
+	// evict_on_new: a fresh successful auth takes over the single client
+	// slot; older sessions are closed so a restored tab cannot lock out
+	// the real page.
+	if ctx.config.evict_on_new && !ctx.config.multi_client {
+		current_id := ctx.find_client_id_by_connection(ws)
+		ctx.mu.rlock()
+		mut stale_ids := []string{}
+		for id, _ in ctx.clients {
+			if id != current_id {
+				stale_ids << id
+			}
+		}
+		ctx.mu.runlock()
+		for id in stale_ids {
+			ctx.logger.info('Evicting stale client ${id} for new session')
+			ctx.close_client(id) or {}
+		}
 	}
 
 	client_id := generate_client_id()

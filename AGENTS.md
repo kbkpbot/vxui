@@ -266,6 +266,16 @@ app.broadcast('<div hx-swap-oob="true">Server message</div>')!
 app.close_client(client_id)!
 ```
 
+### Single-Slot Takeover
+
+```v
+app.multi_client = false
+app.config.evict_on_new = true // fresh auth evicts stale sessions
+```
+
+Without this, a crash-restored browser tab holding the old session blocks
+every new connection when `multi_client` is disabled.
+
 ### Window Management API
 
 ```v

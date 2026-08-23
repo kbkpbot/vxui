@@ -896,6 +896,62 @@ fn test_post_js_is_fire_and_forget_and_leaks_no_callback() {
 	ctx.ws.free()
 }
 
+fn test_evict_on_new_lets_fresh_auth_replace_stale_session() {
+	port := get_free_port()!
+	mut app := new_ws_test_app(u16(port))!
+	mut ctx := unsafe { &app.Context }
+	app.config.multi_client = false
+	app.config.evict_on_new = true
+	startup_ws_server(mut app, .ip, port)!
+	spawn fn [mut ctx] () {
+		ctx.process_client_removals()
+	}()
+
+	// First (soon-stale) session
+	mut cl_a := websocket.new_client('ws://localhost:${port}/echo',
+		websocket.ClientOpt{
+			read_timeout: 2 * time.second
+		})!
+	cl_a.connect()!
+	cl_a.write_string('{"cmd":"auth","token":"it-token"}')!
+	assert wait_for(2000, fn [ctx] () bool {
+		return ctx.clients.len == 1
+	})
+	first_id := ctx.get_clients()[0]
+
+	// Crash-recovery style reconnect with the same token takes over the slot
+	mut cl_b := websocket.new_client('ws://localhost:${port}/echo',
+		websocket.ClientOpt{
+			read_timeout: 2 * time.second
+		})!
+	cl_b.connect()!
+	cl_b.write_string('{"cmd":"auth","token":"it-token"}')!
+	assert wait_for(3000, fn [ctx, first_id] () bool {
+		if ctx.clients.len != 1 {
+			return false
+		}
+		for id, _ in ctx.clients {
+			return id != first_id
+		}
+		return false
+	}), 'fresh auth must evict the stale session'
+
+	// The stale socket was closed by the server
+	mut stale_closed := false
+	for _ in 0 .. 40 {
+		cl_a.read_next_message() or {
+			stale_closed = true
+			break
+		}
+		time.sleep(25 * time.millisecond)
+	}
+	assert stale_closed, 'evicted client should observe a close/error'
+
+	cl_a.close(1000, 'done') or {}
+	cl_b.close(1000, 'done') or {}
+	ctx.ws.free()
+}
+
 fn test_parse_attrs_empty() {
 	verbs, path := parse_attrs('test', []) or {
 		assert false
