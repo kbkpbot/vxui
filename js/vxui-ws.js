@@ -305,6 +305,9 @@ Usage:
         if (statusElement) {
             statusElement.style.opacity = '0'
             statusElement.style.transform = 'translateY(-10px)'
+            // An opacity:0 element with pointer-events:auto would still
+            // swallow every click over it — park it fully out of the way.
+            statusElement.style.pointerEvents = 'none'
         }
     }
 

@@ -31,9 +31,12 @@ fn esc(s string) string {
 	return s.replace_each(['&', '&amp;', '<', '&lt;', '>', '&gt;', '"', '&quot;', "'", '&#x27;'])
 }
 
-// bubble renders one chat bubble element
+// bubble renders one chat bubble element.
+// Each bubble MUST carry hx-swap-oob="beforeend:#messages": the frontend
+// oob_update handler only inserts elements marked with hx-swap-oob — bare
+// fragments are silently dropped and messages would never appear.
 fn bubble(kind string, text string) string {
-	return '<div class="msg ${kind}">${text}</div>'
+	return '<div class="msg ${kind}" hx-swap-oob="beforeend:#messages">${text}</div>'
 }
 
 // users_fragment renders the OOB online-user panel
