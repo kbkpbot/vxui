@@ -16,7 +16,7 @@ mut:
 }
 
 @['/click']
-fn (mut app App) click(message map[string]json2.Any) string {
+fn (mut app App) click(_ map[string]json2.Any) string {
 	app.counter++
 	return '<div id="result" hx-swap-oob="true">Clicked ${app.counter} times!</div>'
 }

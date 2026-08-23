@@ -23,13 +23,13 @@ mut:
 
 // Index handler - renders main display window
 @['/']
-fn (mut app App) index(message map[string]json2.Any) string {
+fn (mut app App) index(_ map[string]json2.Any) string {
 	return app.render_main_window()
 }
 
 // Settings handler - renders settings window
 @['/settings']
-fn (mut app App) settings(message map[string]json2.Any) string {
+fn (mut app App) settings(_ map[string]json2.Any) string {
 	return app.render_settings_window()
 }
 
@@ -71,7 +71,7 @@ fn (mut app App) update_settings(message map[string]json2.Any) string {
 
 // Open new settings window
 @['/open-settings']
-fn (mut app App) open_settings(message map[string]json2.Any) string {
+fn (mut app App) open_settings(_ map[string]json2.Any) string {
 	port := app.Context.get_port()
 	token := app.Context.get_token()
 

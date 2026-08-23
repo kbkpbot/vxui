@@ -32,7 +32,7 @@ fn (mut app App) init_upload_dir() {
 
 // index serves the main page
 @['/']
-fn (mut app App) index(message map[string]json2.Any) string {
+fn (mut app App) index(_ map[string]json2.Any) string {
 	return app.render_file_list()
 }
 

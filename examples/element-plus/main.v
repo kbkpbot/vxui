@@ -96,7 +96,7 @@ fn map_button_type(t string) string {
 }
 
 @['/button/loading']
-fn (mut app App) button_loading(message map[string]json2.Any) string {
+fn (mut app App) button_loading(_ map[string]json2.Any) string {
 	app.show_message('Loading started...', 'info')
 	app.logger.info('Loading button clicked')
 	return ''
@@ -208,7 +208,7 @@ fn (mut app App) tag_close(message map[string]json2.Any) string {
 // =============================================================================
 
 @['/progress/complete']
-fn (mut app App) progress_complete(message map[string]json2.Any) string {
+fn (mut app App) progress_complete(_ map[string]json2.Any) string {
 	app.show_notification('Progress Complete', 'Task finished successfully!', 'success')
 	app.logger.info('Progress completed!')
 	return ''
@@ -238,7 +238,7 @@ fn (mut app App) table_add(message map[string]json2.Any) string {
 }
 
 @['/table/clear']
-fn (mut app App) table_clear(message map[string]json2.Any) string {
+fn (mut app App) table_clear(_ map[string]json2.Any) string {
 	app.show_message('Table cleared', 'warning')
 	app.logger.info('Table cleared')
 	return ''
@@ -261,7 +261,7 @@ fn (mut app App) message_show(message map[string]json2.Any) string {
 // =============================================================================
 
 @['/dialog/confirm']
-fn (mut app App) dialog_confirm(message map[string]json2.Any) string {
+fn (mut app App) dialog_confirm(_ map[string]json2.Any) string {
 	app.show_notification('Dialog Confirmed', 'Your action was recorded by the backend!',
 		'success')
 	app.logger.info('Dialog confirmed')

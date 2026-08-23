@@ -63,7 +63,7 @@ fn (mut app App) edit(message map[string]json2.Any) string {
 }
 
 @['/cancel']
-fn (mut app App) cancel(message map[string]json2.Any) string {
+fn (mut app App) cancel(_ map[string]json2.Any) string {
 	app.logger.info("I'm cancel function!")
 	app.cnt++
 	source := 'cancel'

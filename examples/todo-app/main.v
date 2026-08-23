@@ -22,7 +22,7 @@ mut:
 
 // index serves the main page
 @['/']
-fn (mut app App) index(message map[string]json2.Any) string {
+fn (mut app App) index(_ map[string]json2.Any) string {
 	return app.render_todo_list()
 }
 
@@ -82,7 +82,7 @@ fn (mut app App) delete(message map[string]json2.Any) string {
 
 // clear_completed removes all completed items
 @['/clear']
-fn (mut app App) clear_completed(message map[string]json2.Any) string {
+fn (mut app App) clear_completed(_ map[string]json2.Any) string {
 	mut new_todos := []TodoItem{}
 	for item in app.todos {
 		if !item.completed {

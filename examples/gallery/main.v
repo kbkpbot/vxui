@@ -81,19 +81,19 @@ fn main() {
 // =============================================================================
 
 @['/button/click']
-fn (mut app App) button_click(message map[string]json2.Any) string {
+fn (mut app App) button_click(_ map[string]json2.Any) string {
 	app.notify('Button clicked!', 'info')
 	return '<span id="btn-result" hx-swap-oob="true">Clicked at ${time.now().unix()}</span>'
 }
 
 @['/button/primary']
-fn (mut app App) button_primary(message map[string]json2.Any) string {
+fn (mut app App) button_primary(_ map[string]json2.Any) string {
 	app.notify('Primary action executed', 'success')
 	return ''
 }
 
 @['/button/danger']
-fn (mut app App) button_danger(message map[string]json2.Any) string {
+fn (mut app App) button_danger(_ map[string]json2.Any) string {
 	app.notify('Dangerous action!', 'error')
 	return ''
 }
@@ -157,7 +157,7 @@ fn (mut app App) form_slider(message map[string]json2.Any) string {
 }
 
 @['/form/toggle']
-fn (mut app App) form_toggle(message map[string]json2.Any) string {
+fn (mut app App) form_toggle(_ map[string]json2.Any) string {
 	app.toggle = !app.toggle
 	active_class := if app.toggle { 'active' } else { '' }
 	text := if app.toggle { 'ON' } else { 'OFF' }
@@ -169,13 +169,13 @@ fn (mut app App) form_toggle(message map[string]json2.Any) string {
 // =============================================================================
 
 @['/progress/start']
-fn (mut app App) progress_start(message map[string]json2.Any) string {
+fn (mut app App) progress_start(_ map[string]json2.Any) string {
 	app.progress = 0
 	return app.render_progress()
 }
 
 @['/progress/increment']
-fn (mut app App) progress_increment(message map[string]json2.Any) string {
+fn (mut app App) progress_increment(_ map[string]json2.Any) string {
 	app.progress = if app.progress >= 100 { 0 } else { app.progress + 10 }
 	return app.render_progress()
 }
@@ -209,12 +209,12 @@ fn (app App) render_tabs() string {
 // =============================================================================
 
 @['/table/refresh']
-fn (mut app App) table_refresh(message map[string]json2.Any) string {
+fn (mut app App) table_refresh(_ map[string]json2.Any) string {
 	return app.render_table()
 }
 
 @['/table/add']
-fn (mut app App) table_add(message map[string]json2.Any) string {
+fn (mut app App) table_add(_ map[string]json2.Any) string {
 	id := if app.items.len > 0 { app.items.last().id + 1 } else { 1 }
 	statuses := ['active', 'pending', 'inactive']
 	status := statuses[rand.int_in_range(0, 3) or { 0 }]
@@ -260,7 +260,7 @@ fn (app App) render_table() string {
 // =============================================================================
 
 @['/modal/open']
-fn (mut app App) modal_open(message map[string]json2.Any) string {
+fn (mut app App) modal_open(_ map[string]json2.Any) string {
 	return '<div id="modal-container" hx-swap-oob="true">
 		<div class="modal-backdrop"></div>
 		<div class="modal">
@@ -280,7 +280,7 @@ fn (mut app App) modal_open(message map[string]json2.Any) string {
 }
 
 @['/modal/close']
-fn (mut app App) modal_close(message map[string]json2.Any) string {
+fn (mut app App) modal_close(_ map[string]json2.Any) string {
 	app.notify('Modal closed', 'info')
 	return '<div id="modal-container" hx-swap-oob="true"></div>'
 }
@@ -312,7 +312,7 @@ fn (mut app App) notify_show(message map[string]json2.Any) string {
 }
 
 @['/notify/clear']
-fn (mut app App) notify_clear(message map[string]json2.Any) string {
+fn (mut app App) notify_clear(_ map[string]json2.Any) string {
 	app.notifications = []
 	return '<div id="notifications" hx-swap-oob="true"></div>'
 }
