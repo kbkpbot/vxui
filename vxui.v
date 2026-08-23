@@ -571,6 +571,24 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 			}
 		}
 
+		// Application-level heartbeats carry no token on older cached
+		// vxui-ws.js copies; answer them BEFORE the token gate so a session
+		// can never be killed by its own keep-alive mechanism. Liveness
+		// bookkeeping still requires a valid token.
+		if cmd := message['cmd'] {
+			if cmd.str() == 'ping' {
+				if message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
+					ctx.handle_pong(message)
+				}
+				mut pong := map[string]json2.Any{}
+				pong['cmd'] = json2.Any('pong')
+				pong['client_id'] = message['client_id'] or { json2.Any('') }
+				pong['timestamp'] = json2.Any(time.now().unix_milli())
+				ws.write(json2.encode(pong).bytes(), .text_frame)!
+				return
+			}
+		}
+
 		// Verify token for every non-auth message. When require_auth is on
 		// (the default) a missing token is rejected just like a wrong one.
 		if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {

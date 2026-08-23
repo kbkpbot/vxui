@@ -811,6 +811,56 @@ fn test_websocket_integration_auth_rpc_and_reject() {
 	ctx.ws.free()
 }
 
+// read_text_until reads text frames until one whose payload satisfies `want`,
+// skipping protocol-level control frames. Fails after ~2s.
+fn read_text_until(mut cl websocket.Client, want fn (string) bool) !string {
+	for _ in 0 .. 40 {
+		msg := cl.read_next_message()!
+		if msg.opcode == .text_frame {
+			s := msg.payload.bytestr()
+			if want(s) {
+				return s
+			}
+		}
+	}
+	return error('expected text frame not received')
+}
+
+fn test_heartbeat_ping_answered_before_token_gate() {
+	port := get_free_port()!
+	mut app := new_ws_test_app(u16(port))!
+	mut ctx := unsafe { &app.Context }
+	startup_ws_server(mut app, .ip, port)!
+	spawn fn [mut ctx] () {
+		ctx.process_client_removals()
+	}()
+
+	// A token-less application heartbeat (old cached vxui-ws.js) must be
+	// answered with a pong — NOT closed with 1008 like other gated messages.
+	mut cl := websocket.new_client('ws://localhost:${port}/echo',
+		websocket.ClientOpt{
+			read_timeout: 2 * time.second
+		})!
+	cl.connect()!
+	cl.write_string('{"cmd":"ping","client_id":"pre-auth"}')!
+	pong := read_text_until(mut cl, fn (s string) bool {
+		return s.contains('"pong"')
+	}) or {
+		assert false, 'token-less ping was not answered with pong'
+		return
+	}
+	assert pong.contains('pre-auth')
+
+	// The connection survived: auth works on the same socket afterwards.
+	cl.write_string('{"cmd":"auth","token":"it-token"}')!
+	assert wait_for(2000, fn [ctx] () bool {
+		return ctx.clients.len == 1
+	}), 'ping-before-gate must not have killed the connection'
+
+	cl.close(1000, 'done') or {}
+	ctx.ws.free()
+}
+
 fn test_parse_attrs_empty() {
 	verbs, path := parse_attrs('test', []) or {
 		assert false

@@ -533,10 +533,12 @@ Usage:
                 return
             }
 
-            // Send ping
+            // Send ping (must carry the token: the server rejects any
+            // non-auth message without one)
             var pingMsg = {
                 cmd: 'ping',
                 client_id: clientId,
+                token: token,
                 timestamp: Date.now()
             }
             socket.send(JSON.stringify(pingMsg))
