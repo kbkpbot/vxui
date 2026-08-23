@@ -210,6 +210,12 @@ pub mut:
 - Helper methods on the app struct should return void or non-string types
   (or take no parameters). A string-returning helper with custom parameters
   will fail to compile due to a V comptime limitation in method dispatch.
+- Route handlers execute on the WebSocket read-loop thread. Inside a handler,
+  NEVER call `run_js(code, timeout)` with `timeout > 0` — it deadlocks until
+  timeout (the read loop itself would need to deliver the result). Use
+  fire-and-forget `post_js(code)!` / `post_js_client(id, code)!` there;
+  reserve waiting calls for code running outside handlers or in `spawn`ed
+  coroutines.
 
 ---
 

@@ -298,7 +298,14 @@ println('Page title: ${result}')
 
 // Execute on specific client
 result := app.run_js_client(client_id, 'alert("Hello!")', 3000)!
+
+// Fire-and-forget: safe inside route handlers, result ignored
+app.post_js('console.log("saved")')!
 ```
+
+> Route handlers run on the connection read loop. A waiting
+> `run_js(timeout > 0)` call from inside a handler deadlocks until timeout —
+> use `post_js()` / `post_js_client()` there.
 
 ### Multi-Client Support
 

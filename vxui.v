@@ -1331,6 +1331,11 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 	ctx.mu.lock()
 	ctx.js_callbacks[js_id] = ch
 	ctx.mu.unlock()
+	defer {
+		ctx.mu.lock()
+		ctx.js_callbacks.delete(js_id)
+		ctx.mu.unlock()
+	}
 
 	mut cmd := map[string]json2.Any{}
 	cmd['cmd'] = json2.Any('run_js')
@@ -1363,9 +1368,6 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 			}
 		}
 
-		ctx.mu.lock()
-		ctx.js_callbacks.delete(js_id)
-		ctx.mu.unlock()
 		ch.close()
 
 		if !got_result {
@@ -1378,6 +1380,8 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 
 		return result
 	}
+	// timeout_ms <= 0: fire-and-forget; the result channel is dropped with
+	// the registration removed by the defer above.
 	return ''
 }
 
@@ -1404,6 +1408,20 @@ pub fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string {
 // run_js_client executes JavaScript on a specific client
 pub fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout_ms int) !string {
 	return ctx.execute_js(client_id, js_code, timeout_ms)
+}
+
+// post_js executes JavaScript in the frontend fire-and-forget: the result
+// (or error) is discarded and the pending callback is unregistered
+// immediately. Safe to call from INSIDE route handlers, unlike
+// run_js(timeout_ms > 0), which deadlocks there: a handler runs on the
+// connection read loop, the very goroutine that would deliver js_result.
+pub fn (mut ctx Context) post_js(js_code string) ! {
+	ctx.execute_js('', js_code, 0)!
+}
+
+// post_js_client is post_js targeting one specific client.
+pub fn (mut ctx Context) post_js_client(client_id string, js_code string) ! {
+	ctx.execute_js(client_id, js_code, 0)!
 }
 
 // =============================================================================

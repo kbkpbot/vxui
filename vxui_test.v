@@ -861,6 +861,41 @@ fn test_heartbeat_ping_answered_before_token_gate() {
 	ctx.ws.free()
 }
 
+fn test_post_js_is_fire_and_forget_and_leaks_no_callback() {
+	port := get_free_port()!
+	mut app := new_ws_test_app(u16(port))!
+	mut ctx := unsafe { &app.Context }
+	startup_ws_server(mut app, .ip, port)!
+	spawn fn [mut ctx] () {
+		ctx.process_client_removals()
+	}()
+
+	mut cl := websocket.new_client('ws://localhost:${port}/echo',
+		websocket.ClientOpt{
+			read_timeout: 2 * time.second
+		})!
+	cl.connect()!
+	cl.write_string('{"cmd":"auth","token":"it-token"}')!
+	assert wait_for(2000, fn [ctx] () bool {
+		return ctx.clients.len == 1
+	})
+
+	ctx.post_js('void(0);')!
+	// Registration must be gone immediately: post_js never waits.
+	assert ctx.js_callbacks.len == 0, 'post_js left a pending js_callback'
+
+	// The run_js command did go out on the wire (after the auth_ok frame).
+	read_text_until(mut cl, fn (s string) bool {
+		return s.contains('run_js') && s.contains('void(0)')
+	}) or {
+		assert false, 'post_js command never reached the client'
+		return
+	}
+
+	cl.close(1000, 'done') or {}
+	ctx.ws.free()
+}
+
 fn test_parse_attrs_empty() {
 	verbs, path := parse_attrs('test', []) or {
 		assert false
