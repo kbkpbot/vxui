@@ -558,7 +558,8 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 			// the JSON cmd ping/pong below.
 			return
 		}
-		raw_message := json2.decode[json2.Any](msg.payload.bytestr())!
+		raw_payload := msg.payload.bytestr()
+		raw_message := json2.decode[json2.Any](raw_payload)!
 		message := raw_message.as_map()
 		ctx.logger.debug('Received message: ${message}')
 
@@ -601,7 +602,17 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		// Verify token for every non-auth message. When require_auth is on
 		// (the default) a missing token is rejected just like a wrong one.
 		if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
-			ctx.logger.warn('Unauthorized message rejected (missing or invalid token)')
+			rejected_cmd := message['cmd'] or { json2.Any('') }.str()
+			mut keys := []string{}
+			for k, _ in message {
+				keys << k
+			}
+			keys.sort()
+			mut preview := raw_payload.replace('\n', ' ')
+			if preview.runes().len > 96 {
+				preview = preview.runes()[..96].map(it.str()).join('') + '…'
+			}
+			ctx.logger.warn('Unauthorized message rejected (missing or invalid token): cmd=${rejected_cmd} keys=[${keys.join(',')}] payload="${preview}"')
 			ws.close(1008, 'Invalid token')!
 			return
 		}
@@ -832,8 +843,14 @@ fn message_token_valid(message map[string]json2.Any, require_auth bool, token st
 fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]json2.Any) ! {
 	client_token := message['token'] or { json2.Null{} }
 
+	if client_token is json2.Null {
+		return new_error_detail(.auth_invalid_token, 'missing token')
+	}
+	if client_token.str() == '' {
+		return new_error_detail(.auth_invalid_token, 'missing token')
+	}
 	if client_token.str() != ctx.config.token {
-		return new_error_detail(.auth_invalid_token, 'Invalid token')
+		return new_error_detail(.auth_invalid_token, 'invalid token')
 	}
 
 	client_id := generate_client_id()
