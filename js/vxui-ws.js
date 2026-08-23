@@ -954,9 +954,48 @@ Usage:
             }
         })
 
+        // Process out-of-band content exactly like htmx's XHR path does:
+        // [hx-swap-oob] elements are swapped into their own targets, the
+        // remainder is swapped into the request target. Without this, an
+        // all-OOB response (e.g. a table body plus pager) would be dumped
+        // into the target and mangled by the HTML parser.
+        try {
+            var oobFragment = api.makeFragment(responseHtml)
+            var oobSettleInfo = api.makeSettleInfo(document.body)
+            var oobElts = oobFragment.querySelectorAll('[hx-swap-oob], [data-hx-swap-oob]')
+            for (var oi = 0; oi < oobElts.length; oi++) {
+                var oobElement = oobElts[oi]
+                var oobValue = oobElement.getAttribute('hx-swap-oob') ||
+                               oobElement.getAttribute('data-hx-swap-oob')
+                log('Processing OOB element', oobElement.id, oobValue)
+                api.oobSwap(oobValue, oobElement, oobSettleInfo, document)
+            }
+            if (api.settleImmediately) {
+                api.settleImmediately(oobSettleInfo.tasks)
+            }
+            // anything left after removing the OOB elements goes to the target
+            var leftover = document.createElement('div')
+            while (oobFragment.firstChild) {
+                leftover.appendChild(oobFragment.firstChild)
+            }
+            responseHtml = leftover.innerHTML
+        } catch (oobErr) {
+            log('OOB processing failed, falling back to plain swap:', oobErr)
+        }
+
         // Get swap specification
         var swapStyle = swapSpec.swapStyle || 'innerHTML'
-        
+
+        // Skip the target swap when the response was ONLY OOB content:
+        // swapping an empty string would wipe the target.
+        if (responseHtml.trim() === '' && swapStyle !== 'none') {
+            log('Response contained only OOB content; skipping target swap')
+            api.triggerEvent(elt, 'htmx:afterSwap', responseInfo)
+            api.triggerEvent(elt, 'htmx:afterRequest', responseInfo)
+            resolve && resolve()
+            return
+        }
+
         // Use htmx's internal swap function
         api.swap(target, responseHtml, {
             swapStyle: swapStyle,

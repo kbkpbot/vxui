@@ -82,6 +82,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **WebSocket RPC responses now honor `hx-swap-oob`** — `vxui-ws.js` processed
+  responses with a plain innerHTML swap, so an all-OOB response (e.g. data-table's
+  `<tbody hx-swap-oob>` plus pager) was dumped into the target and mangled by the
+  HTML parser: the table stayed empty until the next interaction. Responses are
+  now handled exactly like htmx's XHR path — OOB elements swap into their own
+  targets first, the remainder swaps into `hx-target`, and an OOB-only response
+  skips the target swap instead of wiping it.
 - **chat example: messages never displayed** — the hidden `cid` input lived
   OUTSIDE both forms, so `/join` and `/send` always failed their `cid == ''`
   guard and returned before broadcasting anything (form still switched, hiding
