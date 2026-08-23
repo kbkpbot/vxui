@@ -703,7 +703,10 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 			ctx.trigger_event(EventType.after_request, client_id, '', message, req, response, none)
 
 			json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response.body)}}'
-			ws.write(json_response.bytes(), .text_frame)!
+			ws.write(json_response.bytes(), .text_frame) or {
+				ctx.log_write_failure(req.path, rpc_id.i64(), json_response, err)
+				return
+			}
 		}
 	})
 

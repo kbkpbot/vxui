@@ -3,6 +3,7 @@ module vxui
 import time
 import net.websocket
 import x.json2
+import encoding.utf8
 
 // =============================================================================
 // Error Type Tests
@@ -1024,6 +1025,29 @@ fn test_escape_html() {
 	assert escape_html('<script>') == '&lt;script&gt;'
 	assert escape_html('"quoted"') == '&quot;quoted&quot;'
 	assert escape_html('a & b') == 'a &amp; b'
+}
+
+fn test_sanitize_utf8_passes_valid_text_through() {
+	assert sanitize_utf8('hello') == 'hello'
+	assert sanitize_utf8('中文备注') == '中文备注'
+	assert sanitize_utf8('') == ''
+	assert sanitize_utf8('mix中en文') == 'mix中en文'
+}
+
+fn test_sanitize_utf8_repairs_truncated_multibyte() {
+	s := '中文备注'
+	truncated := s.bytes()[..s.len - 1].bytestr() // cuts half of the last rune
+	fixed := sanitize_utf8(truncated)
+	assert utf8.validate_str(fixed), 'output must be valid UTF-8'
+	assert fixed.starts_with('中文备')
+}
+
+fn test_sanitize_utf8_repairs_stray_continuation_bytes() {
+	bad := [u8(0x61), u8(0x80), u8(0x62)].bytestr() // a, stray cont., b
+	fixed := sanitize_utf8(bad)
+	assert utf8.validate_str(fixed)
+	assert fixed.len == 5 // 1 byte + U+FFFD (3 bytes) + 1 byte
+	assert fixed[0] == u8(0x61) && fixed[4] == u8(0x62)
 }
 
 fn test_escape_js() {

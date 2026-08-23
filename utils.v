@@ -3,6 +3,49 @@ module vxui
 import rand
 import net
 import net.urllib
+import encoding.utf8
+
+// sanitize_utf8 returns `s` with every invalid UTF-8 byte replaced by the
+// Unicode replacement character (U+FFFD). The websocket layer REJECTS text
+// frames that are not valid UTF-8, so any payload built from byte-wise
+// slicing of multibyte strings must be passed through this helper before
+// being returned from a route handler.
+pub fn sanitize_utf8(s string) string {
+	if utf8.validate_str(s) {
+		return s
+	}
+	replacement := [u8(0xEF), u8(0xBF), u8(0xBD)] // U+FFFD
+	mut out := []u8{cap: s.len + replacement.len}
+	mut i := 0
+	for i < s.len {
+		b := s[i]
+		seq_len := match true {
+			b < 0x80 { 1 } // ASCII
+			b >= 0xC2 && b <= 0xDF { 2 }
+			b >= 0xE0 && b <= 0xEF { 3 }
+			b >= 0xF0 && b <= 0xF4 { 4 }
+			else { 0 } // continuation byte out of place or invalid lead
+		}
+		valid := seq_len > 0 && i + seq_len <= s.len && utf8.validate_str(s[i..i + seq_len])
+		if valid {
+			out << s[i..i + seq_len].bytes()
+			i += seq_len
+		} else {
+			out << replacement
+			i++
+		}
+	}
+	return out.bytestr()
+}
+
+// log_write_failure records a failed text-frame write with routing context
+// and a hex prefix, so non-UTF-8 or oversized payloads show up as a
+// diagnosable error instead of a mysterious disconnect.
+fn (ctx &Context) log_write_failure(path string, rpc_id i64, payload string, err IError) {
+	n := if payload.len > 32 { 32 } else { payload.len }
+	hex_preview := payload.bytes()[..n].hex()
+	ctx.logger.error('WebSocket write failed for path=${path} rpcID=${rpc_id}: ${err} payload_hex[0..${n}]=${hex_preview}')
+}
 
 // url_decode decodes URL-encoded strings ('+' becomes space).
 // Invalid escape sequences are left untouched, matching lenient browser behaviour.

@@ -421,7 +421,9 @@ Demonstrates:
    - Receive `(mut app T)` as receiver
    - Parameter is `message map[string]json2.Any`
    - Return `string` (HTML fragment)
-3. **Return Value**: Use `hx-swap-oob="true"` for out-of-band swap to update specific elements
+3. **Return Value**: Use `hx-swap-oob="true"` for out-of-band swap to update specific elements.
+   Fragments MUST be valid UTF-8 — byte-wise truncation of multibyte strings
+   breaks them; wrap risky payloads in `vxui.sanitize_utf8(payload)`.
 
 ### Frontend Development
 
