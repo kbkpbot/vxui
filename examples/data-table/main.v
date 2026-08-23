@@ -136,8 +136,11 @@ fn qp_from_message(message map[string]json2.Any) QueryParams {
 	return p
 }
 
-// render_table renders tbody content for given page rows plus pager OOB
-fn render_table(page_rows []Employee, total int, p QueryParams) string {
+// render_table renders tbody content for given page rows plus pager OOB.
+// `p` arrives raw from the wire (page_size may be 0): normalize BEFORE any
+// division, exactly like apply_query does.
+fn render_table(page_rows []Employee, total int, raw QueryParams) string {
+	p := norm(raw)
 	max_page := if total == 0 { 1 } else { (total + p.page_size - 1) / p.page_size }
 	// apply_query clamps overflows to the last valid page; mirror it here so
 	// the pager state matches the rows actually served

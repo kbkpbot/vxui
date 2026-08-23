@@ -68,3 +68,13 @@ fn test_default_params() {
 	rows, _ := apply_query(sample(), QueryParams{})
 	assert rows.len == 4 // 默认按 id 升序、不过滤
 }
+
+// regression: wire params arrive UNNORMALIZED (page_size=0). render_table must
+// normalize before dividing for the pager, or the whole app panics.
+fn test_render_table_survives_raw_params() {
+	rows, total := apply_query(sample(), QueryParams{page_size: 10})
+	html := render_table(rows, total, QueryParams{})
+	assert html.contains('<tbody id="tbody-zone"'), 'table body missing'
+	assert html.contains('第 1 / 1 页'), 'pager missing: ${html}'
+	assert html.contains('hx-swap-oob'), 'pager must be oob-marked'
+}
