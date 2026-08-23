@@ -657,6 +657,27 @@ fn test_fire_call_rejects_untagged_method() {
 	assert res == 'blocked'
 }
 
+// A tagged method that does not return string is a configuration mistake:
+// generate_routes must fail fast with a clear message instead of silently
+// registering a route that cannot be dispatched.
+struct BadReturnApp {
+	Context
+}
+
+@['/bad']
+fn (mut app BadReturnApp) bad_handler(message map[string]json2.Any) int {
+	return 1
+}
+
+fn test_generate_routes_rejects_tagged_non_string_method() {
+	mut app := BadReturnApp{}
+	generate_routes(app) or {
+		assert '${err}'.contains('return string'), 'unexpected error: ${err}'
+		return
+	}
+	assert false, 'tagged method returning non-string must be rejected at startup'
+}
+
 // =============================================================================
 // Security Gate Tests
 // =============================================================================

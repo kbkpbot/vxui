@@ -186,10 +186,12 @@ pub mut:
 struct BrowserConfig {
 pub mut:
     custom_args       []string // Additional custom arguments
-    profile_dir       string   // Custom profile directory (empty = default)
+    profile_dir       string   // Custom profile directory (empty = per-run temp profile)
     headless          bool     // Run in headless mode (for testing)
     devtools          bool     // Open DevTools automatically
     no_sandbox        bool     // Disable sandbox (for root/CI)
+    window_mode       WindowMode = .app // app (standalone window) | kiosk | normal tab
+    no_app_mode       bool     // DEPRECATED: legacy switch forcing a plain tab; use window_mode
     user_data_dir     string   // Custom user data directory
     preferred_path    string   // Preferred browser path (skip detection)
     remote_debug_port int      // Chrome remote debugging port (e.g., 9222)
@@ -472,7 +474,8 @@ app.logger.set_custom_time_format('HH:mm:ss')
 2. **Browser Support**: Currently mainly supports Chrome (with specific startup parameters)
 3. **No HTTP Server**: All communication via WebSocket, files loaded via `file://` protocol
 4. **Auto Close**: Application will auto-exit after `config.close_timer_ms` time when no browser client is connected
-5. **Chrome Startup Parameters**: Uses independent user data directory, disables cache and extensions
+5. **Chrome Startup Parameters**: Uses an independent temp profile per run by default, disables cache and extensions. Set `BrowserConfig.user_data_dir` / `profile_dir` to share a profile (note: a leftover Chrome process on the same profile can swallow launch flags)
+6. **Local modules using `#flag @VMODROOT/...`**: on V ≤ 0.5.2 a local module in a subdirectory needs its own `v.mod` for `@VMODROOT` to resolve, even when the project root already has one ("need a v.mod in <module file>, or in one of its parent folders"). Drop a minimal `v.mod` into that module's directory.
 
 ---
 
