@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`WindowMode`** (`BrowserConfig.window_mode = .app | .kiosk | .normal`, default
+  `.app`): the default window is now a standalone app window WITHOUT address bar,
+  launched with the `=`-form `--app=<url>` (Chromium ignores the space form).
+  The legacy `no_app_mode` flag still works but is deprecated in favor of
+  `window_mode: .normal`.
+- **Per-run browser profiles**: when neither `user_data_dir` nor `profile_dir` is
+  set, each run gets a fresh temp profile — a leftover Chrome process sharing a
+  persistent profile can delegate to the existing instance and silently swallow
+  `--app`/`--kiosk`/window flags.
+- **`post_js()` / `post_js_client()`**: fire-and-forget JS execution, safe to call
+  from inside route handlers. Unlike `run_js(timeout > 0)` it never blocks the
+  connection read loop on a result only that same loop could deliver (documented
+  deadlock). The fire-and-forget path also no longer leaks its `js_callbacks`
+  registration.
+- **`Config.evict_on_new`**: with `multi_client=false`, a fresh successful auth
+  now evicts stale sessions so a crash-restored tab cannot hold the single slot
+  forever ("app won't open").
+- **`sanitize_utf8()`**: replaces invalid UTF-8 bytes with U+FFFD; wrap risky
+  payloads (byte-wise truncation of multibyte strings) before returning them
+  from handlers. Failed response writes now log path, rpcID and a payload hex
+  preview instead of failing deep inside the websocket layer.
+- **Diagnostics**: auth failures now say why (`Auth failed: missing token` /
+  `invalid token`) and token rejections log cmd/keys/payload preview, e.g.
+  `rejected ... cmd=ping keys=[cmd,client_id,timestamp]` — instantly separating
+  "heartbeat forgot its token" from forged messages.
 - **Security gates** — the WebSocket server now (1) rejects connections from
   non-loopback interfaces unless `config.allow_remote = true`, and (2) enforces
   `config.require_auth` on every regular message: a missing token is rejected with
@@ -57,6 +82,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Windows launch**: browsers are spawned directly via `os.new_process`
+  instead of `cmd /c start`, whose shell parsing truncated URL parameters at the
+  first unquoted `&` — tokens were dropped and every session was rejected (1008)
+  under default config on Windows.
+- **Heartbeat self-kill**: application-level `{cmd:"ping"}` heartbeats carry no
+  token on older cached vxui-ws.js copies; the server now answers them before
+  the token gate (liveness bookkeeping still requires a valid token) and the JS
+  client includes its token in pings. Idle sessions survive past 30 s.
+- **Startup validation**: `generate_routes` fails fast when an attribute-tagged
+  method does not return `string` instead of registering a route that cannot be
+  dispatched.
 - **Audit: pre-auth command surface closed (Critical)** — `js_result`/`pong`/`client_close`
   ran before the token gate, so any local web page could drive-by connect to the loopback
   port and forge run_js results, keep zombie clients alive, or evict real ones. Now only
