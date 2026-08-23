@@ -1,6 +1,7 @@
 module vxui
 
 import os
+import rand
 
 // BrowserConfig is defined in vxui.v, this file contains browser-related functions
 
@@ -157,6 +158,31 @@ fn get_browser_args(browser_name string) []string {
 	return base_args
 }
 
+// window_mode_args returns the mode-specific launch argument(s) carrying the URL.
+// Value-bearing Chromium switches MUST use the '=' form: `--app <url>` is parsed
+// as a boolean flag plus a stray positional argument.
+fn window_mode_args(mode WindowMode, url string) []string {
+	match mode {
+		.app {
+			return ['--app=${url}']
+		}
+		.kiosk {
+			return ['--kiosk', url]
+		}
+		.normal {
+			return [url]
+		}
+	}
+}
+
+// effective_window_mode resolves the deprecated no_app_mode flag against window_mode.
+fn effective_window_mode(config BrowserConfig) WindowMode {
+	if config.no_app_mode {
+		return .normal
+	}
+	return config.window_mode
+}
+
 // start_browser starts the browser and open the `filename`
 pub fn start_browser(filename string, vxui_ws_port u16) ! {
 	start_browser_with_config(filename, vxui_ws_port, '', WindowConfig{}, BrowserConfig{})!
@@ -234,7 +260,10 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 	} else if browser_config.profile_dir != '' {
 		browser_config.profile_dir
 	} else {
-		os.join_path(os.home_dir(), '.vxui', 'browser_profile')
+		// Fresh profile per run: a leftover Chrome process sharing a
+		// persistent profile delegates to that existing instance and
+		// silently swallows --app/--kiosk/window-size flags.
+		os.join_path(os.temp_dir(), 'vxui_profile_${rand.u64()}')
 	}
 	os.mkdir_all(profile_path) or {
 		return new_error_detail_with_cause(VxuiError.profile_create_failed,
@@ -294,14 +323,10 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 		cmd_args << '--enable-file-access-from-files'
 		cmd_args << '--enable-features=FileAccessAPI,NativeFileSystemAPI'
 
-		// Use app mode unless disabled (app mode can block file dialogs)
-		if !browser_config.no_app_mode {
-			// Use kiosk mode instead of app mode for better file dialog support
-			cmd_args << '--kiosk'
-			cmd_args << 'file://${abs_path}?${url_params}'
-		} else {
-			cmd_args << 'file://${abs_path}?${url_params}'
-		}
+		// App window by default: standalone window WITHOUT address bar or
+		// tab strip. Value-bearing Chromium switches must use the '=' form.
+		cmd_args << window_mode_args(effective_window_mode(browser_config),
+			'file://${abs_path}?${url_params}')
 	} else {
 		// Firefox uses different approach
 		if window.width > 0 && window.height > 0 {

@@ -271,18 +271,27 @@ pub mut:
 	title  string // window/page title; falls back to config.app_name when set
 }
 
+// WindowMode selects how the page window is presented. Only meaningful for
+// Chromium-family browsers; Firefox/Safari open a normal tab regardless.
+pub enum WindowMode {
+	app    // standalone window WITHOUT address bar/tab strip (default)
+	kiosk  // borderless fullscreen
+	normal // an ordinary browser tab
+}
+
 // BrowserConfig holds browser startup configuration
 pub struct BrowserConfig {
 pub mut:
-	custom_args       []string // Additional custom arguments
-	profile_dir       string   // Custom profile directory (empty = default)
-	headless          bool     // Run in headless mode (for testing)
-	devtools          bool     // Open DevTools automatically
-	no_sandbox        bool     // Disable sandbox (for root/CI)
-	no_app_mode       bool     // Disable app mode (allows file dialogs)
-	user_data_dir     string   // Custom user data directory
-	preferred_path    string   // Preferred browser path (skip detection)
-	remote_debug_port int      // Chrome remote debugging port (0 = disabled)
+	custom_args       []string   // Additional custom arguments
+	profile_dir       string     // Custom profile directory (empty = default)
+	headless          bool       // Run in headless mode (for testing)
+	devtools          bool       // Open DevTools automatically
+	no_sandbox        bool       // Disable sandbox (for root/CI)
+	window_mode       WindowMode = .app // presentation of the app window (see WindowMode)
+	no_app_mode       bool       // DEPRECATED: legacy switch forcing a plain tab; use window_mode
+	user_data_dir     string     // Custom user data directory
+	preferred_path    string     // Preferred browser path (skip detection)
+	remote_debug_port int        // Chrome remote debugging port (0 = disabled)
 }
 
 // RateLimitConfig holds rate limiting settings
