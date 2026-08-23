@@ -9,7 +9,6 @@
   <script src="./js/vxui-ws.js"></script>
 </head>
 <body hx-ext="vxui-ws">
-  <input type="hidden" id="cid" name="cid" value="">
   <aside>
     <h2>在线用户</h2>
     <ul id="user-list"><li class="count">0 人在线</li></ul>
@@ -17,25 +16,38 @@
   <main>
     <div id="messages"></div>
     <form id="join-form" hx-post="/join" hx-swap="none">
+      <input type="hidden" name="cid" value="">
       <input name="nick" placeholder="输入昵称加入" maxlength="20" required>
       <button>加入</button>
     </form>
     <form id="chat-form" class="hidden" hx-post="/send" hx-swap="none">
+      <input type="hidden" name="cid" value="">
       <input name="text" placeholder="说点什么…" maxlength="200" autocomplete="off">
       <button>发送</button>
     </form>
   </main>
   <script>
-    document.body.addEventListener('vxui:authenticated', function () {
-      setInterval(function () {
-        var c = window.vxuiWs && window.vxuiWs.getClientId()
-        if (c) { document.getElementById('cid').value = c }
-      }, 1000)
+    // The backend needs cid to attribute the sender. Keep EVERY cid input in
+    // sync: on authentication, on a timer, and — critically — at submit time
+    // in capture phase, so the value is correct before htmx snapshots the
+    // form data.
+    function syncCid() {
+      var c = (window.vxuiWs && window.vxuiWs.getClientId()) || ''
+      document.querySelectorAll('input[name="cid"]').forEach(function (i) {
+        i.value = c
+      })
+    }
+    document.body.addEventListener('vxui:authenticated', syncCid)
+    ;['join-form', 'chat-form'].forEach(function (id) {
+      document.getElementById(id).addEventListener('submit', syncCid, true)
     })
+    setInterval(syncCid, 1000)
+
     document.getElementById('join-form').addEventListener('htmx:afterRequest', function () {
       this.classList.add('hidden')
       document.getElementById('chat-form').classList.remove('hidden')
     })
+  </script>
   </script>
 </body>
 </html>

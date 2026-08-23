@@ -82,6 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **chat example: messages never displayed** — the hidden `cid` input lived
+  OUTSIDE both forms, so `/join` and `/send` always failed their `cid == ''`
+  guard and returned before broadcasting anything (form still switched, hiding
+  the failure). `cid` inputs now live inside each form and are synced at
+  submit time; chat bubbles additionally carry
+  `hx-swap-oob="beforeend:#messages"` so the frontend actually inserts them.
 - **Windows launch**: browsers are spawned directly via `os.new_process`
   instead of `cmd /c start`, whose shell parsing truncated URL parameters at the
   first unquoted `&` — tokens were dropped and every session was rejected (1008)
