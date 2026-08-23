@@ -313,8 +313,14 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 
 	// Start browser process
 	$if windows {
-		// On Windows, use spawn to avoid blocking
-		os.execute('start "" "${browser_path}" ' + cmd_args.join(' '))
+		// Spawn the browser directly instead of going through
+		// `cmd /c start`: the URL arguments contain '&' (e.g.
+		// ?vxui_ws_port=..&vxui_token=..) which cmd.exe treats as an
+		// unquoted command separator, dropping the token and everything
+		// after it. A direct spawn passes arguments verbatim.
+		mut browser_process := os.new_process(browser_path)
+		browser_process.set_args(cmd_args)
+		browser_process.run()
 	} $else {
 		pid := os.fork()
 		if pid == 0 {
