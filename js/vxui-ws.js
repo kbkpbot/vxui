@@ -1016,7 +1016,28 @@ Usage:
         // Trigger afterRequest event
         api.triggerEvent(elt, 'htmx:afterRequest', responseInfo)
 
-        resolve && resolve()
+        resolve && resolve(responseHtml)
+    }
+
+    /**
+     * Apply a raw response body (message + hx-swap-oob fragments) through the
+     * same oob/swap pipeline used for RPC responses. Exposed for callers that
+     * consume responses programmatically, e.g. chunked uploads whose last
+     * chunk returns the refreshed page fragments.
+     * @param {string} html - the response body
+     * @param {string} [targetSelector] - where non-OOB content lands (default body)
+     */
+    function applyResponseHtml(html, targetSelector) {
+        var target = targetSelector ? document.querySelector(targetSelector) : document.body
+        if (!target) { target = document.body }
+        handleResponse({
+            elt: target,
+            target: target,
+            swapSpec: { swapStyle: 'innerHTML' },
+            path: '',
+            requestConfig: {},
+            resolve: null
+        }, html)
     }
 
     /**
@@ -1163,10 +1184,38 @@ Usage:
             }
         },
         getClients: function() { return cachedClients },
+        // rpc sends a raw POST rpc and resolves with the response body.
+        // Swap style is 'none': nothing is written to the DOM, the caller
+        // consumes response data programmatically (e.g. chunked uploads).
+        rpc: function (payload) {
+            return new Promise(function (resolve, reject) {
+                if (!socket || socket.readyState !== WebSocket.OPEN || !isAuthenticated) {
+                    reject(new Error('vxui-ws: not connected'))
+                    return
+                }
+                var rpcID = generateRpcID()
+                pendingRequests[rpcID] = {
+                    elt: document.body,
+                    target: document.body,
+                    swapSpec: { swapStyle: 'none' },
+                    path: payload.path || '',
+                    requestConfig: {},
+                    resolve: resolve,
+                    reject: reject
+                }
+                var msg = { rpcID: rpcID, verb: 'POST', token: token, timestamp: Date.now() }
+                for (var k in payload) { msg[k] = payload[k] }
+                sendMessage(msg)
+            })
+        },
         runJs: function(script) {
             var result = executeJsSafely(script)
             return result.error ? { error: result.error } : { result: result.result }
         },
+        // applyResponseHtml runs a raw response body through the standard
+        // oob/swap pipeline (see rpc()); targetSelector receives non-OOB
+        // content.
+        applyResponseHtml: applyResponseHtml,
         // Heartbeat controls
         getHeartbeatInterval: function() { return config.heartbeatInterval },
         setHeartbeatInterval: function(ms) { 

@@ -302,58 +302,94 @@
             let processed = 0;
             const total = files.length;
 
+            const uploadNext = (file) => {
+                uploadFileChunked(file)
+                    .then(() => {
+                        processed++;
+                        updateProgress(processed, total);
+                        if (processed === total) {
+                            setTimeout(() => { progressBar.style.display = 'none'; }, 500);
+                        }
+                    })
+                    .catch((err) => {
+                        console.error('Upload failed:', err);
+                        alert(`Upload of "${file.name}" failed: ${err.message || err}`);
+                        processed++;
+                        updateProgress(processed, total);
+                    });
+            };
+
             Array.from(files).forEach((file) => {
-                if (file.size > 10 * 1024 * 1024) {
-                    alert(`File "${file.name}" is too large (max 10MB)`);
+                if (file.size > 100 * 1024 * 1024) {
+                    alert(`File "${file.name}" is too large (max 100MB)`);
                     processed++;
                     updateProgress(processed, total);
                     return;
                 }
-
-                console.log('[TIMING] FileReader start:', Date.now(), file.name);
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    console.log('[TIMING] FileReader done:', Date.now());
-                    // Trigger upload event
-                    htmx.trigger(document.body, 'upload-file', {
-                        filename: file.name,
-                        filedata: e.target.result,
-                        mimetype: file.type || 'application/octet-stream'
-                    });
-
-                    processed++;
-                    updateProgress(processed, total);
-
-                    if (processed === total) {
-                        setTimeout(() => {
-                            progressBar.style.display = 'none';
-                        }, 500);
-                    }
-                };
-                reader.readAsDataURL(file);
+                uploadNext(file);
             });
+        }
+
+        // Upload in chunks. CHUNK_SIZE MUST be a multiple of 3: raw-byte
+        // slices of a multiple of 3 encode to base64 WITHOUT padding, so the
+        // server-side concatenation is one seamless base64 stream (a 1MB
+        // slice is NOT divisible by 3 — its base64 ends with '=' padding,
+        // and mid-stream padding truncates the decoded file). Chunks stay
+        // ~1.5MB so no single WebSocket message blocks the server's
+        // connection read loop long enough to trip the protocol-level
+        // liveness watchdog.
+        const CHUNK_SIZE = 1572864; // 1.5MB, divisible by 3
+
+        function blobToDataURL(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = () => reject(reader.error || new Error('read failed'));
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function uploadFileChunked(file) {
+            const total_chunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+            console.log('[TIMING] chunked upload start:', Date.now(), file.name, 'chunks:', total_chunks);
+
+            for (let index = 0; index < total_chunks; index++) {
+                const blob = file.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE);
+                const dataUrl = await blobToDataURL(blob);
+                const params = {
+                    filename: file.name,
+                    mimetype: file.type || 'application/octet-stream',
+                    index: index,
+                    total: total_chunks,
+                    chunk: dataUrl
+                };
+
+                if (index === total_chunks - 1) {
+                    // Final chunk assembles the file server-side. rpc() waits
+                    // for the real response (htmx.ajax's promise resolves
+                    // early), then applyResponseHtml runs the standard oob +
+                    // swap logic over the returned message + file list.
+                    const html = await window.vxuiWs.rpc({
+                        path: '/upload-chunk',
+                        parameters: params
+                    });
+                    window.vxuiWs.applyResponseHtml(html, '#message');
+                } else {
+                    await window.vxuiWs.rpc({
+                        path: '/upload-chunk',
+                        parameters: params
+                    });
+                }
+                progressFill.style.width =
+                    Math.round(((index + 1) / total_chunks) * 100) + '%';
+            }
+            console.log('[TIMING] chunked upload done:', Date.now(), file.name);
         }
 
         function updateProgress(processed, total) {
             const percent = (processed / total) * 100;
             progressFill.style.width = percent + '%';
         }
-
-        // Listen for custom upload event and send via vxui WebSocket
-        document.body.addEventListener('upload-file', (e) => {
-            const params = e.detail;
-            console.log('[TIMING] upload-file event:', Date.now());
-            
-            htmx.ajax('POST', '/upload', {
-                target: '#file-list',
-                swap: 'outerHTML',
-                values: {
-                    filename: params.filename,
-                    filedata: params.filedata,
-                    mimetype: params.mimetype || 'application/octet-stream'
-                }
-            });
-        });
     </script>
 </body>
 </html>

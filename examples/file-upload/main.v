@@ -5,6 +5,7 @@ import os
 import x.json2
 import encoding.base64
 import time
+import sync
 
 // FileInfo represents uploaded file metadata
 struct FileInfo {
@@ -20,8 +21,11 @@ struct FileInfo {
 struct App {
 	vxui.Context
 mut:
+	mu         sync.RwMutex
 	files      []FileInfo
 	upload_dir string
+	// chunked uploads: filename -> accumulated base64 chunks, in order
+	chunk_bufs map[string][]string
 }
 
 // init_upload_dir creates the upload directory
@@ -74,6 +78,76 @@ fn (mut app App) upload(message map[string]json2.Any) string {
 		uploaded: time_now_str()
 	}
 	app.files << file_info
+
+	return '<div id="message" class="success">File "${filename}" uploaded successfully!</div>' +
+		app.render_file_list()
+}
+
+// upload_chunk handles ONE chunk of a chunked upload. The page slices files
+// into 1MB pieces so no single WebSocket message blocks the connection read
+// loop long enough to trip the protocol-level pong watchdog.
+// The final chunk assembles the file and returns the standard
+// message + out-of-band file-list response.
+@['/upload-chunk']
+fn (mut app App) upload_chunk(message map[string]json2.Any) string {
+	params := message['parameters'] or { json2.Null{} }.as_map()
+	filename := params['filename'] or { json2.Null{} }.str()
+	mimetype := params['mimetype'] or { json2.Any('application/octet-stream') }.str()
+	index := params['index'] or { json2.Any(0) }.int()
+	total := params['total'] or { json2.Any(1) }.int()
+	chunk := params['chunk'] or { json2.Null{} }.str()
+
+	if filename == '' || total < 1 || index < 0 || index >= total {
+		return '<div id="message" class="error">Invalid chunk parameters</div>'
+	}
+
+	app.mu.lock()
+	if index == 0 {
+		app.chunk_bufs[filename] = []string{}
+	}
+	if filename !in app.chunk_bufs {
+		app.mu.unlock()
+		return '<div id="message" class="error">Upload restarted, chunk lost</div>'
+	}
+	// EVERY chunk arrives as a data URL ("data:...;base64,PAYLOAD") because
+	// the page reads each slice with readAsDataURL — strip the prefix per
+	// chunk. Stripping only the first chunk's prefix (or after joining)
+	// would cut the stream at the second comma.
+	mut piece := chunk
+	if piece.contains(',') {
+		piece = piece.split(',').last()
+	}
+	app.chunk_bufs[filename] << piece
+	done := app.chunk_bufs[filename].len == total
+	mut data := ''
+	if done {
+		data = app.chunk_bufs[filename].join('')
+		app.chunk_bufs.delete(filename)
+	}
+	app.mu.unlock()
+
+	if !done {
+		// intermediate chunk: the page tracks progress via rpc() and does
+		// not render anything for this response
+		return ''
+	}
+
+	decoded := base64.decode_str(data)
+
+	file_path := os.join_path(app.upload_dir, filename)
+	os.write_file(file_path, decoded) or {
+		return '<div id="message" class="error">Failed to save file: ${err.msg()}</div>'
+	}
+
+	app.mu.lock()
+	app.files << FileInfo{
+		name:     filename
+		size:     decoded.len
+		size_str: format_size(decoded.len)
+		mimetype: mimetype
+		uploaded: time_now_str()
+	}
+	app.mu.unlock()
 
 	return '<div id="message" class="success">File "${filename}" uploaded successfully!</div>' +
 		app.render_file_list()
@@ -161,6 +235,7 @@ fn main() {
 	}
 
 	mut app := App{}
+	app.chunk_bufs = map[string][]string{}
 	app.init_upload_dir()
 	app.config.close_timer_ms = 1000
 	app.config.window = vxui.WindowConfig{

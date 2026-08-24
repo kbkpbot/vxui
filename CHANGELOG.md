@@ -82,6 +82,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **file-upload: uploading a file killed the session** — three stacked issues:
+  the server's protocol-ping watchdog ran at a hardcoded 1-second interval
+  (closing any client whose read loop was busy for >2s, e.g. while receiving a
+  multi-MB upload — "no pong received" → app exit). The interval is now driven
+  by `config.ws_ping_interval_ms` (30s default, 60s watchdog). The example now
+  uploads in 1.5MB chunks (a multiple of 3, so per-chunk base64 has no
+  mid-stream `=` padding) with a new `/upload-chunk` handler, and strips the
+  `data:` prefix from EVERY chunk (readAsDataURL prefixes all of them).
+  New public APIs in vxui-ws.js: `rpc(payload)` (Promise-based raw rpc) and
+  `applyResponseHtml(html, targetSelector)` (run a response body through the
+  standard oob/swap pipeline).
 - **WebSocket RPC responses now honor `hx-swap-oob`** — `vxui-ws.js` processed
   responses with a plain innerHTML swap, so an all-OOB response (e.g. data-table's
   `<tbody hx-swap-oob>` plus pager) was dumped into the target and mangled by the

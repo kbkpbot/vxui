@@ -514,8 +514,16 @@ fn generate_request_id() string {
 // Callbacks derive the Context from the captured app on every invocation so
 // they can never observe a stale/aliased Context instance.
 fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&websocket.Server {
+	mut ctx := context_of(mut app)
 	mut s := websocket.new_server(family, listen_port, '')
-	s.set_ping_interval(1)
+	// The library's ping thread also WATCHDOGS clients: it closes any
+	// connection whose pong is older than 2x this interval. A 1-second
+	// interval killed clients whenever a route handler (e.g. a multi-MB
+	// upload) blocked the read loop for more than 2 seconds. Drive it from
+	// the documented config instead: interval = ws_ping_interval_ms, so the
+	// effective watchdog threshold matches ws_pong_timeout_ms semantics.
+	ping_secs := ctx.config.ws_ping_interval_ms / 1000
+	s.set_ping_interval(if ping_secs < 1 { 1 } else { ping_secs })
 
 	s.on_connect(fn [mut app] [T](mut s websocket.ServerClient) !bool {
 		mut ctx := context_of(mut app)
