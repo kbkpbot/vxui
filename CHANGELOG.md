@@ -155,6 +155,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Middleware system and rate limiting**: both were web-server concepts with
+  zero real-world usage (no example, test scenario, or doc recipe ever used
+  them) and are gone outright — `Middleware`/`MiddlewareContext`/
+  `MiddlewareResult`, `Context.use()`, `RateLimitConfig`,
+  `Config.rate_limit`, `check_rate_limit()`, `set_rate_limit()`, the
+  `middleware_rejected` / `rate_limited` error codes and the
+  `middleware_error` event. A loopback desktop UI has no caller to throttle
+  and no middleware pipeline to compose; request handling is now a straight
+  route dispatch between the before/after_request events.
 - **Dead public API** (zero callers in examples, tests, or docs):
   `run_with_config()` (set `app.config` directly before `run()`),
   `run_embedded()` (use `new_packed_app()` + `add_file_string()` +

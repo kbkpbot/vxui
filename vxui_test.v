@@ -68,7 +68,6 @@ fn test_event_type_enum() {
 	assert int(EventType.js_execution) == 7
 	assert int(EventType.before_request) == 8
 	assert int(EventType.after_request) == 9
-	assert int(EventType.middleware_error) == 10
 }
 
 fn test_event_data_struct() {
@@ -129,30 +128,6 @@ fn test_response_struct() {
 fn test_response_default_status() {
 	resp := Response{}
 	assert resp.status == 200
-}
-
-// =============================================================================
-// Middleware Tests
-// =============================================================================
-
-fn test_middleware_context_struct() {
-	req := Request{
-		id:   'req-1'
-		verb: Verb.get
-		path: '/test'
-	}
-	mctx := MiddlewareContext{
-		request:  req
-		response: Response{}
-	}
-	assert mctx.request.id == 'req-1'
-	assert mctx.response.status == 200
-}
-
-fn test_middleware_result_enum() {
-	assert int(MiddlewareResult.continue_) == 0
-	assert int(MiddlewareResult.stop) == 1
-	assert int(MiddlewareResult.error) == 2
 }
 
 // =============================================================================
@@ -255,96 +230,10 @@ fn test_browser_config_custom() {
 	assert config.no_sandbox == true
 }
 
-fn test_rate_limit_config_defaults() {
-	config := RateLimitConfig{}
-	assert config.enabled == true
-	assert config.max_requests == 100
-	assert config.window_ms == 60000
-	assert config.block_duration == 30000
-}
-
-fn test_rate_limit_config_custom() {
-	config := RateLimitConfig{
-		enabled:      false
-		max_requests: 50
-		window_ms:    30000
-	}
-	assert config.enabled == false
-	assert config.max_requests == 50
-	assert config.window_ms == 30000
-}
-
 fn test_log_config_defaults() {
 	config := LogConfig{}
 	assert config.level == .info
 	assert config.output == 'stderr'
-}
-
-// =============================================================================
-// Rate Limit Tests
-// =============================================================================
-
-fn test_rate_limit_blocks_after_max_requests() {
-	mut ctx := new_test_context()
-	ctx.config.rate_limit = RateLimitConfig{
-		enabled:        true
-		max_requests:   3
-		window_ms:      60_000
-		block_duration: 30_000
-	}
-	assert ctx.check_rate_limit('c1')
-	assert ctx.check_rate_limit('c1')
-	assert ctx.check_rate_limit('c1')
-	// 4th request inside the window is blocked
-	assert !ctx.check_rate_limit('c1')
-	// other clients are unaffected
-	assert ctx.check_rate_limit('c2')
-}
-
-fn test_rate_limit_block_expires() {
-	mut ctx := new_test_context()
-	ctx.config.rate_limit = RateLimitConfig{
-		enabled:        true
-		max_requests:   1
-		window_ms:      60_000
-		block_duration: 40
-	}
-	assert ctx.check_rate_limit('c1')
-	assert !ctx.check_rate_limit('c1')
-	time.sleep(70 * time.millisecond)
-	// block duration elapsed -> fresh window granted
-	assert ctx.check_rate_limit('c1')
-	// REGRESSION: the fresh window must be enforced too — under steady traffic
-	// the limiter must not stay permanently bypassed after one block
-	assert !ctx.check_rate_limit('c1')
-}
-
-fn test_rate_limit_window_reset() {
-	mut ctx := new_test_context()
-	ctx.config.rate_limit = RateLimitConfig{
-		enabled:        true
-		max_requests:   2
-		window_ms:      60
-		block_duration: 5_000
-	}
-	assert ctx.check_rate_limit('c1')
-	assert ctx.check_rate_limit('c1')
-	time.sleep(90 * time.millisecond)
-	// window slid -> fresh budget
-	assert ctx.check_rate_limit('c1')
-	assert ctx.check_rate_limit('c1')
-	assert !ctx.check_rate_limit('c1')
-}
-
-fn test_rate_limit_zero_max_never_blocks() {
-	mut ctx := new_test_context()
-	ctx.config.rate_limit = RateLimitConfig{
-		enabled:      true
-		max_requests: 0
-	}
-	for _ in 0 .. 50 {
-		assert ctx.check_rate_limit('c1')
-	}
 }
 
 // =============================================================================
@@ -465,15 +354,6 @@ fn test_set_browser_config() {
 	}
 	ctx.set_browser_config(config)
 	assert ctx.config.browser.headless == true
-}
-
-fn test_set_rate_limit() {
-	mut ctx := Context{}
-	config := RateLimitConfig{
-		max_requests: 50
-	}
-	ctx.set_rate_limit(config)
-	assert ctx.config.rate_limit.max_requests == 50
 }
 
 // =============================================================================
@@ -726,8 +606,6 @@ fn new_ws_test_app(port u16) !&RoutingTestApp {
 	app.clients = map[string]Client{}
 	app.js_callbacks = map[string]chan string{}
 	app.event_handlers = map[EventType][]EventHandler{}
-	app.middlewares = []Middleware{}
-	app.rate_counters = map[string]RateCounter{}
 	app.client_remove_chan = chan ClientRemoveMsg{cap: 8}
 	app.routes = generate_routes(app)!
 	return app
@@ -1173,8 +1051,6 @@ fn new_test_context() Context {
 	ctx.clients = map[string]Client{}
 	ctx.js_callbacks = map[string]chan string{}
 	ctx.event_handlers = map[EventType][]EventHandler{}
-	ctx.middlewares = []Middleware{}
-	ctx.rate_counters = map[string]RateCounter{}
 	ctx.client_remove_chan = chan ClientRemoveMsg{cap: 8}
 	return ctx
 }
@@ -1230,18 +1106,6 @@ fn test_disconnect_events_fire_outside_lock() {
 			}
 		}
 	}
-}
-
-// =============================================================================
-// use Middleware Test
-// =============================================================================
-
-fn test_use_middleware() {
-	mut ctx := Context{}
-	ctx.use(fn (mut mctx MiddlewareContext) MiddlewareResult {
-		return .continue_
-	})
-	assert ctx.middlewares.len == 1
 }
 
 // =============================================================================
@@ -1491,11 +1355,9 @@ fn test_vxui_error_all_codes() {
 		VxuiError.path_traversal,
 		VxuiError.route_not_found,
 		VxuiError.invalid_message,
-		VxuiError.middleware_rejected,
 		VxuiError.request_timeout,
-		VxuiError.rate_limited,
 	]
-	assert codes.len == 20
+	assert codes.len == 18
 }
 
 // =============================================================================
@@ -1584,18 +1446,12 @@ fn test_config_full_setup() {
 			timeout_ms: 3000
 			allow_eval: false
 		}
-		rate_limit:          RateLimitConfig{
-			enabled:      true
-			max_requests: 50
-			window_ms:    30000
-		}
 	}
 
 	assert config.app_name == 'test-app'
 	assert config.window.width == 1920
 	assert config.browser.headless == true
 	assert config.js_sandbox.enabled == true
-	assert config.rate_limit.max_requests == 50
 }
 
 // =============================================================================
@@ -1707,11 +1563,9 @@ fn test_all_error_codes_have_messages() {
 		VxuiError.browser_not_found,
 		VxuiError.file_not_found,
 		VxuiError.auth_failed,
-		VxuiError.rate_limited,
 		VxuiError.invalid_message,
 		VxuiError.port_not_available,
 		VxuiError.route_not_found,
-		VxuiError.middleware_rejected,
 		VxuiError.connection_closed,
 		VxuiError.request_timeout,
 		VxuiError.auth_invalid_token,

@@ -35,9 +35,7 @@ pub enum VxuiError {
 	path_traversal
 	route_not_found
 	invalid_message
-	middleware_rejected
 	request_timeout
-	rate_limited
 	// Additional error codes for unified error handling
 	profile_create_failed
 	process_fork_failed
@@ -143,7 +141,6 @@ pub enum EventType {
 	js_execution
 	before_request
 	after_request
-	middleware_error
 }
 
 // EventData contains event information
@@ -196,28 +193,6 @@ pub mut:
 	headers map[string]string = {}
 	body    string
 }
-
-// =============================================================================
-// Middleware System
-// =============================================================================
-
-// MiddlewareResult represents the result of middleware execution
-pub enum MiddlewareResult {
-	continue_
-	stop
-	error
-}
-
-// MiddlewareContext holds context for middleware execution
-pub struct MiddlewareContext {
-pub mut:
-	request  Request
-	response Response
-	err      ?VxuiErrorDetail
-}
-
-// Middleware is a function that processes requests
-pub type Middleware = fn (mut MiddlewareContext) MiddlewareResult
 
 // =============================================================================
 // Configuration Structures
@@ -284,15 +259,6 @@ pub mut:
 	remote_debug_port int        // Chrome remote debugging port (0 = disabled)
 }
 
-// RateLimitConfig holds rate limiting settings
-pub struct RateLimitConfig {
-pub mut:
-	enabled        bool = true
-	max_requests   int  = 100   // Max requests per window
-	window_ms      int  = 60000 // Window in milliseconds (1 minute)
-	block_duration int  = 30000 // Block duration in ms when limit exceeded
-}
-
 // LogConfig holds logging settings.
 // `output` accepts 'stderr' (default), 'stdout', or a file path.
 // The previous max_file_size/rotate_files/show_* fields never had any
@@ -329,7 +295,6 @@ pub mut:
 	// the single slot forever.
 	evict_on_new bool
 	max_clients  int = 10 // Maximum concurrent clients (0 = unlimited)
-	rate_limit   RateLimitConfig // Rate limiting settings
 
 	// JavaScript execution settings
 	js_timeout int = 5000 // Default timeout for run_js()
@@ -413,20 +378,10 @@ mut:
 	mu                 sync.RwMutex
 	js_callbacks       map[string]chan string
 	event_handlers     map[EventType][]EventHandler
-	middlewares        []Middleware
-	rate_counters      map[string]RateCounter
 	client_remove_chan chan ClientRemoveMsg // channel for serialized client removal
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}
-}
-
-// RateCounter tracks request rates per client
-struct RateCounter {
-mut:
-	count         int
-	window_start  time.Time
-	blocked_until time.Time
 }
 
 // =============================================================================
@@ -455,8 +410,6 @@ fn init[T](mut app T) ! {
 	ctx.clients = map[string]Client{}
 	ctx.js_callbacks = map[string]chan string{}
 	ctx.event_handlers = map[EventType][]EventHandler{}
-	ctx.middlewares = []Middleware{}
-	ctx.rate_counters = map[string]RateCounter{}
 	ctx.client_remove_chan = chan ClientRemoveMsg{cap: 100}
 
 	// Setup logger (level + output destination)
@@ -649,53 +602,16 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		}
 
 		if rpc_id := message['rpcID'] {
-			// Get client_id for rate limiting
 			client_id := ctx.find_client_id_by_connection(ws)
-
-			// Check rate limit
-			if ctx.config.rate_limit.enabled && client_id != '' {
-				if !ctx.check_rate_limit(client_id) {
-					ctx.trigger_event(EventType.middleware_error, client_id, 'Rate limit exceeded',
-						message, none, none, new_error_detail(.rate_limited, 'Rate limit exceeded'))
-					err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"rate_limited", "message":"Rate limit exceeded"}'
-					ws.write(err_resp.bytes(), .text_frame)!
-					return
-				}
-			}
 
 			// Build type-safe request
 			req := build_request(message, client_id)
-
-			// Execute middlewares
-			mut mctx := MiddlewareContext{
-				request:  req
-				response: Response{}
-			}
-
-			mut middleware_passed := true
-			for middleware in ctx.middlewares {
-				result := middleware(mut mctx)
-				if result != .continue_ {
-					middleware_passed = false
-					if result == .error {
-						ctx.trigger_event(EventType.middleware_error, client_id,
-							'Middleware rejected', message, req, mctx.response, mctx.err)
-					}
-					break
-				}
-			}
-
-			if !middleware_passed {
-				err_resp := '{"rpcID":"${rpc_id.i64()}", "error":"middleware_rejected"}'
-				ws.write(err_resp.bytes(), .text_frame)!
-				return
-			}
 
 			// Trigger before_request event
 			ctx.trigger_event(EventType.before_request, client_id, '', message, req, none, none)
 
 			// Handle message
-			response := handle_request(mut app, ctx, mctx.request, message)!
+			response := handle_request(mut app, ctx, req, message)!
 
 			// Trigger after_request event
 			ctx.trigger_event(EventType.after_request, client_id, '', message, req, response, none)
@@ -783,49 +699,6 @@ fn build_request(message map[string]json2.Any, client_id string) Request {
 		timestamp:   time.now()
 		raw_message: message
 	}
-}
-
-// check_rate_limit checks if client is within rate limits
-fn (mut ctx Context) check_rate_limit(client_id string) bool {
-	if ctx.config.rate_limit.max_requests <= 0 {
-		return true
-	}
-
-	ctx.mu.lock()
-
-	now := time.now()
-	mut counter := ctx.rate_counters[client_id] or { RateCounter{} }
-
-	// Check if blocked
-	if now.unix_milli() < counter.blocked_until.unix_milli() {
-		ctx.mu.unlock()
-		return false
-	}
-
-	// Reset window if it slid past its size, or if a punishment block just
-	// completed — otherwise the leftover over-limit count would re-block the
-	// client in short pulses until the original window finally slid.
-	if now.unix_milli() - counter.window_start.unix_milli() > ctx.config.rate_limit.window_ms
-		|| (!counter.blocked_until.is_zero()
-		&& now.unix_milli() >= counter.blocked_until.unix_milli()) {
-		counter.count = 0
-		counter.window_start = now
-		counter.blocked_until = time.Time{}
-	}
-
-	counter.count++
-
-	// Check limit
-	if counter.count > ctx.config.rate_limit.max_requests {
-		counter.blocked_until = now.add(ctx.config.rate_limit.block_duration * time.millisecond)
-		ctx.rate_counters[client_id] = counter
-		ctx.mu.unlock()
-		return false
-	}
-
-	ctx.rate_counters[client_id] = counter
-	ctx.mu.unlock()
-	return true
 }
 
 // addr_is_loopback reports whether the peer address is a loopback interface
@@ -988,15 +861,6 @@ pub fn (mut ctx Context) on_event(event_type EventType, handler EventHandler) {
 		ctx.event_handlers[event_type] = []
 	}
 	ctx.event_handlers[event_type] << handler
-}
-
-// =============================================================================
-// Middleware System
-// =============================================================================
-
-// use adds a middleware to the chain
-pub fn (mut ctx Context) use(middleware Middleware) {
-	ctx.middlewares << middleware
 }
 
 // =============================================================================
@@ -1650,10 +1514,8 @@ pub fn (mut ctx Context) set_browser_config(config BrowserConfig) {
 	ctx.config.browser = config
 }
 
-// set_rate_limit configures rate limiting
-pub fn (mut ctx Context) set_rate_limit(config RateLimitConfig) {
-	ctx.config.rate_limit = config
-}
+// set_rate_limit was removed along with the rate-limiting subsystem:
+// a loopback desktop UI has no caller to throttle.
 
 // get_port returns the WebSocket port
 pub fn (ctx Context) get_port() u16 {
