@@ -175,14 +175,6 @@ fn window_mode_args(mode WindowMode, url string) []string {
 	}
 }
 
-// effective_window_mode resolves the deprecated no_app_mode flag against window_mode.
-fn effective_window_mode(config BrowserConfig) WindowMode {
-	if config.no_app_mode {
-		return .normal
-	}
-	return config.window_mode
-}
-
 // start_browser starts the browser and open the `filename`
 pub fn start_browser(filename string, vxui_ws_port u16) ! {
 	start_browser_with_config(filename, vxui_ws_port, '', WindowConfig{}, BrowserConfig{})!
@@ -325,7 +317,7 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 
 		// App window by default: standalone window WITHOUT address bar or
 		// tab strip. Value-bearing Chromium switches must use the '=' form.
-		cmd_args << window_mode_args(effective_window_mode(browser_config),
+		cmd_args << window_mode_args(browser_config.window_mode,
 			'file://${abs_path}?${url_params}')
 	} else {
 		// Firefox uses different approach

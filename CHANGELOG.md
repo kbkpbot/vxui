@@ -155,6 +155,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Dead public API** (zero callers in examples, tests, or docs):
+  `run_with_config()` (set `app.config` directly before `run()`),
+  `run_embedded()` (use `new_packed_app()` + `add_file_string()` +
+  `run_packed()`), `use_logger()` / `use_auth()` middleware helpers (compose
+  with `use()` instead), and `VxuiErrorDetail.full_message()`.
+- **`BrowserConfig.no_app_mode`**: the deprecated legacy flag was removed;
+  use `window_mode: .normal` for a plain tab.
 - **file-upload example**: removed. In the local-desktop positioning (backend
   and browser share one filesystem), shipping file bytes through the browser
   and back over loopback is wasted motion — the backend can simply be handed a

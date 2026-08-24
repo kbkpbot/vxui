@@ -15,7 +15,6 @@
 - [new_packed_app](#new_packed_app)
 - [parse_attrs](#parse_attrs)
 - [run](#run)
-- [run_embedded](#run_embedded)
 - [run_packed](#run_packed)
 - [sanitize_path](#sanitize_path)
 - [start_browser](#start_browser)
@@ -167,15 +166,6 @@ fn run[T](mut app T, html_filename string) !
 ```
 
 run opens the `html_filename` in browser and starts the event loop
-
-[[Return to contents]](#Contents)
-
-## run_embedded
-```v
-fn run_embedded[T](mut app T, html_data []u8, filename string) !
-```
-
-run_embedded is a convenience function for running with embedded HTML Usage: vxui.run_embedded(mut app, $embed_file('ui/index.html'), 'index.html')!
 
 [[Return to contents]](#Contents)
 

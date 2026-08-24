@@ -1096,17 +1096,6 @@ fn test_window_mode_args_use_equals_form_for_app_mode() {
 	assert !app_arg.contains(' '), 'URL and flag must be ONE argument'
 }
 
-fn test_effective_window_mode_respects_legacy_no_app_mode() {
-	mut cfg := BrowserConfig{}
-	assert effective_window_mode(cfg) == .app // new default: plain app window
-	cfg.no_app_mode = true
-	assert effective_window_mode(cfg) == .normal // deprecated flag still honored
-	mut cfg2 := BrowserConfig{
-		window_mode: .kiosk
-	}
-	assert effective_window_mode(cfg2) == .kiosk
-}
-
 
 fn test_is_valid_email() {
 	assert is_valid_email('test@example.com') == true

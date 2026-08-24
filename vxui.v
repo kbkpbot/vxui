@@ -77,15 +77,6 @@ pub fn (e VxuiErrorDetail) str() string {
 	return e.msg()
 }
 
-// full_message returns the full error message including cause chain
-pub fn (e VxuiErrorDetail) full_message() string {
-	mut result := e.message
-	if cause := e.cause {
-		result += '\n  Caused by: ${cause.msg()}'
-	}
-	return result
-}
-
 // with_cause creates a new error with an underlying cause
 pub fn (e VxuiErrorDetail) with_cause(cause IError) VxuiErrorDetail {
 	return VxuiErrorDetail{
@@ -288,7 +279,6 @@ pub mut:
 	devtools          bool       // Open DevTools automatically
 	no_sandbox        bool       // Disable sandbox (for root/CI)
 	window_mode       WindowMode = .app // presentation of the app window (see WindowMode)
-	no_app_mode       bool       // DEPRECATED: legacy switch forcing a plain tab; use window_mode
 	user_data_dir     string     // Custom user data directory
 	preferred_path    string     // Preferred browser path (skip detection)
 	remote_debug_port int        // Chrome remote debugging port (0 = disabled)
@@ -1009,30 +999,6 @@ pub fn (mut ctx Context) use(middleware Middleware) {
 	ctx.middlewares << middleware
 }
 
-// use_logger adds a logging middleware that routes request lines through
-// the framework logger (respecting its level/output config) instead of stdout
-pub fn (mut ctx Context) use_logger() {
-	ctx.use(fn [ctx] (mut mctx MiddlewareContext) MiddlewareResult {
-		ctx.logger.info('${mctx.request.verb} ${mctx.request.path}')
-		return .continue_
-	})
-}
-
-// use_auth adds an authentication middleware
-pub fn (mut ctx Context) use_auth(check_fn fn (string) bool) {
-	ctx.use(fn [check_fn] (mut mctx MiddlewareContext) MiddlewareResult {
-		if mctx.request.client_id == '' {
-			mctx.err = new_error_detail(.auth_failed, 'No client ID')
-			return .error
-		}
-		if !check_fn(mctx.request.client_id) {
-			mctx.err = new_error_detail(.auth_failed, 'Authentication failed')
-			return .stop
-		}
-		return .continue_
-	})
-}
-
 // =============================================================================
 // Route Handling
 // =============================================================================
@@ -1294,14 +1260,6 @@ pub fn run[T](mut app T, html_filename string) ! {
 	ctx.logger.info('vxui shutdown complete')
 }
 
-// run_with_config runs the app with unified configuration
-pub fn run_with_config[T](mut app T, html_filename string, config Config) ! {
-	// Apply configuration
-	app.config = config
-
-	run(mut app, html_filename)!
-}
-
 // check_client_timeouts removes clients that haven't responded to pings
 fn (mut ctx Context) check_client_timeouts() {
 	ctx.mu.lock()
@@ -1344,13 +1302,6 @@ pub fn run_packed[T](mut app T, mut packed PackedApp, entry_file string) ! {
 	}
 
 	packed.cleanup(temp_dir)
-}
-
-// run_embedded is a convenience function for running with embedded HTML
-pub fn run_embedded[T](mut app T, html_data []u8, filename string) ! {
-	mut packed := new_packed_app()
-	packed.add_file(filename, html_data)
-	run_packed(mut app, mut packed, filename)!
 }
 
 // =============================================================================

@@ -190,7 +190,6 @@ pub mut:
     devtools          bool     // Open DevTools automatically
     no_sandbox        bool     // Disable sandbox (for root/CI)
     window_mode       WindowMode = .app // app (standalone window) | kiosk | normal tab
-    no_app_mode       bool     // DEPRECATED: legacy switch forcing a plain tab; use window_mode
     user_data_dir     string   // Custom user data directory
     preferred_path    string   // Preferred browser path (skip detection)
     remote_debug_port int      // Chrome remote debugging port (e.g., 9222)
