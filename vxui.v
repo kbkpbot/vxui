@@ -510,7 +510,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		if msg.opcode == .pong {
 			// protocol-level pong: the websocket library answers control
 			// pings itself; nothing to do here. Application liveness uses
-			// the JSON cmd ping/pong below.
+			// the JSON cmd ping/pong in handle_control_message.
 			return
 		}
 		raw_payload := msg.payload.bytestr()
@@ -518,109 +518,13 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		message := raw_message.as_map()
 		ctx.logger.debug('Received message: ${message}')
 
-		// The auth handshake is the ONLY command reachable without a token.
-		// Everything else — including js_result/pong/client_close, which used
-		// to bypass the gate — requires a valid token; otherwise any local
-		// web page could drive-by connect to the loopback port and forge
-		// results, keep zombie clients alive or evict real ones.
-		if cmd := message['cmd'] {
-			if cmd.str() == 'auth' {
-				ctx.handle_auth(mut ws, message) or {
-					auth_err := new_error_detail(.auth_failed, 'Auth failed: ${err}')
-					ctx.logger.error(auth_err.message)
-					ctx.trigger_event(EventType.error, '', auth_err.message, message, none, none,
-						auth_err)
-					ws.close(1008, 'Authentication failed')!
-				}
-				return
-			}
-		}
-
-		// Application-level heartbeats carry no token on older cached
-		// vxui-ws.js copies; answer them BEFORE the token gate so a session
-		// can never be killed by its own keep-alive mechanism. Liveness
-		// bookkeeping still requires a valid token.
-		if cmd := message['cmd'] {
-			if cmd.str() == 'ping' {
-				if message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
-					ctx.handle_pong(message)
-				}
-				mut pong := map[string]json2.Any{}
-				pong['cmd'] = json2.Any('pong')
-				pong['client_id'] = message['client_id'] or { json2.Any('') }
-				pong['timestamp'] = json2.Any(time.now().unix_milli())
-				ws.write(json2.encode(pong).bytes(), .text_frame)!
-				return
-			}
-		}
-
-		// Verify token for every non-auth message. When require_auth is on
-		// (the default) a missing token is rejected just like a wrong one.
-		if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
-			rejected_cmd := message['cmd'] or { json2.Any('') }.str()
-			mut keys := []string{}
-			for k, _ in message {
-				keys << k
-			}
-			keys.sort()
-			mut preview := raw_payload.replace('\n', ' ')
-			if preview.runes().len > 96 {
-				preview = preview.runes()[..96].map(it.str()).join('') + '…'
-			}
-			ctx.logger.warn('Unauthorized message rejected (missing or invalid token): cmd=${rejected_cmd} keys=[${keys.join(',')}] payload="${preview}"')
-			ws.close(1008, 'Invalid token')!
+		handled := ctx.handle_control_message(mut ws, message, raw_payload)!
+		if handled {
 			return
 		}
 
-		if cmd := message['cmd'] {
-			if cmd.str() == 'js_result' {
-				ctx.handle_js_result(message)
-				return
-			}
-			if cmd.str() == 'pong' {
-				ctx.handle_pong(message)
-				return
-			}
-			if cmd.str() == 'client_close' {
-				// Client is closing, send removal request to channel
-				client_id := message['client_id'] or { json2.Any('') }.str()
-				ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
-				return
-			}
-			// Authenticated utility command: enumerate connected clients
-			if cmd.str() == 'get_clients' {
-				mut ids := []json2.Any{}
-				for id in ctx.get_clients() {
-					ids << json2.Any(id)
-				}
-				mut resp := map[string]json2.Any{}
-				resp['cmd'] = json2.Any('clients')
-				resp['ids'] = json2.Any(ids)
-				ws.write(json2.encode(resp).bytes(), .text_frame)!
-				return
-			}
-		}
-
 		if rpc_id := message['rpcID'] {
-			client_id := ctx.find_client_id_by_connection(ws)
-
-			// Build type-safe request
-			req := build_request(message, client_id)
-
-			// Trigger before_request event
-			ctx.trigger_event(EventType.before_request, client_id, '', message, req, none, none)
-
-			// Handle message
-			response := handle_request(mut app, ctx, req, message)!
-
-			// Trigger after_request event
-			ctx.trigger_event(EventType.after_request, client_id, '', message, req, response, none)
-
-			json_response := '{"rpcID":"${rpc_id.i64()}", "data":${json2.encode(response.body)}}'
-			ws.write(json_response.bytes(), .text_frame) or {
-				ctx.log_write_failure(req.path, rpc_id.i64(), json_response, err)
-				return
-			}
+			dispatch_rpc(mut app, mut ctx, mut ws, rpc_id.i64(), message)!
 		}
 	})
 
@@ -637,6 +541,122 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 
 	start_server_in_thread_and_wait_till_it_is_ready_to_accept_connections(mut s)
 	return s
+}
+
+// handle_control_message answers the framework-level commands carried by a
+// control-channel text frame: auth, heartbeat ping, js_result, pong,
+// client_close and get_clients. It also enforces the token gate.
+// Returns true when the message was a control command and is fully handled;
+// false means the caller should try rpc dispatch.
+fn (mut ctx Context) handle_control_message(mut ws websocket.Client, message map[string]json2.Any, raw_payload string) !bool {
+	// The auth handshake is the ONLY command reachable without a token.
+	// Everything else — including js_result/pong/client_close, which used
+	// to bypass the gate — requires a valid token; otherwise any local
+	// web page could drive-by connect to the loopback port and forge
+	// results, keep zombie clients alive or evict real ones.
+	if cmd := message['cmd'] {
+		if cmd.str() == 'auth' {
+			ctx.handle_auth(mut ws, message) or {
+				auth_err := new_error_detail(.auth_failed, 'Auth failed: ${err}')
+				ctx.logger.error(auth_err.message)
+				ctx.trigger_event(EventType.error, '', auth_err.message, message, none, none,
+					auth_err)
+				ws.close(1008, 'Authentication failed')!
+			}
+			return true
+		}
+	}
+
+	// Application-level heartbeats carry no token on older cached
+	// vxui-ws.js copies; answer them BEFORE the token gate so a session
+	// can never be killed by its own keep-alive mechanism. Liveness
+	// bookkeeping still requires a valid token.
+	if cmd := message['cmd'] {
+		if cmd.str() == 'ping' {
+			if message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
+				ctx.handle_pong(message)
+			}
+			mut pong := map[string]json2.Any{}
+			pong['cmd'] = json2.Any('pong')
+			pong['client_id'] = message['client_id'] or { json2.Any('') }
+			pong['timestamp'] = json2.Any(time.now().unix_milli())
+			ws.write(json2.encode(pong).bytes(), .text_frame)!
+			return true
+		}
+	}
+
+	// Verify token for every non-auth message. When require_auth is on
+	// (the default) a missing token is rejected just like a wrong one.
+	if !message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
+		rejected_cmd := message['cmd'] or { json2.Any('') }.str()
+		mut keys := []string{}
+		for k, _ in message {
+			keys << k
+		}
+		keys.sort()
+		mut preview := raw_payload.replace('\n', ' ')
+		if preview.runes().len > 96 {
+			preview = preview.runes()[..96].map(it.str()).join('') + '…'
+		}
+		ctx.logger.warn('Unauthorized message rejected (missing or invalid token): cmd=${rejected_cmd} keys=[${keys.join(',')}] payload="${preview}"')
+		ws.close(1008, 'Invalid token')!
+		return true
+	}
+
+	if cmd := message['cmd'] {
+		if cmd.str() == 'js_result' {
+			ctx.handle_js_result(message)
+			return true
+		}
+		if cmd.str() == 'pong' {
+			ctx.handle_pong(message)
+			return true
+		}
+		if cmd.str() == 'client_close' {
+			// Client is closing, send removal request to channel
+			client_id := message['client_id'] or { json2.Any('') }.str()
+			ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
+			return true
+		}
+		// Authenticated utility command: enumerate connected clients
+		if cmd.str() == 'get_clients' {
+			mut ids := []json2.Any{}
+			for id in ctx.get_clients() {
+				ids << json2.Any(id)
+			}
+			mut resp := map[string]json2.Any{}
+			resp['cmd'] = json2.Any('clients')
+			resp['ids'] = json2.Any(ids)
+			ws.write(json2.encode(resp).bytes(), .text_frame)!
+			return true
+		}
+	}
+
+	return false
+}
+
+// dispatch_rpc routes an rpcID-bearing message to its tagged route handler
+// and writes the JSON response back on the same connection.
+fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i64, message map[string]json2.Any) ! {
+	client_id := ctx.find_client_id_by_connection(ws)
+
+	// Build type-safe request
+	req := build_request(message, client_id)
+
+	// Trigger before_request event
+	ctx.trigger_event(EventType.before_request, client_id, '', message, req, none, none)
+
+	// Handle message
+	response := handle_request(mut app, ctx, req, message)!
+
+	// Trigger after_request event
+	ctx.trigger_event(EventType.after_request, client_id, '', message, req, response, none)
+
+	json_response := '{"rpcID":"${rpc_id}", "data":${json2.encode(response.body)}}'
+	ws.write(json_response.bytes(), .text_frame) or {
+		ctx.log_write_failure(req.path, rpc_id, json_response, err)
+		return
+	}
 }
 
 // find_client_id_by_connection finds client ID by WebSocket connection
