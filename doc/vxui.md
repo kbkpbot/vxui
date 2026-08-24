@@ -274,7 +274,8 @@ struct Config {
 pub mut:
 	// Connection settings
 	close_timer      int = 50 // Close app after N cycles with no browser (each cycle is ~1ms)
-	ws_ping_interval int = 10 // WebSocket ping interval in seconds
+	ws_ping_interval_ms int = 30000 // WebSocket ping interval in milliseconds (default 30s)
+	ws_pong_timeout_ms  int = 60000 // Watchdog timeout: closes if no pong received within this many ms (default 60s, = 2 × ws_ping_interval_ms)
 
 	// Security settings
 	token        string // Security token (auto-generated if empty)
@@ -294,6 +295,31 @@ pub mut:
 ```
 
 Config holds vxui runtime configuration
+
+[[Return to contents]](#Contents)
+
+## Ping and Watchdog
+
+The WebSocket ping/patch mechanism serves two purposes:
+
+1. **Liveness probing** — detects connections that have gone silent (no data flowing). This is essential for remote deployments (`allow_remote = true`) where the process may crash without closing the socket cleanly.
+
+2. **Watchdog** — the server's ping thread periodically sends ping frames and closes any connection whose pong response is not received within `ws_pong_timeout_ms`. The effective threshold is `2 × ws_ping_interval_ms`.
+
+### Recommended settings by deployment type
+
+| Deployment | `ws_ping_interval_ms` | `ws_pong_timeout_ms` | Rationale |
+|---|---|---|---|
+| **Loopback (default, `allow_remote = false`)** | 30000 (30s) | 60000 (60s) | Progress death is detected by `on_close`; long interval avoids false positives during large transfers. |
+| **Remote / `allow_remote = true`** | 10000 (10s) | 15000 (15s) | Network partitions and middleboxes require more responsive detection. |
+| **Activity‑aware mode** (future: any received frame refreshes the timer) | 20000 (20s) | 30000 (30s) | Complements the vlib watchdog patch; pong still fires for idle detection. |
+
+### Known behavior
+
+- The library's ping thread fires every `ws_ping_interval_ms / 1000` seconds. A connection whose pong staleness exceeds `ws_pong_timeout_ms` is closed with code 1001 (going away).
+- During large file uploads (or any handler-blocking operation), the read loop may be temporarily unavailable to process pong frames. With the recommended loopback settings (30s interval / 60s timeout) and chunked uploads (≥1.5MB chunks, size multiple of 3 for base64 alignment), the watchdog never fires because each chunk processes in ~10s, well under the 60s threshold.
+- If a handler genuinely blocks for >60s (e.g., slow disk write), the connection will be killed — this is intentional, as it indicates a stuck server thread.
+- The `on_close` event fires when the connection is terminated, allowing the application to clean up gracefully.
 
 [[Return to contents]](#Contents)
 

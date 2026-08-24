@@ -48,14 +48,6 @@
     <td><img src="enchart.png" alt="Enchart" width="400"></td>
     <td><img src="todo.png" alt="Todo App" width="400"></td>
   </tr>
-  <tr>
-    <td align="center"><b>File Upload</b></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td><img src="file-upload.png" alt="File Upload" width="400"></td>
-    <td></td>
-  </tr>
 </table>
 
 ---

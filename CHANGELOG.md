@@ -155,6 +155,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **file-upload example**: removed. In the local-desktop positioning (backend
+  and browser share one filesystem), shipping file bytes through the browser
+  and back over loopback is wasted motion — the backend can simply be handed a
+  path. Small in-browser payloads (drag-and-drop, clipboard) remain served by
+  the standard htmx request path.
 - **Dead Config**: Removed `ReconnectConfig`, `RequestConfig` and `BackoffStrategy`
   (and `Config.reconnect` / `Config.request`) — they were never implemented; reconnection
   lives entirely in `vxui-ws.js`. Re-add alongside a real implementation if needed.

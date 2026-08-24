@@ -44,7 +44,6 @@
     ├── gallery/        # Desktop UI controls demo
     ├── element-plus/   # Vue 3 + Element Plus integration demo
     ├── todo-app/       # Full CRUD example
-    ├── file-upload/    # File upload/download example
     ├── multi-window/   # Multiple browser windows example
     ├── system-monitor/ # Real-time dashboard: broadcast + oob_update + multi-client
     ├── chat/           # Multi-window chat: broadcast + lifecycle events
