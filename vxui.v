@@ -205,13 +205,6 @@ pub mut:
 	timeout_ms         int  = 5000        // Max execution time
 	max_result_size    int  = 1024 * 1024 // Max result size in bytes (1MB)
 	allow_eval         bool // Allow eval() in frontend (dangerous!)
-	allowed_apis       []string = [// Allowed API patterns
-		'document.*',
-		'window.location.*',
-		'console.*',
-		'localStorage.*',
-		'sessionStorage.*',
-	]
 	forbidden_patterns []string = [// Forbidden patterns
 		'eval(',
 		'Function(',

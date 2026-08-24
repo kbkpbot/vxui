@@ -38,22 +38,28 @@ fn log_entry(ok bool, title string, detail string) string {
 
 // run_and_log executes js on target client and logs the outcome to ALL windows.
 // Must not return string: fire_call dispatches every string-returning method.
+// The waiting call runs in a spawned coroutine: route handlers execute on the
+// connection read loop, and a blocking run_js() there would deadlock until
+// timeout because the js_result it waits for arrives on that same loop
+// (see AGENTS.md "Routing rules").
 fn (mut app App) run_and_log(title string, js string, timeout_ms int, cid string) {
-	mut result := ''
-	mut ok := true
-	if cid != '' {
-		result = app.run_js_client(cid, js, timeout_ms) or {
-			ok = false
-			err.msg()
+	spawn fn [mut app, title, js, timeout_ms, cid] () {
+		mut result := ''
+		mut ok := true
+		if cid != '' {
+			result = app.run_js_client(cid, js, timeout_ms) or {
+				ok = false
+				err.msg()
+			}
+		} else {
+			result = app.run_js(js, timeout_ms) or {
+				ok = false
+				err.msg()
+			}
 		}
-	} else {
-		result = app.run_js(js, timeout_ms) or {
-			ok = false
-			err.msg()
-		}
-	}
-	payload := {'cmd': 'oob_update', 'html': log_entry(ok, title, result)}
-	app.broadcast(json2.encode(payload)) or {}
+		payload := {'cmd': 'oob_update', 'html': log_entry(ok, title, result)}
+		app.broadcast(json2.encode(payload)) or {}
+	}()
 }
 
 @['/title']
@@ -100,6 +106,11 @@ fn main() {
 	mut app := App{}
 	app.config.app_name = 'run-js-playground'
 	app.config.close_timer_ms = 60000
+	// setTimeout is essential for UI scripts (auto-dismissing toasts etc.);
+	// opt out of the default blanket timer ban for this playground.
+	mut forbidden := app.config.js_sandbox.forbidden_patterns.clone()
+	forbidden = forbidden.filter(it != 'setTimeout(' && it != 'setInterval(')
+	app.config.js_sandbox.forbidden_patterns = forbidden
 
 	vxui.run(mut app, default_page_html_file)!
 }

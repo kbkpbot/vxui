@@ -153,8 +153,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simultaneous htmx requests in the same millisecond no longer overwrite each other in
   `pendingRequests`
 
+### Fixed
+
+- **run-js-playground: every button failed with "JavaScript execution timeout"**.
+  The example called the blocking `run_js()` inside route handlers — handlers
+  run on the connection read loop, the very coroutine that would deliver the
+  `js_result` they wait for (the documented deadlock constraint in AGENTS.md).
+  `run_and_log()` now runs its waiting call in a spawned coroutine; all six
+  demo buttons verified working end-to-end in a real browser. The example also
+  opts out of the default `setTimeout(`/`setInterval(` sandbox ban, which
+  blocked its auto-dismissing toast.
+
 ### Removed
 
+- **Dead config**: `JsSandboxConfig.allowed_apis` was never consulted —
+  validation only ever checked `forbidden_patterns`. The field is gone
+  (vxui-ws.js keeps syncing it harmlessly).
 - **Middleware system and rate limiting**: both were web-server concepts with
   zero real-world usage (no example, test scenario, or doc recipe ever used
   them) and are gone outright — `Middleware`/`MiddlewareContext`/

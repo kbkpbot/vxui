@@ -171,7 +171,6 @@ fn test_js_sandbox_config_defaults() {
 	assert config.timeout_ms == 5000
 	assert config.max_result_size == 1048576
 	assert config.allow_eval == false
-	assert config.allowed_apis.len > 0
 	assert config.forbidden_patterns.len > 0
 }
 
