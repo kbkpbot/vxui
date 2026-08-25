@@ -285,8 +285,10 @@ pub mut:
 	multi_client bool // Allow multiple browser clients
 	// When multi_client is off, let a NEW successful authentication evict
 	// stale sessions instead of letting a restored/crashed browser tab hold
-	// the single slot forever.
-	evict_on_new bool
+	// the single slot forever. Defaults to true: without it, a simple F5
+	// reload races the async client cleanup and the fresh connection gets
+	// rejected — the app appears dead after a refresh.
+	evict_on_new bool = true
 	max_clients  int = 10 // Maximum concurrent clients (0 = unlimited)
 
 	// JavaScript execution settings
@@ -1083,6 +1085,8 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	mut had_clients := false // Track if we ever had clients
 
+	mut empty_since := time.Time{} // when the last client left (grace window)
+
 	for {
 		ws_state = ctx.ws.get_state()
 
@@ -1099,25 +1103,35 @@ pub fn run[T](mut app T, html_filename string) ! {
 		}
 
 		if client_count == 0 {
-			// If we had clients before and now none, exit immediately
-
 			if had_clients {
-				ctx.logger.info('All clients disconnected, shutting down')
+				// Grace window: a page RELOAD delivers client_close / FIN for
+				// the old connection and reconnects a moment later. Exiting
+				// immediately here turned every F5 into an app suicide.
+				// Wait ~1.5s; a reconnecting client clears empty_since.
+				if empty_since.is_zero() {
+					empty_since = time.now()
+				}
 
-				break
-			}
+				if time.now().unix_milli() - empty_since.unix_milli() > 1500 {
+					ctx.logger.info('All clients disconnected, shutting down')
 
-			// Never had clients, wait for timeout
+					break
+				}
+			} else {
+				// Never had clients, wait for timeout
 
-			elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
+				elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
 
-			if elapsed_ms > ctx.config.close_timer_ms {
-				ctx.logger.info('No clients connected for ${ctx.config.close_timer_ms}ms, shutting down')
+				if elapsed_ms > ctx.config.close_timer_ms {
+					ctx.logger.info('No clients connected for ${ctx.config.close_timer_ms}ms, shutting down')
 
-				break
+					break
+				}
 			}
 		} else {
 			had_clients = true
+
+			empty_since = time.Time{}
 
 			last_client_time = time.now()
 		}

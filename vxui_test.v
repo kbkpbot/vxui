@@ -1738,3 +1738,47 @@ fn test_on_event_before_run_survives_init() ! {
 	assert fired[0], 'client_connected handler registered before run() did not fire'
 	cl.close(1000, 'done') or {}
 }
+
+// Regression: a page RELOAD closes the old connection and reconnects ~1s
+// later. The event loop must ride out that gap instead of shutting down.
+fn test_reconnect_within_grace_window_keeps_server_alive() ! {
+	port := get_free_port()!
+	mut app := new_ws_test_app(u16(port))!
+	app.config.evict_on_new = true
+	ws := startup_ws_server(mut app, .ip, port)!
+	spawn fn [mut app] () {
+		app.process_client_removals()
+	}()
+	defer {
+		app.ws.free()
+	}
+
+	// first connection: authenticate, then simulate a reload (client_close
+	// notification followed by a fresh connection ~300ms later)
+	mut cl1 := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
+	cl1.connect()!
+	cl1.write_string('{"cmd":"auth","token":"it-token"}')!
+	read_text_until(mut cl1, fn (s string) bool {
+		return s.contains('"cmd":"auth_ok"')
+	})!
+
+	cl1.write_string('{"cmd":"client_close","token":"it-token","client_id":"${''}"}')!
+	time.sleep(300 * time.millisecond)
+	cl1.close(1000, 'reload') or {}
+
+	// second connection arrives inside the grace window
+	mut cl2 := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
+	cl2.connect()!
+	cl2.write_string('{"cmd":"auth","token":"it-token"}')!
+	resp2 := read_text_until(mut cl2, fn (s string) bool {
+		return s.contains('"cmd":"auth_ok"')
+	})!
+	assert resp2.contains('"cmd":"auth_ok"'), 'reconnect after reload was rejected'
+
+	// server must still be open well past the gap
+	assert ws.get_state() == .open
+	time.sleep(1700 * time.millisecond)
+	assert ws.get_state() == .open, 'server shut down despite reconnect inside grace window'
+
+	cl2.close(1000, 'done') or {}
+}

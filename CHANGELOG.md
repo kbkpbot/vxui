@@ -153,8 +153,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simultaneous htmx requests in the same millisecond no longer overwrite each other in
   `pendingRequests`
 
+### Added
+
+- **game-minesweeper example**: 16×16/40 mines with mouse-precision
+  interaction (left = reveal, right = flag via contextmenu), first-click-safe
+  generation, flood-fill openings, server-side timing, and the classic Win95
+  bevel look. Demonstrates the programmatic `rpc()` + `applyResponseHtml()`
+  API pair alongside 2048's declarative style.
+
 ### Fixed
 
+- **F5 reload killed the app** (single-client mode): the page's beforeunload
+  `client_close` removed the client synchronously, the event loop saw "all
+  clients disconnected" and shut down before the reloading page could
+  reconnect. The event loop now holds a 1.5s grace window after the last
+  client leaves; a reconnecting client cancels the shutdown (regression test
+  `test_reconnect_within_grace_window_keeps_server_alive`).
+- **`evict_on_new` now defaults to true**: without it the same reload race
+  rejected the fresh connection under `multi_client = false`.
 - **Google Translate popup suppressed by default**: Chromium's translate
   prompt appeared on every fresh profile whenever the page language differed
   from the browser UI language. The obsolete `--disable-translate` flag (no
