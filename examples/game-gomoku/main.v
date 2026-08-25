@@ -30,7 +30,8 @@ mut:
 	turn     int = 1 // 1 black, 2 white
 	over      bool
 	winner    int
-	place_err string // last rule rejection (void helpers can't return errors)
+	place_err  string // last rule rejection (void helpers can't return errors)
+	invite_err string // last second-window launch failure
 	last_x   int = -1
 	last_y   int = -1
 	move_no  int
@@ -276,6 +277,49 @@ fn (mut app App) place_handler(message map[string]json2.Any) string {
 		payload := {'cmd': 'oob_update', 'html': '<div id="notice" hx-swap-oob="innerHTML:#notice"><span class="warn">${err}</span></div>'}
 		app.send_to_client(client_id, json2.encode(payload)) or {}
 	}
+	return ''
+}
+
+// invite launches a SECOND browser window pointed at the same match —
+// the framework's browser management doubles as the "invite player"
+// button. The second instance gets its own profile (independent window)
+// and a debug port so tooling can inspect both players.
+@['/invite']
+fn (mut app App) invite(_ map[string]json2.Any) string {
+	// fire-and-forget: browser startup takes seconds and must not block the
+	// read loop (spawn keeps this handler instant)
+	spawn fn [mut app] () {
+		defer {
+			app.mu.lock()
+			err := app.invite_err
+			app.invite_err = ''
+			app.mu.unlock()
+			if err != '' {
+				payload := {'cmd': 'oob_update', 'html': '<div id="notice" hx-swap-oob="innerHTML:#notice"><span class="warn">${err}</span></div>'}
+				app.broadcast(json2.encode(payload)) or {}
+			}
+		}
+		cfg := vxui.BrowserConfig{
+			custom_args: [
+				'--disable-features=Translate,TranslateUI,TranslateMessageUI',
+				'--lang=en-US',
+				'--remote-debugging-port=9555',
+				'--remote-allow-origins=*',
+			]
+		}
+		vxui.start_browser_with_config(default_page_html_file, app.ws_port,
+			app.config.token, vxui.WindowConfig{
+				width:  640
+				height: 900
+				x:      120
+				y:      120
+				title:  'Gomoku — Player 2'
+			}, cfg) or {
+			app.mu.lock()
+			app.invite_err = 'Could not launch the second window: ${err.msg()}'
+			app.mu.unlock()
+		}
+	}()
 	return ''
 }
 
