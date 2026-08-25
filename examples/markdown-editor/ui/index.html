@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Markdown Editor — vxui</title>
+<link rel="stylesheet" href="./stylesheet.css"/>
+<script src="./js/htmx.js"></script>
+<script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+<header>
+<h1>MD</h1>
+<input id="path" type="text" placeholder="/path/to/file.md" spellcheck="false"/>
+<button id="open" class="act">Open</button>
+<button id="save" class="act save">Save</button>
+<button id="new" class="act">New</button>
+<div id="hud"><span class="msg">new document</span></div>
+</header>
+<div id="notice"><span class="warn"></span></div>
+<main>
+<textarea id="editor" spellcheck="false" placeholder="# Start typing markdown…"></textarea>
+<div id="preview" class="md-body"></div>
+</main>
+<script>
+// Editor wiring. Two response styles are in play:
+//   /preview returns an HTML fragment  -> injected into #preview
+//   /open /save /new return JSON       -> parsed and applied to the editor
+(function () {
+    var editor = document.getElementById('editor');
+    var preview = document.getElementById('preview');
+    var hud = document.getElementById('hud');
+    var noticeEl = document.querySelector('#notice .warn');
+    var pathInput = document.getElementById('path');
+    var debounceTimer = null;
+
+    function notice(msg, warn) {
+        if (noticeEl) { noticeEl.textContent = msg || ''; noticeEl.className = warn ? 'warn' : ''; }
+    }
+    function hudMsg(msg) { hud.innerHTML = '<span class="msg">' + msg + '</span>'; }
+
+    function rpc(path, params) {
+        return window.vxuiWs.rpc({ path: path, parameters: params || {} });
+    }
+
+    // live preview, debounced
+    editor.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+            rpc('/preview', { content: editor.value }).then(function (html) {
+                preview.innerHTML = html;
+            });
+        }, 300);
+    });
+
+    document.getElementById('open').addEventListener('click', function () {
+        rpc('/open', { path: pathInput.value }).then(function (raw) {
+            var r = JSON.parse(raw);
+            if (!r.ok) { notice(r.error, true); return; }
+            editor.value = r.content;
+            pathInput.value = r.path;
+            notice(''); 
+            hudMsg('opened ' + r.path + ' · ' + r.chars + ' chars');
+            preview.innerHTML = '';
+            editor.dispatchEvent(new Event('input'));
+        }).catch(function (e) { notice(e.message || e, true); });
+    });
+
+    document.getElementById('save').addEventListener('click', function () {
+        rpc('/save', { path: pathInput.value, content: editor.value }).then(function (raw) {
+            var r = JSON.parse(raw);
+            if (!r.ok) { notice(r.error, true); return; }
+            pathInput.value = r.path;
+            notice('');
+            hudMsg('saved ' + r.path + ' · ' + r.chars + ' chars · ' + r.saved_at);
+        }).catch(function (e) { notice(e.message || e, true); });
+    });
+
+    document.getElementById('new').addEventListener('click', function () {
+        rpc('/new', {}).then(function () {
+            editor.value = ''; pathInput.value = '';
+            preview.innerHTML = '';
+            hudMsg('new document'); notice('');
+        });
+    });
+})();
+</script>
+</body>
+</html>

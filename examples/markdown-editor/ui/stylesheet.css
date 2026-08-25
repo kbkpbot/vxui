@@ -1,0 +1,51 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1e1e2e; color: #cdd6f4; min-height: 100vh;
+	font-family: -apple-system, 'Segoe UI', sans-serif; padding: 14px 18px;
+	display: flex; flex-direction: column; }
+
+header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+header h1 { font-size: 26px; font-weight: 900; color: #cba6f7; }
+#path { flex: 1; min-width: 260px; background: #313244; color: #cdd6f4;
+	border: 1px solid #45475a; border-radius: 6px; padding: 9px 12px;
+	font-family: 'Consolas', monospace; font-size: 13px; }
+#path:focus { outline: 1px solid #cba6f7; }
+button.act { background: #45475a; color: #cdd6f4; border: none;
+	padding: 9px 18px; border-radius: 6px; cursor: pointer;
+	font-size: 13.5px; font-weight: 700; }
+button.act:hover { background: #585b70; }
+button.act.save { background: #a6e3a1; color: #1e1e2e; }
+button.act.save:hover { background: #b9f0b5; }
+#hud { width: 100%; margin-top: 8px; font-size: 12.5px; color: #9399b2; }
+#hud .msg { font-weight: 600; }
+
+#notice { min-height: 20px; font-size: 13px; }
+#notice .warn { color: #f38ba8; font-weight: 700; }
+
+main { flex: 1; display: flex; gap: 14px; margin-top: 8px;
+	min-height: 0; }
+#editor { flex: 1; background: #313244; color: #cdd6f4;
+	border: 1px solid #45475a; border-radius: 10px; padding: 16px;
+	font-family: 'Consolas', 'Fira Code', monospace; font-size: 14.5px;
+	line-height: 1.65; resize: none; }
+#editor:focus { outline: 1px solid #cba6f7; }
+
+#preview { flex: 1; background: #eff1f5; color: #4c4f69;
+	border-radius: 10px; padding: 22px 26px; overflow-y: auto; }
+
+/* markdown body styles (light paper) */
+.md-body h1 { font-size: 30px; margin: 18px 0 12px; color: #1e1e2e; }
+.md-body h2 { font-size: 24px; margin: 16px 0 10px; color: #1e1e2e;
+	border-bottom: 1px solid #ccd0da; padding-bottom: 6px; }
+.md-body h3 { font-size: 19px; margin: 14px 0 8px; }
+.md-body p { margin: 8px 0; line-height: 1.7; }
+.md-body ul, .md-body ol { margin: 8px 0 8px 26px; line-height: 1.7; }
+.md-body code { background: #e6e9ef; border-radius: 4px; padding: 2px 6px;
+	font-family: 'Consolas', monospace; font-size: 13px; color: #8839ef; }
+.md-body pre { background: #1e1e2e; color: #cdd6f4; border-radius: 8px;
+	padding: 14px 16px; overflow-x: auto; margin: 10px 0; }
+.md-body pre code { background: none; color: inherit; padding: 0; }
+.md-body blockquote { border-left: 4px solid #cba6f7; padding: 6px 14px;
+	margin: 10px 0; background: #e6e9ef; border-radius: 0 6px 6px 0; }
+.md-body a { color: #1e66f5; }
+.md-body hr { border: none; border-top: 1px solid #ccd0da; margin: 14px 0; }
+.md-body strong { color: #1e1e2e; }
