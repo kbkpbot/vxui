@@ -1,0 +1,58 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #faf8ef; color: #776e65; min-height: 100vh;
+	font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+	padding: 18px 16px; }
+
+header { max-width: 560px; margin: 0 auto 10px; }
+header h1 { font-size: 40px; font-weight: 900; letter-spacing: -1px; }
+header .hint { margin-top: 10px; font-size: 13.5px; line-height: 1.5;
+	color: #8f7a66; background: #f2ede3; border-radius: 8px; padding: 10px 14px; }
+.mycolor { display: inline-block; margin-left: 12px; padding: 6px 12px;
+	border-radius: 6px; background: #bbada0; color: #fff;
+	font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+
+#hud { display: inline-block; margin-left: 10px; }
+#hud .msg { font-size: 15px; font-weight: 700; }
+#hud .msg.end { color: #f65e3b; }
+
+#notice { max-width: 560px; margin: 0 auto 8px; min-height: 22px; }
+#notice .warn { color: #d9534f; font-size: 13.5px; font-weight: 700; }
+
+button.ghost { background: #8f7a66; color: #f9f6f2; border: none;
+	padding: 10px 20px; border-radius: 6px; cursor: pointer;
+	font-size: 14px; font-weight: 700; box-shadow: 0 3px 0 #7a6857; }
+button.ghost:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a6857; }
+
+/* Board: 15x15 cells; each empty cell is an htmx trigger. Stones are
+   centered circles; the last move gets a marker ring. Grid lines and star
+   points are painted in CSS (no image assets). */
+#board { width: fit-content; margin: 6px auto 0; }
+.grid { display: grid;
+	grid-template-columns: repeat(15, 34px);
+	grid-template-rows: repeat(15, 34px);
+	background-color: #dcb35c;
+	/* 1px grid lines along every cell edge (14 inner lines per axis) */
+	background-image:
+		linear-gradient(to right, rgba(122, 85, 43, .55) 1px, transparent 1px),
+		linear-gradient(to bottom, rgba(122, 85, 43, .55) 1px, transparent 1px);
+	background-size: 34px 34px;
+	border: 3px solid #7a552b; border-radius: 4px;
+	box-shadow: 0 6px 24px rgba(119, 110, 101, .3); }
+.cell { position: relative; display: flex; align-items: center;
+	justify-content: center; }
+/* star points: hoshi (3,3) (11,3) (3,11) (11,11) and tengen (7,7) */
+.cell.empty.star::before { content: ''; position: absolute; width: 7px;
+	height: 7px; border-radius: 50%; background: #7a552b; }
+.cell.empty { cursor: pointer; }
+.cell.empty:hover::after { content: ''; position: absolute; width: 10px;
+	height: 10px; border-radius: 50%; background: rgba(119, 110, 101, .45); }
+
+.cell.stone::after { content: ''; width: 28px; height: 28px; border-radius: 50%;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, .4); }
+.cell.black::after { background: radial-gradient(circle at 35% 30%, #555, #000 70%); }
+.cell.white::after { background: radial-gradient(circle at 35% 30%, #fff, #d8d8d8 75%); }
+.cell.last::before { content: ''; position: absolute; width: 12px; height: 12px;
+	border-radius: 50%; border: 2px solid #e74c3c; z-index: 3; }
+
+.build { font-size: 10px; color: #b0a493; margin-left: 8px;
+	font-weight: 400; letter-spacing: .3px; }

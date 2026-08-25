@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>2048 — vxui</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23edc22e'/%3E%3Ctext x='16' y='23' font-size='16' font-weight='900' font-family='Arial' fill='%23fff' text-anchor='middle'%3E2%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="./stylesheet.css"/>
+<script src="./js/htmx.js"></script>
+<script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+<header>
+<h1>2048</h1>
+<div id="hud"><div class="scores"><div class="box">SCORE<b>0</b></div><div class="box">BEST<b>0</b></div><span class="msg">connecting…</span></div></div>
+<button hx-post="/new" hx-target="#board" hx-swap="outerHTML" class="ghost">New Game</button>
+<p class="hint">Every arrow key is one WebSocket round-trip (~0.6ms loopback).<br>
+All rules run backend-side in V — the page renders fragments and nothing else.</p>
+</header>
+
+<!-- Keyboard bridge + four declarative triggers. Each arrow key is mapped
+     to a named custom event; hx-vals carries the direction as the request
+     parameter. No game logic lives on this page. -->
+<div class="k" hx-post="/move" hx-trigger="g2048-left from:body"
+     hx-vals='{"direction":"left"}' hx-target="#board" hx-swap="outerHTML"></div>
+<div class="k" hx-post="/move" hx-trigger="g2048-right from:body"
+     hx-vals='{"direction":"right"}' hx-target="#board" hx-swap="outerHTML"></div>
+<div class="k" hx-post="/move" hx-trigger="g2048-up from:body"
+     hx-vals='{"direction":"up"}' hx-target="#board" hx-swap="outerHTML"></div>
+<div class="k" hx-post="/move" hx-trigger="g2048-down from:body"
+     hx-vals='{"direction":"down"}' hx-target="#board" hx-swap="outerHTML"></div>
+<script>
+document.body.addEventListener("keyup", function (e) {
+	var dir = { ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down" }[e.key];
+	if (dir && window.htmx) { htmx.trigger(document.body, "g2048-" + dir); }
+});
+document.addEventListener("keydown", function (e) {
+	if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].indexOf(e.key) >= 0) { e.preventDefault(); }
+});
+</script>
+
+<!-- Initial board; /new fills it right after the socket authenticates. -->
+<div id="board"
+     hx-post="/new" hx-trigger="vxui:authenticated from:body"
+     hx-swap="outerHTML"><div class="grid"></div></div>
+<script>
+// FLIP slide animation for backend-rendered tiles. The backend re-renders
+// every tile at its new absolute position after each move; identity
+// (data-tid) survives moves and merges, so the page can slide each tile
+// from where it used to be. Presentation only — no game logic here.
+(function () {
+	var board = null;
+	var prev = {};
+	document.body.addEventListener('htmx:beforeOnLoad', function () {
+		board = board || document.getElementById('board');
+		if (!board) { return; }
+		prev = {};
+		board.querySelectorAll('.tile').forEach(function (t) {
+			prev[t.dataset.tid] = t.style.transform;
+		});
+	});
+	document.body.addEventListener('htmx:afterSwap', function () {
+		board = board || document.getElementById('board');
+		if (!board) { return; }
+		board.querySelectorAll('.tile').forEach(function (t) {
+			var old = prev[t.dataset.tid];
+			var now = t.style.transform;
+			if (old && old !== now) {
+				t.style.transition = 'none';
+				t.style.transform = old;
+				void t.getBoundingClientRect(); // force layout
+				requestAnimationFrame(function () {
+					t.style.transition = '';
+					t.style.transform = now;
+				});
+			}
+		});
+		prev = {};
+	});
+})();
+</script>
+</body>
+</html>

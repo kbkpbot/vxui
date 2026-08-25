@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Minesweeper — vxui</title>
+<link rel="stylesheet" href="./stylesheet.css"/>
+<script src="./js/htmx.js"></script>
+<script src="./js/vxui-ws.js"></script>
+</head>
+<body hx-ext="vxui-ws">
+<header>
+<h1>Minesweeper</h1>
+<div id="hud"><span class="msg">left = reveal · right = flag</span></div>
+<button id="new" class="ghost">New Board</button>
+<p class="hint">16×16, 40 mines. The first click is always safe. Every click is
+one WebSocket rpc (~0.6ms loopback); rules run backend-side in V.</p>
+</header>
+<div id="notice"><span class="warn"></span></div>
+<div id="board"></div>
+<script>
+// Mouse-precision bridge: left = reveal, right = flag. Moves travel through
+// the framework's programmatic API pair — rpc() carries the click to the
+// backend, applyResponseHtml() renders the returned fragments (board inner +
+// hud oob). No game logic lives here.
+document.body.addEventListener("vxui:authenticated", function () {
+    // render the untouched board (all hidden cells) once connected
+    window.vxuiWs.rpc({ path: '/new', parameters: {} })
+        .then(function (html) { window.vxuiWs.applyResponseHtml(html, '#board'); });
+});
+
+(function () {
+    var board = document.getElementById('board');
+
+    function cellFrom(e) {
+        var el = e.target.closest('.cell');
+        if (!el) { return null; }
+        return { x: +el.dataset.x, y: +el.dataset.y };
+    }
+
+    function act(path, c) {
+        window.vxuiWs.rpc({ path: path, parameters: { x: c.x, y: c.y } })
+            .then(function (html) {
+                window.vxuiWs.applyResponseHtml(html, '#board');
+                var warn = document.getElementById('notice');
+                if (warn) { warn.innerHTML = '<span class="warn"></span>'; }
+            })
+            .catch(function (err) {
+                var warn = document.getElementById('notice');
+                if (warn) { warn.innerHTML = '<span class="warn">' + (err.message || err) + '</span>'; }
+            });
+    }
+
+    board.addEventListener('click', function (e) {
+        var c = cellFrom(e);
+        if (c) { act('/reveal', c); }
+    });
+    board.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        var c = cellFrom(e);
+        if (c) { act('/flag', c); }
+    });
+    document.getElementById('new').addEventListener('click', function () {
+        window.vxuiWs.rpc({ path: '/new', parameters: {} })
+            .then(function (html) { window.vxuiWs.applyResponseHtml(html, '#board'); });
+    });
+})();
+</script>
+</body>
+</html>

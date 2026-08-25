@@ -2,10 +2,14 @@
 *.exe
 main
 examples/*/main
-examples/*/[a-z]*
 !examples/*/main.v
 !examples/*/*.v
 !examples/*/README.md
+!examples/*/ui/**
+!examples/*/templates/**
+# NOTE: the previous `examples/*/[a-z]*` rule also ignored every example's
+# lowercase resource dirs (ui/, templates/) — examples cloned from git had
+# no HTML/CSS/JS at all. Binary artifacts stay ignored via examples/*/main.
 
 # V cache
 .vcache/

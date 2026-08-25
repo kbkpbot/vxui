@@ -1,0 +1,51 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #c0c0c0; color: #222; min-height: 100vh;
+	font-family: 'Segoe UI', Tahoma, sans-serif; padding: 18px 16px;
+	user-select: none; }
+
+header { max-width: 560px; margin: 0 auto 12px; }
+header h1 { font-size: 34px; font-weight: 900; letter-spacing: -1px; }
+#hud { display: inline-block; margin-left: 12px; }
+#hud .msg { font-size: 15px; font-weight: 700; }
+#hud .msg.win { color: #0a7a2f; }
+#hud .msg.lose { color: #c22; }
+.hint { margin-top: 10px; font-size: 13px; line-height: 1.5; color: #444;
+	background: #d4d0c8; border: 2px inset #fff; border-radius: 4px;
+	padding: 8px 12px; }
+.ghost { float: right; background: #d4d0c8; border: 2px outset #fff;
+	padding: 8px 18px; border-radius: 3px; cursor: pointer;
+	font-size: 14px; font-weight: 700; }
+.ghost:active { border-style: inset; }
+
+#notice { max-width: 560px; margin: 0 auto 6px; min-height: 20px; }
+#notice .warn { color: #c22; font-size: 13px; font-weight: 700; }
+
+/* Board: Win95-style sunken panel with bevelled cells */
+#board { width: fit-content; margin: 0 auto; background: #bdbdbd;
+	border: 3px solid; border-color: #808080 #fff #fff #808080;
+	padding: 8px; }
+.grid { display: grid;
+	grid-template-columns: repeat(16, 30px);
+	grid-template-rows: repeat(16, 30px); }
+
+.cell { display: flex; align-items: center; justify-content: center;
+	width: 30px; height: 30px; font-size: 16px; font-weight: 900;
+	font-family: 'Consolas', monospace; }
+.cell.hidden { background: #bdbdbd; border: 3px outset;
+	border-color: #fff #7b7b7b #7b7b7b #fff; cursor: pointer; }
+.cell.hidden:active { border-style: inset; }
+.cell.open { background: #d6d6d6; border: 1px solid #a9a9a9; }
+.cell.flagged { background: #bdbdbd; border: 3px outset;
+	border-color: #fff #7b7b7b #7b7b7b #fff; color: #c22; }
+.cell.mine-hit { background: #e33; border: 1px solid #900; color: #fff; }
+.cell.mine-shown { background: #bbb; border: 1px solid #999; color: #333; }
+
+/* classic digit ramp */
+.n1 { color: #0000ff; }
+.n2 { color: #008000; }
+.n3 { color: #ff0000; }
+.n4 { color: #000080; }
+.n5 { color: #800000; }
+.n6 { color: #008080; }
+.n7 { color: #000; }
+.n8 { color: #808080; }
