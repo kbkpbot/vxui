@@ -155,6 +155,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Google Translate popup suppressed by default**: Chromium's translate
+  prompt appeared on every fresh profile whenever the page language differed
+  from the browser UI language. The obsolete `--disable-translate` flag (no
+  effect on current Chromium) is replaced by merging
+  `Translate,TranslateUI,TranslateMessageUI` into the single
+  `--disable-features` switch (repeated `--disable-features` flags overwrite
+  each other), and fresh temp profiles are pre-seeded with
+  `{"translate":{"enabled":false}}` in `Default/Preferences`. User-supplied
+  `user_data_dir`/`profile_dir` settings are never overwritten.
 - **run-js-playground: every button failed with "JavaScript execution timeout"**.
   The example called the blocking `run_js()` inside route handlers — handlers
   run on the connection read loop, the very coroutine that would deliver the

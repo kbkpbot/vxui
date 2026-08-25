@@ -117,7 +117,7 @@ fn get_browser_args(browser_name string) []string {
 		'--disable-default-apps',
 		'--disable-dev-shm-usage',
 		'--disable-infobars',
-		'--disable-features=site-per-process',
+		'--disable-features=site-per-process,Translate,TranslateUI,TranslateMessageUI',
 		'--disable-hang-monitor',
 		'--disable-ipc-flooding-protection',
 		'--disable-popup-blocking',
@@ -136,7 +136,6 @@ fn get_browser_args(browser_name string) []string {
 		'--disable-background-mode',
 		'--disable-plugins',
 		'--disable-plugins-discovery',
-		'--disable-translate',
 		'--bwsi',
 		'--disable-sync',
 		'--disable-sync-preferences',
@@ -260,6 +259,14 @@ pub fn start_browser_with_config(filename string, vxui_ws_port u16, token string
 	os.mkdir_all(profile_path) or {
 		return new_error_detail_with_cause(VxuiError.profile_create_failed,
 			'Failed to create profile directory', err)
+	}
+	// Disable Chrome's translate prompt at the prefs level too: feature
+	// flags alone miss newer Chrome builds. Written only when absent, so a
+	// user-supplied user_data_dir/profile_dir keeps its own settings.
+	prefs_path := os.join_path(profile_path, 'Default', 'Preferences')
+	if !os.exists(prefs_path) {
+		os.mkdir_all(os.join_path(profile_path, 'Default')) or {}
+		os.write_file(prefs_path, '{"translate":{"enabled":false}}') or {}
 	}
 
 	// Build command arguments
