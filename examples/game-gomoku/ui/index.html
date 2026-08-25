@@ -10,7 +10,7 @@
 <body hx-ext="vxui-ws">
 <header>
 <h1>Gomoku <span id="mycolor" class="mycolor">…</span></h1>
-<div id="hud"><span class="msg">connecting…</span><span class="build">gomoku-b3-invite</span></div>
+<div id="hud"><span class="msg">connecting…</span></div>
 <button id="invite" class="ghost">Open Second Window</button>
 <button hx-post="/new" hx-swap="none" class="ghost">New Match</button>
 <p class="hint">Open a <b>second browser window</b> of this page: the first
@@ -21,7 +21,6 @@ Click an intersection to place a stone.</p>
 <div id="notice"><span class="warn"></span></div>
 <div id="board"><div class="grid"></div></div>
 <script>
-console.log('[GOMOKU] page build gomoku-b3-invite — invite via rpc()');
 // Pull the CURRENT match on join (does not reset it).
 document.body.addEventListener("vxui:authenticated", function () {
 	htmx.ajax("POST", "/state", { target: "#board", swap: "outerHTML" });
@@ -29,24 +28,19 @@ document.body.addEventListener("vxui:authenticated", function () {
 // invite via rpc() so failures are VISIBLE (declarative hx-post 404s are
 // silent); success/failure both land in the notice bar
 document.getElementById("invite").addEventListener("click", function () {
-	// diagnostic chain: every step lands in the notice bar, so a failure is
-	// visible on the page itself (no devtools needed)
 	var w = document.querySelector("#notice");
-	function step(msg, cls) {
-		if (w) { w.innerHTML = '<span class="' + (cls || 'msg') + '">' + msg + '</span>'; }
-		console.log('[invite] ' + msg);
+	function notice(msg, warn) {
+		if (w) { w.innerHTML = '<span class="' + (warn ? 'warn' : 'msg') + '">' + msg + '</span>'; }
 	}
-	var hasWs = !!window.vxuiWs;
-	var st = hasWs ? window.vxuiWs.getConnectionState() : 'NO vxuiWs OBJECT';
-	var hasRpc = hasWs && typeof window.vxuiWs.rpc === 'function';
-	step('clicked · ws=' + st + ' · rpc()=' + hasRpc + ' · build=gomoku-b3-invite');
-	if (!hasRpc) { step('ABORT: rpc() unavailable — stale vxui-ws.js?', 'warn'); return; }
-	if (st !== 'authenticated') { step('ABORT: not authenticated (state=' + st + ')', 'warn'); return; }
-	step('sending /invite …');
+	if (!window.vxuiWs || typeof window.vxuiWs.rpc !== 'function') {
+		notice('Not connected yet — try again in a second', true);
+		return;
+	}
+	notice('Opening second window…');
 	window.vxuiWs.rpc({ path: '/invite', parameters: {} }).then(function () {
-		step('server accepted — second window should appear');
+		notice('Second window launched — it plays WHITE ○');
 	}).catch(function (e) {
-		step('SERVER ERROR: ' + (e.message || e), 'warn');
+		notice((e.message || e), true);
 	});
 });
 </script>

@@ -53,6 +53,3 @@ button.ghost:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a6857; }
 .cell.white::after { background: radial-gradient(circle at 35% 30%, #fff, #d8d8d8 75%); }
 .cell.last::before { content: ''; position: absolute; width: 12px; height: 12px;
 	border-radius: 50%; border: 2px solid #e74c3c; z-index: 3; }
-
-.build { font-size: 10px; color: #b0a493; margin-left: 8px;
-	font-weight: 400; letter-spacing: .3px; }
