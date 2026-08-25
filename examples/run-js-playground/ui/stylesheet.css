@@ -24,3 +24,19 @@ select { background: #1c2532; color: #dfe6ee; border: 1px solid #2a3444;
 .entry .title { font-weight: 600; }
 .entry pre { white-space: pre-wrap; word-break: break-all;
 	color: #9fb3c8; margin-top: 4px; font-size: 13px; }
+
+/* Backend-injected toast (see /toast in main.v). Big, animated banner:
+   slide-down fade-in, ~3.4s on screen, fade-out before removal. */
+.vxui-toast { position: fixed; top: 24px; left: 50%;
+	transform: translate(-50%, -16px); background: linear-gradient(135deg, #11998e, #38ef7d);
+	color: #fff; padding: 16px 34px; border-radius: 14px;
+	font-size: 17px; font-weight: 600; letter-spacing: .5px; white-space: nowrap;
+	box-shadow: 0 10px 36px rgba(0, 0, 0, .40); opacity: 0; z-index: 2147483647;
+	animation: vxui-toast-in .26s cubic-bezier(.2, .9, .3, 1.2) forwards; }
+.vxui-toast.hide { animation: vxui-toast-out .34s ease-in forwards; }
+@keyframes vxui-toast-in {
+	from { opacity: 0; transform: translate(-50%, -16px); }
+	to   { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes vxui-toast-out {
+	from { opacity: 1; transform: translate(-50%, 0); }
+	to   { opacity: 0; transform: translate(-50%, -16px); } }

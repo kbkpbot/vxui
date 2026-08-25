@@ -77,7 +77,10 @@ fn (mut app App) do_scroll(message map[string]json2.Any) string {
 
 @['/toast']
 fn (mut app App) do_toast(message map[string]json2.Any) string {
-	js := "(()=>{const t=document.createElement('div');t.textContent='来自后端的消息 '+new Date().toLocaleTimeString();t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#11998e;color:#fff;padding:10px 18px;border-radius:8px;z-index:99999';document.body.appendChild(t);setTimeout(()=>t.remove(),2500);return 'toast shown'})()"
+	// Visuals live in the .vxui-toast CSS class (see ui/stylesheet.css): the
+	// sandbox counts semicolons in the script text, so the injected JS stays a
+	// minimal skeleton while the stylesheet carries gradients/shadows/keyframes.
+	js := "(()=>{var t=document.createElement('div');t.className='vxui-toast';t.textContent='来自后端的消息 · '+new Date().toLocaleTimeString();document.body.appendChild(t);setTimeout(()=>{t.classList.add('hide');setTimeout(()=>t.remove(),340)},3400);return 'toast shown'})()"
 	app.run_and_log('弹出 Toast', js, 3000, param(message, 'cid'))
 	return ''
 }
