@@ -179,7 +179,9 @@ fn (app &App) render_board() string {
 			v := app.board[y][x]
 			last := app.last_x == x && app.last_y == y
 			if v == 0 {
-				sb << '<div class="cell empty" hx-post="/place" hx-vals=\'{"x":${x},"y":${y}}\' hx-swap="none"></div>'
+				star := ((x == 3 || x == 11) && (y == 3 || y == 11)) || (x == 7 && y == 7)
+				star_cls := if star { ' star' } else { '' }
+				sb << '<div class="cell empty${star_cls}" hx-post="/place" hx-vals=\'{"x":${x},"y":${y}}\' hx-swap="none"></div>'
 			} else {
 				mut cls := if v == 1 { 'cell stone black' } else { 'cell stone white' }
 				if last {
