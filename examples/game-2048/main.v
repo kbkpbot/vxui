@@ -26,6 +26,8 @@ struct App {
 	vxui.Context
 mut:
 	board   [board_size][board_size]int
+	tids    [board_size][board_size]int // tile identity per cell (0 = empty)
+	next_id int = 1
 	score   int
 	best    int
 	over    bool
@@ -52,30 +54,37 @@ fn param(message map[string]json2.Any, key string) string {
 // Game rules (backend-authoritative)
 // =============================================================================
 
-// slide_row_left slides and merges one row towards index 0. Returns the
-// points gained; mutates the row in place.
-fn slide_row_left(mut row []int) int {
+// slide_row_left_ids slides a values row and its identity row in lockstep.
+// Merging keeps the LEFT tile's id (it slides onto the target); the right
+// tile's id disappears. Returns points gained; mutates both rows.
+fn slide_row_left_ids(mut vals []int, mut ids []int) int {
 	mut gain := 0
-	mut vals := []int{}
-	for v in row {
-		if v != 0 {
-			vals << v
+	mut vs := []int{}
+	mut is_ := []int{}
+	for i in 0 .. vals.len {
+		if vals[i] != 0 {
+			vs << vals[i]
+			is_ << ids[i]
 		}
 	}
-	mut merged := []int{}
+	mut mv := []int{}
+	mut mi := []int{}
 	mut i := 0
-	for i < vals.len {
-		if i + 1 < vals.len && vals[i] == vals[i + 1] {
-			merged << vals[i] * 2
-			gain += vals[i] * 2
+	for i < vs.len {
+		if i + 1 < vs.len && vs[i] == vs[i + 1] {
+			mv << vs[i] * 2
+			gain += vs[i] * 2
+			mi << is_[i] // survivor identity
 			i += 2
 		} else {
-			merged << vals[i]
+			mv << vs[i]
+			mi << is_[i]
 			i++
 		}
 	}
-	for j in 0 .. row.len {
-		row[j] = if j < merged.len { merged[j] } else { 0 }
+	for j in 0 .. vals.len {
+		vals[j] = if j < mv.len { mv[j] } else { 0 }
+		ids[j] = if j < mi.len { mi[j] } else { 0 }
 	}
 	return gain
 }
@@ -91,6 +100,34 @@ fn (app &App) get_row(r int) []int {
 fn (mut app App) set_row(r int, vals []int) {
 	for c in 0 .. board_size {
 		app.board[r][c] = vals[c]
+	}
+}
+
+fn (app &App) get_tid_row(r int) []int {
+	mut out := []int{cap: board_size}
+	for c in 0 .. board_size {
+		out << app.tids[r][c]
+	}
+	return out
+}
+
+fn (mut app App) set_tid_row(r int, vals []int) {
+	for c in 0 .. board_size {
+		app.tids[r][c] = vals[c]
+	}
+}
+
+fn (app &App) get_tid_col(c int) []int {
+	mut out := []int{cap: board_size}
+	for r in 0 .. board_size {
+		out << app.tids[r][c]
+	}
+	return out
+}
+
+fn (mut app App) set_tid_col(c int, vals []int) {
+	for r in 0 .. board_size {
+		app.tids[r][c] = vals[r]
 	}
 }
 
@@ -118,52 +155,64 @@ fn (mut app App) apply_move(direction string) bool {
 			for r in 0 .. board_size {
 				before := app.get_row(r)
 				mut row_vals := before.clone()
-				gain := slide_row_left(mut row_vals)
+				mut row_ids := app.get_tid_row(r)
+				gain := slide_row_left_ids(mut row_vals, mut row_ids)
 				app.score += gain
 				if row_vals != before {
 					changed = true
 				}
 				app.set_row(r, row_vals)
+				app.set_tid_row(r, row_ids)
 			}
 		}
 		'right' {
 			for r in 0 .. board_size {
 				before := app.get_row(r)
 				mut row_vals := before.clone()
+				mut row_ids := app.get_tid_row(r)
 				row_vals.reverse_in_place()
-				gain := slide_row_left(mut row_vals)
+				row_ids.reverse_in_place()
+				gain := slide_row_left_ids(mut row_vals, mut row_ids)
 				app.score += gain
 				row_vals.reverse_in_place()
+				row_ids.reverse_in_place()
 				if row_vals != before {
 					changed = true
 				}
 				app.set_row(r, row_vals)
+				app.set_tid_row(r, row_ids)
 			}
 		}
 		'up' {
 			for c in 0 .. board_size {
 				before := app.get_col(c)
 				mut col_vals := before.clone()
-				gain := slide_row_left(mut col_vals)
+				mut col_ids := app.get_tid_col(c)
+				gain := slide_row_left_ids(mut col_vals, mut col_ids)
 				app.score += gain
 				if col_vals != before {
 					changed = true
 				}
 				app.set_col(c, col_vals)
+				app.set_tid_col(c, col_ids)
 			}
 		}
 		'down' {
 			for c in 0 .. board_size {
 				before := app.get_col(c)
 				mut col_vals := before.clone()
+				mut col_ids := app.get_tid_col(c)
 				col_vals.reverse_in_place()
-				gain := slide_row_left(mut col_vals)
+				col_ids.reverse_in_place()
+				gain := slide_row_left_ids(mut col_vals, mut col_ids)
 				app.score += gain
 				col_vals.reverse_in_place()
+				col_ids.reverse_in_place()
 				if col_vals != before {
 					changed = true
 				}
 				app.set_col(c, col_vals)
+				app.set_tid_col(c, col_ids)
 			}
 		}
 		else {}
@@ -221,6 +270,8 @@ fn (mut app App) spawn_tile() {
 	cell := empty[rand.int_in_range(0, empty.len - 1) or { 0 }]
 	value := if rand.int_in_range(0, 9) or { 0 } == 0 { 4 } else { 2 }
 	app.board[cell[0]][cell[1]] = value
+	app.tids[cell[0]][cell[1]] = app.next_id
+	app.next_id++
 	app.spawn_at[0] = cell[0]
 	app.spawn_at[1] = cell[1]
 	app.has_spawn = true
@@ -261,6 +312,8 @@ fn (mut app App) check_endgame() {
 // reset starts a fresh game with two spawned tiles.
 fn (mut app App) reset() {
 	app.board = [board_size][board_size]int{}
+	app.tids = [board_size][board_size]int{}
+	app.next_id = 1
 	app.score = 0
 	app.over = false
 	app.won = false
@@ -275,18 +328,32 @@ fn (mut app App) reset() {
 // Rendering — the browser only ever receives these fragments
 // =============================================================================
 
+// cell_px / gap_px must mirror the CSS grid metrics: tiles are absolutely
+// positioned so the browser can transition them between moves.
+const cell_px = 106
+
+const gap_px = 14
+
 fn (app &App) render_board() string {
 	mut sb := []string{}
 	sb << '<div id="board">'
 	sb << '<div class="grid">'
+	// static empty backdrop cells
+	for _ in 0 .. board_size * board_size {
+		sb << '<div class="cell empty"></div>'
+	}
+	sb << '</div>'
+	// live tiles, absolutely positioned; data-tid lets the page FLIP-slide
+	// a tile from its previous position (identity survives moves/merges)
 	for r in 0 .. board_size {
 		for c in 0 .. board_size {
 			v := app.board[r][c]
 			if v == 0 {
-				sb << '<div class="cell empty"></div>'
 				continue
 			}
-			mut cls := 'cell tile tile-${v}'
+			x := c * (cell_px + gap_px)
+			y := r * (cell_px + gap_px)
+			mut cls := 'tile tile-${v}'
 			if app.has_spawn && r == app.spawn_at[0] && c == app.spawn_at[1] {
 				cls += ' spawn'
 			} else {
@@ -297,10 +364,10 @@ fn (app &App) render_board() string {
 					}
 				}
 			}
-			sb << '<div class="${cls}">${v}</div>'
+			sb << '<div class="${cls}" data-tid="${app.tids[r][c]}" data-v="${v}" style="transform:translate(${x}px,${y}px)"></div>'
 		}
 	}
-	sb << '</div></div>'
+	sb << '</div>'
 	return sb.join('\n')
 }
 

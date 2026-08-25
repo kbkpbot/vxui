@@ -13,34 +13,43 @@ fn set_board(mut app App, vals [][]int) {
 }
 
 fn test_slide_row_left_merges_once_per_pair() {
-	mut row := [2, 2, 4, 4]
-	gain := slide_row_left(mut row)
-	assert row == [4, 8, 0, 0]
+	mut vals := [2, 2, 4, 4]
+	mut ids := [1, 2, 3, 4]
+	gain := slide_row_left_ids(mut vals, mut ids)
+	assert vals == [4, 8, 0, 0]
 	assert gain == 12
+	assert ids == [1, 3, 0, 0] // survivors keep their identity
 }
 
 fn test_slide_row_left_no_merge_when_separated() {
-	mut row := [2, 0, 2, 4]
-	gain := slide_row_left(mut row)
-	assert row == [4, 4, 0, 0] // the two 2s merge; 4 stays separate
+	mut vals := [2, 0, 2, 4]
+	mut ids := [1, 0, 2, 3]
+	gain := slide_row_left_ids(mut vals, mut ids)
+	assert vals == [4, 4, 0, 0] // the two 2s merge; 4 stays separate
 	assert gain == 4
+	assert ids == [1, 3, 0, 0] // left 2 slides onto the target and survives
 }
 
 fn test_slide_row_left_triple_merges_lowest_first() {
-	mut row := [2, 2, 2, 0]
-	gain := slide_row_left(mut row)
-	assert row == [4, 2, 0, 0] // leftmost pair merges first
+	mut vals := [2, 2, 2, 0]
+	mut ids := [1, 2, 3, 0]
+	gain := slide_row_left_ids(mut vals, mut ids)
+	assert vals == [4, 2, 0, 0] // leftmost pair merges first
 	assert gain == 4
+	assert ids == [1, 3, 0, 0]
 }
 
 fn test_slide_row_left_all_zero_and_no_change() {
-	mut row := [0, 0, 0, 0]
-	_ := slide_row_left(mut row)
-	assert row == [0, 0, 0, 0]
+	mut vals := [0, 0, 0, 0]
+	mut ids := [0, 0, 0, 0]
+	slide_row_left_ids(mut vals, mut ids)
+	assert vals == [0, 0, 0, 0]
 
 	mut fixed := [2, 4, 2, 4]
-	_ := slide_row_left(mut fixed)
+	mut fids := [5, 6, 7, 8]
+	slide_row_left_ids(mut fixed, mut fids)
 	assert fixed == [2, 4, 2, 4]
+	assert fids == [5, 6, 7, 8] // no movement: identities stay put
 }
 
 fn test_apply_move_left_moves_everything_left() {

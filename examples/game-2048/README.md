@@ -12,6 +12,7 @@ tile spawning, win/lose detection, scoring. The page contains zero game logic
 | One WS round-trip per input | Each arrow key fires one `/move` rpc — measured at **0.6ms p50 / 1.3ms p99** loopback (`perf_rtt_test.v`) |
 | Declarative keyboard triggers | Four hidden divs with `hx-trigger="keyup from:body [key=='ArrowLeft']"` — no custom JS anywhere |
 | Multi-target partial updates | One response swaps `#board` (main target) and patches `#hud` (`hx-swap-oob`) |
+| **Tile identity across moves** | The backend tracks a stable id per tile (`tids` layer) and renders absolute positions; the page FLIP-slides tiles between moves via CSS transition — sliding animation with zero game logic client-side |
 
 ## Run
 
