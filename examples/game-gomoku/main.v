@@ -294,10 +294,15 @@ fn (mut app App) invite(_ map[string]json2.Any) string {
 			err := app.invite_err
 			app.invite_err = ''
 			app.mu.unlock()
-			if err != '' {
-				payload := {'cmd': 'oob_update', 'html': '<div id="notice" hx-swap-oob="innerHTML:#notice"><span class="warn">${err}</span></div>'}
-				app.broadcast(json2.encode(payload)) or {}
+			// ALWAYS close the loop: silence here looks exactly like a dead
+			// button to the player who clicked it
+			msg := if err != '' {
+				'<span class="warn">${err}</span>'
+			} else {
+				'<span class="msg">Second window launched — it plays WHITE ○</span>'
 			}
+			payload := {'cmd': 'oob_update', 'html': '<div id="notice" hx-swap-oob="innerHTML:#notice">${msg}</div>'}
+			app.broadcast(json2.encode(payload)) or {}
 		}
 		cfg := vxui.BrowserConfig{
 			custom_args: [
@@ -307,6 +312,7 @@ fn (mut app App) invite(_ map[string]json2.Any) string {
 				'--remote-allow-origins=*',
 			]
 		}
+		println('invite: launching second window (html=${default_page_html_file}, ws_port=${app.ws_port})')
 		vxui.start_browser_with_config(default_page_html_file, app.ws_port,
 			app.config.token, vxui.WindowConfig{
 				width:  640
@@ -318,7 +324,9 @@ fn (mut app App) invite(_ map[string]json2.Any) string {
 			app.mu.lock()
 			app.invite_err = 'Could not launch the second window: ${err.msg()}'
 			app.mu.unlock()
+			return
 		}
+		println('invite: second window launched')
 	}()
 	return ''
 }
