@@ -286,6 +286,7 @@ fn (mut app App) place_handler(message map[string]json2.Any) string {
 // and a debug port so tooling can inspect both players.
 @['/invite']
 fn (mut app App) invite(_ map[string]json2.Any) string {
+	println('invite: handler entered')
 	// fire-and-forget: browser startup takes seconds and must not block the
 	// read loop (spawn keeps this handler instant)
 	spawn fn [mut app] () {

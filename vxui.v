@@ -647,7 +647,14 @@ fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i
 	ctx.trigger_event(EventType.before_request, client_id, '', message, req, none, none)
 
 	// Handle message
-	response := handle_request(mut app, ctx, req, message)!
+	response := handle_request(mut app, ctx, req, message) or {
+		// unknown route: previously a completely silent 404 — the player
+		// clicks a button and nothing happens, no trace anywhere
+		ctx.logger.warn('rpc 404: no route for ${req.verb} ${req.path} (client ${client_id})')
+		err_resp := '{"rpcID":"${rpc_id}", "error":"route_not_found", "message":"no route for ${req.path}"}'
+		ws.write(err_resp.bytes(), .text_frame)!
+		return
+	}
 
 	// Trigger after_request event
 	ctx.trigger_event(EventType.after_request, client_id, '', message, req, response, none)
