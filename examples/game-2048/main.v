@@ -419,6 +419,12 @@ fn main() {
 	mut app := App{}
 	app.config.app_name = '2048'
 	app.config.close_timer_ms = 60_000
+	// Fit the whole game: header (~250px) + 4x106 board + gaps/padding (~530px).
+	app.config.window = vxui.WindowConfig{
+		width:      620
+		height:     900
+		title:      '2048 — vxui'
+	}
 	app.reset()
 
 	vxui.run(mut app, default_page_html_file)!
