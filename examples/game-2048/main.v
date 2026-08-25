@@ -31,6 +31,11 @@ mut:
 	over    bool
 	won     bool
 	move_no int
+	// animation hints for the next render: the freshly spawned cell and the
+	// cells created by merges (they get distinct pop effects in CSS)
+	spawn_at  [2]int
+	has_spawn bool
+	merged    [][]int
 }
 
 // param pulls a string parameter from the request.
@@ -106,6 +111,7 @@ fn (mut app App) set_col(c int, vals []int) {
 // apply_move applies one 2048 move. Returns true when the board changed
 // (standard rule: only then spawn a new tile).
 fn (mut app App) apply_move(direction string) bool {
+	board_before := app.board
 	mut changed := false
 	match direction {
 		'left' {
@@ -162,6 +168,9 @@ fn (mut app App) apply_move(direction string) bool {
 		}
 		else {}
 	}
+	if changed {
+		app.mark_merges(board_before)
+	}
 	return changed
 }
 
@@ -195,7 +204,8 @@ fn (app &App) can_move() bool {
 	return false
 }
 
-// spawn_tile places a 2 (90%) or 4 (10%) on a random empty cell.
+// spawn_tile places a 2 (90%) or 4 (10%) on a random empty cell and records
+// its position so the renderer can play the "new tile" pop.
 fn (mut app App) spawn_tile() {
 	mut empty := [][]int{}
 	for r in 0 .. board_size {
@@ -211,6 +221,22 @@ fn (mut app App) spawn_tile() {
 	cell := empty[rand.int_in_range(0, empty.len - 1) or { 0 }]
 	value := if rand.int_in_range(0, 9) or { 0 } == 0 { 4 } else { 2 }
 	app.board[cell[0]][cell[1]] = value
+	app.spawn_at[0] = cell[0]
+	app.spawn_at[1] = cell[1]
+	app.has_spawn = true
+}
+
+// mark_merges records which cells were created by a merge this move: after a
+// move, any cell whose value exactly doubled vs. the previous board.
+fn (mut app App) mark_merges(before [board_size][board_size]int) {
+	app.merged = []
+	for r in 0 .. board_size {
+		for c in 0 .. board_size {
+			if before[r][c] > 0 && app.board[r][c] == before[r][c] * 2 {
+				app.merged << [r, c]
+			}
+		}
+	}
 }
 
 // check_endgame updates the over/won flags and the best score.
@@ -239,6 +265,8 @@ fn (mut app App) reset() {
 	app.over = false
 	app.won = false
 	app.move_no = 0
+	app.has_spawn = false
+	app.merged = []
 	app.spawn_tile()
 	app.spawn_tile()
 }
@@ -256,9 +284,20 @@ fn (app &App) render_board() string {
 			v := app.board[r][c]
 			if v == 0 {
 				sb << '<div class="cell empty"></div>'
-			} else {
-				sb << '<div class="cell tile tile-${v}">${v}</div>'
+				continue
 			}
+			mut cls := 'cell tile tile-${v}'
+			if app.has_spawn && r == app.spawn_at[0] && c == app.spawn_at[1] {
+				cls += ' spawn'
+			} else {
+				for m in app.merged {
+					if m[0] == r && m[1] == c {
+						cls += ' merged'
+						break
+					}
+				}
+			}
+			sb << '<div class="${cls}">${v}</div>'
 		}
 	}
 	sb << '</div></div>'
