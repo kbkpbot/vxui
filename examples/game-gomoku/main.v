@@ -14,6 +14,10 @@ import sync
 
 const default_page_html_file = './ui/index.html'
 
+// Build fingerprint: bump when behaviour changes so a stale binary/page is
+// instantly identifiable from the startup banner, the page HUD and logs.
+const build_tag = 'gomoku-b3-invite'
+
 const board_size = 15
 
 const win_len = 5
@@ -286,7 +290,7 @@ fn (mut app App) place_handler(message map[string]json2.Any) string {
 // and a debug port so tooling can inspect both players.
 @['/invite']
 fn (mut app App) invite(_ map[string]json2.Any) string {
-	println('invite: handler entered')
+	println('invite: handler entered [${build_tag}]')
 	// fire-and-forget: browser startup takes seconds and must not block the
 	// read loop (spawn keeps this handler instant)
 	spawn fn [mut app] () {
@@ -367,6 +371,7 @@ document.body.addEventListener("vxui:authenticated", function () {
 }
 
 fn main() {
+	println('=== GOMOKU ${build_tag} | /invite route + client_id injection ACTIVE ===')
 	mut app := App{}
 	app.config.app_name = 'gomoku'
 	app.config.close_timer_ms = 60_000
