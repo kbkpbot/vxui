@@ -49,3 +49,11 @@ main { flex: 1; display: flex; gap: 14px; margin-top: 8px;
 .md-body a { color: #1e66f5; }
 .md-body hr { border: none; border-top: 1px solid #ccd0da; margin: 14px 0; }
 .md-body strong { color: #1e1e2e; }
+
+/* drag & drop feedback */
+body.dragging::after { content: 'Drop to open'; position: fixed; inset: 0;
+	display: flex; align-items: center; justify-content: center;
+	background: rgba(30, 30, 46, .82); color: #cba6f7;
+	font-size: 32px; font-weight: 900; z-index: 999;
+	border: 4px dashed #cba6f7; border-radius: 14px;
+	pointer-events: none; }

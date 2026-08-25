@@ -82,6 +82,55 @@
             hudMsg('new document'); notice('');
         });
     });
+
+    // ---- drag & drop: drop a text file anywhere on the window ----
+    // The browser resolves ALL OS differences (Windows shell, Linux
+    // file managers); the page only sees File objects. Note: browsers do not
+    // expose the dropped file's full path — the save path defaults to the
+    // file name and can be adjusted before saving.
+    var MAX_DROP = 5 * 1024 * 1024; // 5MB — this is a text editor
+
+    function hasFiles(e) {
+        return e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.indexOf('Files') >= 0;
+    }
+    function dragHighlight(on) {
+        document.body.classList.toggle('dragging', on);
+    }
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        document.addEventListener(ev, function (e) {
+            if (!hasFiles(e)) { return; }
+            e.preventDefault();
+            dragHighlight(true);
+        });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        document.addEventListener(ev, function (e) {
+            if (ev === 'drop' || e.target === document.documentElement || e.relatedTarget === null) {
+                dragHighlight(false);
+            }
+        });
+    });
+    document.addEventListener('drop', function (e) {
+        if (!hasFiles(e)) { return; }
+        e.preventDefault();
+        dragHighlight(false);
+        var f = e.dataTransfer.files[0];
+        if (!f) { return; }
+        if (f.size > MAX_DROP) {
+            notice('"' + f.name + '" is ' + (f.size / 1048576).toFixed(1) + 'MB — too large for the editor (max 5MB)', true);
+            return;
+        }
+        f.text().then(function (text) {
+            editor.value = text;
+            pathInput.value = f.name; // adjust the directory before saving
+            preview.innerHTML = '';
+            editor.dispatchEvent(new Event('input'));
+            notice('dropped "' + f.name + '" — adjust the save path if needed');
+            hudMsg('dropped ' + f.name + ' · ' + f.size + ' bytes');
+        }).catch(function (err) {
+            notice('cannot read "' + f.name + '": ' + (err.message || err), true);
+        });
+    });
 })();
 </script>
 </body>
