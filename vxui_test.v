@@ -1700,3 +1700,41 @@ fn test_url_decode_invalid_hex() {
 	assert url_decode('%ZZ') == '%ZZ'
 	assert url_decode('%2') == '%2'
 }
+
+// Regression: on_event() handlers registered BEFORE vxui.run()/init() must
+// still fire. init() used to wipe event_handlers, silently dropping them.
+fn test_on_event_before_run_survives_init() ! {
+	port := get_free_port()!
+	mut app := new_ws_test_app(u16(port))!
+	mut fired := [false]
+	app.on_event(.client_connected, fn [mut fired] (e vxui.EventData) {
+		fired[0] = true // in-place: append would reallocate a captured copy
+	})
+	// registration sanity: the handler must be visible on the Context
+	mut ctx0 := unsafe { &app.Context }
+	assert ctx0.event_handlers[EventType.client_connected].len == 1
+	// bisect: does direct dispatch through trigger_event fire the handler?
+	ctx0.trigger_event(.client_connected, 'pre-test', '', {}, none, none, none)
+	assert fired[0], 'direct trigger_event did not fire the handler'
+	fired[0] = false
+	startup_ws_server(mut app, .ip, port)!
+	spawn fn [mut app] () {
+		app.process_client_removals()
+	}()
+	defer {
+		app.ws.free()
+	}
+
+	mut cl := websocket.new_client('ws://localhost:${port}/echo', websocket.ClientOpt{})!
+	cl.connect()!
+	cl.write_string('{"cmd":"auth","token":"it-token"}')!
+	auth_resp := read_text_until(mut cl, fn (s string) bool {
+		return s.contains('"cmd":"auth_ok"')
+	})!
+	assert auth_resp.contains('"cmd":"auth_ok"')
+
+	// the handler runs synchronously inside handle_auth (before auth_ok is
+	// even written), so by the time we read auth_ok it must have fired
+	assert fired[0], 'client_connected handler registered before run() did not fire'
+	cl.close(1000, 'done') or {}
+}

@@ -402,7 +402,6 @@ fn init[T](mut app T) ! {
 	// Initialize maps
 	ctx.clients = map[string]Client{}
 	ctx.js_callbacks = map[string]chan string{}
-	ctx.event_handlers = map[EventType][]EventHandler{}
 	ctx.client_remove_chan = chan ClientRemoveMsg{cap: 100}
 
 	// Setup logger (level + output destination)
@@ -508,7 +507,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		}
 		raw_payload := msg.payload.bytestr()
 		raw_message := json2.decode[json2.Any](raw_payload)!
-		message := raw_message.as_map()
+		mut message := raw_message.as_map()
 		ctx.logger.debug('Received message: ${message}')
 
 		handled := ctx.handle_control_message(mut ws, message, raw_payload)!
@@ -517,7 +516,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		}
 
 		if rpc_id := message['rpcID'] {
-			dispatch_rpc(mut app, mut ctx, mut ws, rpc_id.i64(), message)!
+			dispatch_rpc(mut app, mut ctx, mut ws, rpc_id.i64(), mut message)!
 		}
 	})
 
@@ -630,8 +629,14 @@ fn (mut ctx Context) handle_control_message(mut ws websocket.Client, message map
 
 // dispatch_rpc routes an rpcID-bearing message to its tagged route handler
 // and writes the JSON response back on the same connection.
-fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i64, message map[string]json2.Any) ! {
+fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i64, mut message map[string]json2.Any) ! {
 	client_id := ctx.find_client_id_by_connection(ws)
+	// Make the caller's identity available to handlers: multi-player apps
+	// (games, collaborative tools) need to know WHO issued a request, not
+	// just what was requested.
+	if client_id != '' {
+		message['client_id'] = json2.Any(client_id)
+	}
 
 	// Build type-safe request
 	req := build_request(message, client_id)
@@ -657,8 +662,18 @@ fn (ctx &Context) find_client_id_by_connection(ws websocket.Client) string {
 	ctx.mu.rlock()
 
 	for id, client in ctx.clients {
-		// SAFETY: nil comparison only, no dereference
-		if client.connection or { unsafe { nil } } == ws {
+		// Compare the underlying TCP connection POINTER, not the whole
+		// websocket.Client value: Client carries volatile fields
+		// (last_pong_ut, ...), so value equality fails after the first pong
+		// and every lookup would return '' (breaking caller-identity
+		// injection, send_to_client, and anything else that resolves a
+		// connection back to its client id).
+		mut stored_conn := &net.TcpConn(unsafe { nil })
+		if stored := client.connection {
+			stored_conn = stored.conn
+		}
+		// SAFETY: pointer comparison only, no dereference
+		if stored_conn != unsafe { nil } && stored_conn == ws.conn {
 			ctx.mu.runlock()
 			return id
 		}
@@ -824,7 +839,8 @@ fn (mut ctx Context) handle_js_result(message map[string]json2.Any) {
 	result := message['result'] or { json2.Any('') }.str()
 
 	ctx.mu.lock()
-	if ch := ctx.js_callbacks[js_id] {
+	if js_id in ctx.js_callbacks {
+		mut ch := ctx.js_callbacks[js_id]
 		ch <- result
 		ctx.js_callbacks.delete(js_id)
 	}
@@ -861,15 +877,23 @@ fn (mut ctx Context) trigger_event(event_type EventType, client_id string, messa
 		err:        err
 	}
 
-	if handlers := ctx.event_handlers[event_type] {
-		for handler in handlers {
-			handler(event)
-		}
+	// NOTE: deliberately NOT `if handlers := m[key]` — that or-init form
+	// silently skipped existing array values in this V build (0.5.2).
+	mut handlers := []EventHandler{}
+	if event_type in ctx.event_handlers {
+		handlers = ctx.event_handlers[event_type]
+	}
+	for handler in handlers {
+		handler(event)
 	}
 }
 
 // on_event registers an event handler
 pub fn (mut ctx Context) on_event(event_type EventType, handler EventHandler) {
+	if ctx.event_handlers.len == 0 {
+		// nil-map guard: handlers may be registered before init() runs
+		ctx.event_handlers = map[EventType][]EventHandler{}
+	}
 	if event_type !in ctx.event_handlers {
 		ctx.event_handlers[event_type] = []
 	}
