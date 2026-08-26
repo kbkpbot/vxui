@@ -412,12 +412,29 @@ pub fn new_display(id string, app_cfg &Config) !Display {
 }
 
 // resolve_auto picks the first available process-family browser backend.
+// It maps the found executable NAME to a registered backend id (e.g. the
+// `google-chrome` / `chromium` binaries both resolve to the `chrome` backend),
+// so the id handed to new_display is always one the registry knows.
 // Linux-first; extend per platform. Falls back to 'system'.
 pub fn resolve_auto(cfg &Config) string {
-	for candidate in ['chrome', 'google-chrome', 'chromium', 'firefox', 'edge', 'brave', 'system'] {
-		if candidate == 'system' { return 'system' }
-		path := os.find_abs_path_of_executable(candidate) or { '' }
-		if path != '' { return candidate }
+	// (executable name -> backend id) pairs, Linux-first.
+	candidates := [
+		['chrome', 'chrome'],
+		['google-chrome', 'chrome'],
+		['google-chrome-stable', 'chrome'],
+		['chromium', 'chrome'],
+		['chromium-browser', 'chrome'],
+		['firefox', 'firefox'],
+		['edge', 'edge'],
+		['microsoft-edge', 'edge'],
+		['msedge', 'edge'],
+		['brave', 'brave'],
+		['brave-browser', 'brave'],
+		['safari', 'safari'],
+	]
+	for pair in candidates {
+		path := os.find_abs_path_of_executable(pair[0]) or { '' }
+		if path != '' { return pair[1] }
 	}
 	return 'system'
 }
