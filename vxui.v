@@ -27,15 +27,11 @@ pub enum VxuiError {
 	js_result_too_large
 	auth_failed
 	auth_invalid_token
-	connection_error
-	connection_closed
 	port_not_available
 	browser_not_found
 	file_not_found
 	path_traversal
 	route_not_found
-	invalid_message
-	request_timeout
 	// Additional error codes for unified error handling
 	profile_create_failed
 	process_fork_failed
@@ -43,7 +39,6 @@ pub enum VxuiError {
 	null_byte_detected
 	absolute_path_not_allowed
 	invalid_method
-	method_not_allowed
 	attribute_parse_error
 }
 
@@ -175,23 +170,17 @@ pub enum Verb {
 // Request represents a type-safe request
 pub struct Request {
 pub:
-	id          string
 	verb        Verb
 	path        string
-	parameters  map[string]string
-	headers     map[string]string
-	body        string
 	client_id   string
-	timestamp   time.Time
 	raw_message map[string]json2.Any // Original message for compatibility
 }
 
 // Response represents a type-safe response
 pub struct Response {
 pub mut:
-	status  int               = 200
-	headers map[string]string = {}
-	body    string
+	status int = 200
+	body   string
 }
 
 // =============================================================================
@@ -331,11 +320,8 @@ pub mut:
 // Client represents a connected browser client
 pub struct Client {
 pub:
-	id            string
-	token         string
-	connected     time.Time
-	request_count int
-	last_request  time.Time
+	id    string
+	token string
 pub mut:
 	connection ?&websocket.Client
 	last_ping  time.Time
@@ -448,11 +434,6 @@ fn generate_token() string {
 // generate_client_id creates a unique client identifier
 fn generate_client_id() string {
 	return '${time.now().unix_milli()}-${rand.u32()}'
-}
-
-// generate_request_id creates a unique request identifier
-fn generate_request_id() string {
-	return 'req-${time.now().unix_milli()}-${rand.u32()}'
 }
 
 // =============================================================================
@@ -718,34 +699,10 @@ fn build_request(message map[string]json2.Any, client_id string) Request {
 		path = p.str()
 	}
 
-	mut parameters := map[string]string{}
-	if params := message['parameters'] {
-		for k, v in params.as_map() {
-			parameters[k] = v.str()
-		}
-	}
-
-	mut headers := map[string]string{}
-	if h := message['headers'] {
-		for k, v in h.as_map() {
-			headers[k] = v.str()
-		}
-	}
-
-	mut body := ''
-	if b := message['body'] {
-		body = b.str()
-	}
-
 	return Request{
-		id:          generate_request_id()
 		verb:        verb
 		path:        path
-		parameters:  parameters
-		headers:     headers
-		body:        body
 		client_id:   client_id
-		timestamp:   time.now()
 		raw_message: message
 	}
 }
@@ -803,12 +760,10 @@ fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]jso
 
 	ctx.mu.lock()
 	ctx.clients[client_id] = Client{
-		id:            client_id
-		token:         ctx.config.token
-		connected:     time.now()
-		last_ping:     time.now()
-		request_count: 0
-		connection:    ws
+		id:         client_id
+		token:      ctx.config.token
+		last_ping:  time.now()
+		connection: ws
 	}
 	ctx.mu.unlock()
 
@@ -1573,32 +1528,6 @@ pub fn (mut ctx Context) process_client_removals() {
 // =============================================================================
 // Configuration Setters
 // =============================================================================
-
-// set_window_size sets the window dimensions
-pub fn (mut ctx Context) set_window_size(width int, height int) {
-	ctx.config.window.width = width
-	ctx.config.window.height = height
-	if mut s := ctx.display_session {
-		s.set_size(width, height)
-	}
-}
-
-// set_window_position sets the window position
-pub fn (mut ctx Context) set_window_position(x int, y int) {
-	ctx.config.window.x = x
-	ctx.config.window.y = y
-	if mut s := ctx.display_session {
-		s.set_position(x, y)
-	}
-}
-
-// set_window_title sets the window title
-pub fn (mut ctx Context) set_window_title(title string) {
-	ctx.config.window.title = title
-	if mut s := ctx.display_session {
-		s.set_title(title)
-	}
-}
 
 // open_window opens an additional display window using the current window
 // configuration and security token.

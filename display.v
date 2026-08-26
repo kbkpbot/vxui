@@ -425,10 +425,6 @@ fn find_browser_path_with_preferred(preferred string) string {
 	return ''
 }
 
-fn find_browser_path() string {
-	return find_browser_path_with_preferred('')
-}
-
 // find_browser_path_linux finds browser on Linux
 fn find_browser_path_linux() string {
 	paths := [

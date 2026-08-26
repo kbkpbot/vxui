@@ -95,22 +95,13 @@ fn test_verb_enum() {
 
 fn test_request_struct() {
 	req := Request{
-		id:         'req-123'
-		verb:       Verb.post
-		path:       '/api/test'
-		parameters: {
-			'key': 'value'
-		}
-		headers:    {
-			'Content-Type': 'application/json'
-		}
-		body:       '{"test": true}'
-		client_id:  'client-1'
+		verb:      Verb.post
+		path:      '/api/test'
+		client_id: 'client-1'
 	}
-	assert req.id == 'req-123'
 	assert req.verb == Verb.post
 	assert req.path == '/api/test'
-	assert req.parameters['key'] == 'value'
+	assert req.client_id == 'client-1'
 }
 
 fn test_response_struct() {
@@ -242,15 +233,12 @@ fn test_log_config_defaults() {
 fn test_client_struct() {
 	now := time.now()
 	client := Client{
-		id:            'test-client-123'
-		token:         'secret-token'
-		connected:     now
-		last_ping:     now
-		request_count: 5
+		id:        'test-client-123'
+		token:     'secret-token'
+		last_ping: now
 	}
 	assert client.id == 'test-client-123'
 	assert client.token == 'secret-token'
-	assert client.request_count == 5
 	assert client.connection == none
 }
 
@@ -316,26 +304,6 @@ fn test_get_config() {
 // =============================================================================
 // Setter Tests
 // =============================================================================
-
-fn test_set_window_size() {
-	mut ctx := Context{}
-	ctx.set_window_size(1024, 768)
-	assert ctx.config.window.width == 1024
-	assert ctx.config.window.height == 768
-}
-
-fn test_set_window_position() {
-	mut ctx := Context{}
-	ctx.set_window_position(100, 200)
-	assert ctx.config.window.x == 100
-	assert ctx.config.window.y == 200
-}
-
-fn test_set_window_title() {
-	mut ctx := Context{}
-	ctx.set_window_title('My Application')
-	assert ctx.config.window.title == 'My Application'
-}
 
 fn test_set_js_sandbox() {
 	mut ctx := Context{}
@@ -647,7 +615,7 @@ fn test_websocket_integration_auth_rpc_and_reject() {
 		for k, _ in ctx.routes {
 			keys << '${k}=${ctx.routes[k].path}'
 		}
-		rp := if r := e.request { '${r.path}|${r.verb}|${r.id}' } else { '<no req>' }
+		rp := if r := e.request { '${r.path}|${r.verb}' } else { '<no req>' }
 		after_req <- 'routes[${keys.join(',')}|n=${ctx.routes.len}] req=${rp} body=${body}'
 	})
 
@@ -919,12 +887,6 @@ fn test_sanitize_path_traversal() {
 	}
 }
 
-fn test_escape_html() {
-	assert escape_html('<script>') == '&lt;script&gt;'
-	assert escape_html('"quoted"') == '&quot;quoted&quot;'
-	assert escape_html('a & b') == 'a &amp; b'
-}
-
 fn test_sanitize_utf8_passes_valid_text_through() {
 	assert sanitize_utf8('hello') == 'hello'
 	assert sanitize_utf8('中文备注') == '中文备注'
@@ -953,16 +915,6 @@ fn test_escape_js() {
 	assert escape_js('line\nbreak') == 'line\\nbreak'
 }
 
-fn test_escape_attr() {
-	assert escape_attr('"value"') == '&quot;value&quot;'
-	assert escape_attr('a & b') == 'a &amp; b'
-}
-
-fn test_truncate_string() {
-	assert truncate_string('hello', 10) == 'hello'
-	assert truncate_string('hello world', 8) == 'hello...'
-}
-
 fn test_window_mode_args_use_equals_form_for_app_mode() {
 	url := 'file:///x/index.html?vxui_ws_port=1234&vxui_token=abc'
 	assert window_mode_args(.app, url) == ['--app=${url}']
@@ -973,18 +925,6 @@ fn test_window_mode_args_use_equals_form_for_app_mode() {
 	assert !app_arg.contains(' '), 'URL and flag must be ONE argument'
 }
 
-
-fn test_is_valid_email() {
-	assert is_valid_email('test@example.com') == true
-	assert is_valid_email('invalid') == false
-}
-
-fn test_generate_id() {
-	id1 := generate_id()
-	id2 := generate_id()
-	assert id1.len == 16
-	assert id1 != id2
-}
 
 // =============================================================================
 // PackedApp Tests
@@ -1070,12 +1010,10 @@ fn test_disconnect_events_fire_outside_lock() {
 
 	stale := Client{
 		id:        'stale-1'
-		connected: time.now().add(-(2 * time.minute))
 		last_ping: time.now().add(-(2 * time.minute))
 	}
 	live := Client{
 		id:        'live-1'
-		connected: time.now()
 		last_ping: time.now()
 	}
 	ctx.clients['stale-1'] = stale
@@ -1183,17 +1121,6 @@ fn test_sanitize_path_double_encoding() {
 	assert result == '%252e%252e%252f'
 }
 
-fn test_escape_html_all_special_chars() {
-	input := '<script>alert("xss")</script>&\''
-	result := escape_html(input)
-	assert result.contains('&lt;')
-	assert result.contains('&gt;')
-	assert result.contains('&quot;')
-	assert result.contains('&amp;')
-	assert result.contains('&#x27;')
-	assert !result.contains('<script>')
-}
-
 fn test_escape_js_special_chars() {
 	input := 'line1\nline2\ttab"quote\'apostrophe\\backslash'
 	result := escape_js(input)
@@ -1202,56 +1129,6 @@ fn test_escape_js_special_chars() {
 	assert result.contains('\\"')
 	assert result.contains("\\'")
 	assert result.contains('\\\\')
-}
-
-fn test_escape_attr_quotes() {
-	input := 'onclick="evil()" onmouseover=\'bad\''
-	result := escape_attr(input)
-	assert !result.contains('"onclick')
-	assert result.contains('&quot;')
-	assert result.contains('&#x27;')
-}
-
-fn test_is_valid_email_edge_cases() {
-	// Valid emails
-	assert is_valid_email('a@b.co') == true
-	assert is_valid_email('user+tag@example.com') == true
-	assert is_valid_email('user.name@example.org') == true
-
-	// Invalid emails
-	assert is_valid_email('') == false
-	assert is_valid_email('a@') == false
-	assert is_valid_email('@b.com') == false
-	assert is_valid_email('a@b') == false
-	assert is_valid_email('a@b.') == false
-	assert is_valid_email('a@.com') == false
-	// Note: current implementation doesn't validate spaces in email
-	// 'a b@c.com' passes basic validation
-}
-
-fn test_truncate_string_edge_cases() {
-	// Exact length
-	assert truncate_string('hello', 5) == 'hello'
-	// Empty string
-	assert truncate_string('', 10) == ''
-	// Very short max
-	assert truncate_string('hello', 2) == 'he'
-	// Max less than 3
-	assert truncate_string('hello', 1) == 'h'
-}
-
-fn test_generate_id_uniqueness() {
-	mut ids := map[string]bool{}
-	for _ in 0 .. 100 {
-		id := generate_id()
-		assert id !in ids
-		ids[id] = true
-	}
-}
-
-fn test_generate_id_length() {
-	id := generate_id()
-	assert id.len == 16
 }
 
 // =============================================================================
@@ -1346,17 +1223,13 @@ fn test_vxui_error_all_codes() {
 		VxuiError.js_result_too_large,
 		VxuiError.auth_failed,
 		VxuiError.auth_invalid_token,
-		VxuiError.connection_error,
-		VxuiError.connection_closed,
 		VxuiError.port_not_available,
 		VxuiError.browser_not_found,
 		VxuiError.file_not_found,
 		VxuiError.path_traversal,
 		VxuiError.route_not_found,
-		VxuiError.invalid_message,
-		VxuiError.request_timeout,
 	]
-	assert codes.len == 18
+	assert codes.len == 14
 }
 
 // =============================================================================
@@ -1370,9 +1243,6 @@ fn test_build_request_defaults() {
 	assert req.verb == Verb.get
 	assert req.path == '/'
 	assert req.client_id == 'client-1'
-	assert req.parameters.len == 0
-	assert req.headers.len == 0
-	assert req.body == ''
 }
 
 fn test_build_request_with_verb() {
@@ -1389,30 +1259,6 @@ fn test_build_request_with_path() {
 	req := build_request(message, 'client-1')
 
 	assert req.path == '/api/users'
-}
-
-fn test_build_request_with_parameters() {
-	mut message := map[string]json2.Any{}
-	mut params := map[string]json2.Any{}
-	params['name'] = json2.Any('John')
-	params['age'] = json2.Any(30)
-	message['parameters'] = json2.Any(params)
-	req := build_request(message, 'client-1')
-
-	assert req.parameters['name'] == 'John'
-	assert req.parameters['age'] == '30'
-}
-
-fn test_build_request_with_headers() {
-	mut message := map[string]json2.Any{}
-	mut headers := map[string]json2.Any{}
-	headers['Content-Type'] = json2.Any('application/json')
-	headers['Authorization'] = json2.Any('Bearer token')
-	message['headers'] = json2.Any(headers)
-	req := build_request(message, 'client-1')
-
-	assert req.headers['Content-Type'] == 'application/json'
-	assert req.headers['Authorization'] == 'Bearer token'
 }
 
 // =============================================================================
@@ -1534,8 +1380,8 @@ fn test_sanitize_path_plus_sign() {
 
 fn test_error_with_cause() {
 	// Test that error detail can be created
-	err := new_error_detail(VxuiError.connection_error, 'WebSocket failed')
-	assert err.code == VxuiError.connection_error
+	err := new_error_detail(VxuiError.no_clients, 'WebSocket failed')
+	assert err.code == VxuiError.no_clients
 	assert err.message == 'WebSocket failed'
 }
 
@@ -1558,15 +1404,11 @@ fn test_all_error_codes_have_messages() {
 		VxuiError.no_valid_connection,
 		VxuiError.js_timeout,
 		VxuiError.js_validation_failed,
-		VxuiError.connection_error,
 		VxuiError.browser_not_found,
 		VxuiError.file_not_found,
 		VxuiError.auth_failed,
-		VxuiError.invalid_message,
 		VxuiError.port_not_available,
 		VxuiError.route_not_found,
-		VxuiError.connection_closed,
-		VxuiError.request_timeout,
 		VxuiError.auth_invalid_token,
 		VxuiError.path_traversal,
 		VxuiError.js_result_too_large,
@@ -1581,16 +1423,6 @@ fn test_all_error_codes_have_messages() {
 // Escape Function Tests
 // =============================================================================
 
-fn test_escape_html_basic() {
-	assert escape_html('<script>alert("xss")</script>') == '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
-	assert escape_html('Test & Example') == 'Test &amp; Example'
-	assert escape_html("It's working") == 'It&#x27;s working'
-}
-
-fn test_escape_html_empty() {
-	assert escape_html('') == ''
-}
-
 fn test_escape_js_basic() {
 	assert escape_js('alert("test")') == 'alert(\\"test\\")'
 	assert escape_js('line1\nline2') == 'line1\\nline2'
@@ -1600,82 +1432,6 @@ fn test_escape_js_basic() {
 fn test_escape_js_tab_and_return() {
 	assert escape_js('\t') == '\\t'
 	assert escape_js('\r') == '\\r'
-}
-
-fn test_escape_attr_basic() {
-	assert escape_attr('value" onclick="alert(1)') == 'value&quot; onclick=&quot;alert(1)'
-	assert escape_attr("test' OR '1'='1") == 'test&#x27; OR &#x27;1&#x27;=&#x27;1'
-}
-
-fn test_escape_html_no_change() {
-	// Test that safe HTML passes through unchanged
-	input := 'Hello World 123'
-	assert escape_html(input) == input
-}
-
-// =============================================================================
-// Utility Function Tests
-// =============================================================================
-
-fn test_truncate_string_short() {
-	// String shorter than max should not be truncated
-	assert truncate_string('Hello', 10) == 'Hello'
-}
-
-fn test_truncate_string_exact() {
-	// String exactly at max should not be truncated
-	assert truncate_string('Hello World', 11) == 'Hello World'
-}
-
-fn test_truncate_string_long() {
-	// Long string should be truncated with ellipsis
-	result := truncate_string('This is a very long string', 20)
-	assert result.len == 20
-	assert result.ends_with('...')
-}
-
-fn test_truncate_string_boundary() {
-	// Test boundary condition
-	result := truncate_string('Hello World', 10)
-	assert result == 'Hello W...'
-}
-
-fn test_truncate_string_small_max() {
-	// When max_len <= 3, should just truncate without ellipsis
-	assert truncate_string('Hello', 3) == 'Hel'
-	assert truncate_string('Hello', 2) == 'He'
-}
-
-fn test_generate_id_format() {
-	id := generate_id()
-	assert id.len == 16 // rand.hex(16) returns 16 hex chars
-	// Check all chars are valid hex
-	for c in id.to_lower().bytes() {
-		assert (c >= u8(`0`) && c <= u8(`9`)) || (c >= u8(`a`) && c <= u8(`f`))
-	}
-}
-
-fn test_generate_id_unique() {
-	// Generate multiple IDs and verify they're different
-	ids := [generate_id(), generate_id(), generate_id()]
-	assert ids[0] != ids[1]
-	assert ids[1] != ids[2]
-	assert ids[0] != ids[2]
-}
-
-fn test_is_valid_email_valid() {
-	assert is_valid_email('test@example.com') == true
-	assert is_valid_email('user.name@domain.co.uk') == true
-	assert is_valid_email('user+tag@example.org') == true
-}
-
-fn test_is_valid_email_invalid() {
-	assert is_valid_email('invalid') == false
-	assert is_valid_email('no@domain') == false
-	assert is_valid_email('@example.com') == false
-	assert is_valid_email('test@') == false
-	assert is_valid_email('a@b') == false // no dot in domain
-	assert is_valid_email('') == false
 }
 
 // =============================================================================
