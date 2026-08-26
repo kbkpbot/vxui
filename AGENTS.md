@@ -356,16 +356,7 @@ every new connection when `multi_client` is disabled.
 ### Window Management API
 
 ```v
-// Set window size
-app.set_window_size(1024, 768)
-
-// Set window position (-1 for center)
-app.set_window_position(100, 100)
-
-// Set window title
-app.set_window_title('My App')
-
-// Configure via WindowConfig
+// Window geometry/title are configured via WindowConfig
 app.Context.config.window = vxui.WindowConfig{
     width:  1200
     height: 800

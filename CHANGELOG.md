@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Added `WebViewConfig` + a reserved `WebViewDisplay` stub, `Context.set_webview_config`,
   and `close_displays()` driven on shutdown. Adding a WebView/WebKit backend is now a
   pure add-on (implement `WebViewDisplay.spawn`).
+- Refactor: split the monolithic `vxui.v` into focused modules
+  (`errors.v`, `events.v`, `config.v`, `clients.v`, `ws.v`, `routing.v`,
+  `jsexec.v`, `displaymgr.v`); `Context`/`run` remain in `vxui.v`.
+- Removed dead/misleading APIs (breaking): `Client.connected`/`request_count`/
+  `last_request`, `find_browser_path`, unused `VxuiError` members, `Response.headers`,
+  `set_window_size`/`set_window_position`/`set_window_title`, and unused utils
+  (`escape_html`, `escape_attr`, `is_valid_email`, `truncate_string`, `generate_id`).
+  `Request` slimmed to `{verb, path, client_id, raw_message}`.
+- Added `send_cmd`/`broadcast_cmd` helpers; control-message dispatch and `run()`
+  loop extracted into small handlers (behavior-preserving).
 
 ### Added
 

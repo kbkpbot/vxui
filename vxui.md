@@ -3,15 +3,11 @@
 
 ## Contents
 - [detect_browser_type](#detect_browser_type)
-- [escape_attr](#escape_attr)
-- [escape_html](#escape_html)
 - [escape_js](#escape_js)
 - [fire_call](#fire_call)
-- [generate_id](#generate_id)
 - [generate_routes](#generate_routes)
 - [get_free_port](#get_free_port)
 - [is_app_mode_supported](#is_app_mode_supported)
-- [is_valid_email](#is_valid_email)
 - [new_display](#new_display)
 - [new_error_detail](#new_error_detail)
 - [new_error_detail_with_cause](#new_error_detail_with_cause)
@@ -22,7 +18,6 @@
 - [run_packed](#run_packed)
 - [sanitize_path](#sanitize_path)
 - [sanitize_utf8](#sanitize_utf8)
-- [truncate_string](#truncate_string)
 - [BrowserType.from](#BrowserType.from)
 - [DisplayKind.from](#DisplayKind.from)
 - [EventType.from](#EventType.from)
@@ -54,33 +49,30 @@
 - [Client](#Client)
 - [Config](#Config)
 - [Context](#Context)
-  - [on_event](#on_event)
-  - [run_js](#run_js)
-  - [run_js_client](#run_js_client)
-  - [post_js](#post_js)
-  - [post_js_client](#post_js_client)
-  - [get_clients](#get_clients)
-  - [get_client_count](#get_client_count)
-  - [get_client](#get_client)
-  - [close_client](#close_client)
   - [broadcast](#broadcast)
   - [broadcast_except](#broadcast_except)
-  - [send_to_client](#send_to_client)
-  - [ping_client](#ping_client)
-  - [ping_all_clients](#ping_all_clients)
-  - [process_client_removals](#process_client_removals)
-  - [set_window_size](#set_window_size)
-  - [set_window_position](#set_window_position)
-  - [set_window_title](#set_window_title)
-  - [open_window](#open_window)
-  - [open_window_with](#open_window_with)
-  - [set_js_sandbox](#set_js_sandbox)
-  - [set_browser_config](#set_browser_config)
-  - [set_webview_config](#set_webview_config)
+  - [close_client](#close_client)
   - [close_displays](#close_displays)
+  - [get_client](#get_client)
+  - [get_client_count](#get_client_count)
+  - [get_clients](#get_clients)
+  - [get_config](#get_config)
   - [get_port](#get_port)
   - [get_token](#get_token)
-  - [get_config](#get_config)
+  - [on_event](#on_event)
+  - [open_window](#open_window)
+  - [open_window_with](#open_window_with)
+  - [ping_all_clients](#ping_all_clients)
+  - [ping_client](#ping_client)
+  - [post_js](#post_js)
+  - [post_js_client](#post_js_client)
+  - [process_client_removals](#process_client_removals)
+  - [run_js](#run_js)
+  - [run_js_client](#run_js_client)
+  - [send_to_client](#send_to_client)
+  - [set_browser_config](#set_browser_config)
+  - [set_js_sandbox](#set_js_sandbox)
+  - [set_webview_config](#set_webview_config)
   - [trigger_hot_reload](#trigger_hot_reload)
 - [DevConfig](#DevConfig)
 - [DisplayConfig](#DisplayConfig)
@@ -123,24 +115,6 @@ detect_browser_type determines the browser type from path
 
 [[Return to contents]](#Contents)
 
-## escape_attr
-```v
-fn escape_attr(input string) string
-```
-
-escape_attr escapes HTML attribute values
-
-[[Return to contents]](#Contents)
-
-## escape_html
-```v
-fn escape_html(input string) string
-```
-
-escape_html escapes special HTML characters to prevent XSS attacks Use this when outputting user-generated content in HTML
-
-[[Return to contents]](#Contents)
-
 ## escape_js
 ```v
 fn escape_js(input string) string
@@ -158,15 +132,6 @@ fn fire_call[T](mut app T, method_name string, message map[string]json2.Any) !st
 fire_call calls the method Only methods carrying route attributes (@['/path'] and/or a verb) are dispatchable; untagged helper methods are invisible to routing.
 
 NOTE on V comptime limits (tested on V 0.5.2 / 9142d68): the dispatch call below is instantiated ONCE FOR EVERY string-returning method of T, regardless of attributes — runtime `if` guards do not gate comptime instantiation, `$for attr in method.attributes` nesting parses but does not gate it either, and `continue` is illegal inside `$for`. Helpers on the app struct must therefore return void/non-string types (or take no parameters): a string-returning helper with custom parameters will not compile. generate_routes fails fast when a TAGGED method has the wrong return type, which keeps this constraint discoverable at startup.
-
-[[Return to contents]](#Contents)
-
-## generate_id
-```v
-fn generate_id() string
-```
-
-generate_id generates a unique ID string
 
 [[Return to contents]](#Contents)
 
@@ -194,15 +159,6 @@ fn is_app_mode_supported(browser_type BrowserType) bool
 ```
 
 is_app_mode_supported returns true if browser supports app mode
-
-[[Return to contents]](#Contents)
-
-## is_valid_email
-```v
-fn is_valid_email(email string) bool
-```
-
-is_valid_email validates email format (basic check)
 
 [[Return to contents]](#Contents)
 
@@ -293,15 +249,6 @@ fn sanitize_utf8(s string) string
 ```
 
 sanitize_utf8 returns `s` with every invalid UTF-8 byte replaced by the Unicode replacement character (U+FFFD). The websocket layer REJECTS text frames that are not valid UTF-8, so any payload built from byte-wise slicing of multibyte strings must be passed through this helper before being returned from a route handler.
-
-[[Return to contents]](#Contents)
-
-## truncate_string
-```v
-fn truncate_string(s string, max_len int) string
-```
-
-truncate_string truncates a string to max length with ellipsis
 
 [[Return to contents]](#Contents)
 
@@ -518,15 +465,11 @@ enum VxuiError {
 	js_result_too_large
 	auth_failed
 	auth_invalid_token
-	connection_error
-	connection_closed
 	port_not_available
 	browser_not_found
 	file_not_found
 	path_traversal
 	route_not_found
-	invalid_message
-	request_timeout
 	// Additional error codes for unified error handling
 	profile_create_failed
 	process_fork_failed
@@ -534,7 +477,6 @@ enum VxuiError {
 	null_byte_detected
 	absolute_path_not_allowed
 	invalid_method
-	method_not_allowed
 	attribute_parse_error
 }
 ```
@@ -598,11 +540,8 @@ fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) !Dis
 ```v
 struct Client {
 pub:
-	id            string
-	token         string
-	connected     time.Time
-	request_count int
-	last_request  time.Time
+	id    string
+	token string
 pub mut:
 	connection ?&websocket.Client
 	last_ping  time.Time
@@ -690,86 +629,7 @@ pub mut:
 }
 ```
 
-[[Return to contents]](#Contents)
-
-## on_event
-```v
-fn (mut ctx Context) on_event(event_type EventType, handler EventHandler)
-```
-
-on_event registers an event handler
-
-[[Return to contents]](#Contents)
-
-## run_js
-```v
-fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string
-```
-
-run_js executes JavaScript in the frontend and returns the result
-
-[[Return to contents]](#Contents)
-
-## run_js_client
-```v
-fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout_ms int) !string
-```
-
-run_js_client executes JavaScript on a specific client
-
-[[Return to contents]](#Contents)
-
-## post_js
-```v
-fn (mut ctx Context) post_js(js_code string) !
-```
-
-post_js executes JavaScript in the frontend fire-and-forget: the result (or error) is discarded and the pending callback is unregistered immediately. Safe to call from INSIDE route handlers, unlike run_js(timeout_ms > 0), which deadlocks there: a handler runs on the connection read loop, the very goroutine that would deliver js_result.
-
-[[Return to contents]](#Contents)
-
-## post_js_client
-```v
-fn (mut ctx Context) post_js_client(client_id string, js_code string) !
-```
-
-post_js_client is post_js targeting one specific client.
-
-[[Return to contents]](#Contents)
-
-## get_clients
-```v
-fn (mut ctx Context) get_clients() []string
-```
-
-get_clients returns list of connected client IDs
-
-[[Return to contents]](#Contents)
-
-## get_client_count
-```v
-fn (mut ctx Context) get_client_count() int
-```
-
-get_client_count returns the number of connected clients
-
-[[Return to contents]](#Contents)
-
-## get_client
-```v
-fn (mut ctx Context) get_client(client_id string) ?Client
-```
-
-get_client returns client info by ID
-
-[[Return to contents]](#Contents)
-
-## close_client
-```v
-fn (mut ctx Context) close_client(client_id string) !
-```
-
-close_client disconnects a specific client
+Context is the main struct of vxui
 
 [[Return to contents]](#Contents)
 
@@ -791,111 +651,12 @@ broadcast_except sends a message to all clients except one. Per-client write fai
 
 [[Return to contents]](#Contents)
 
-## send_to_client
+## close_client
 ```v
-fn (mut ctx Context) send_to_client(client_id string, message string) !
+fn (mut ctx Context) close_client(client_id string) !
 ```
 
-send_to_client sends a message to a specific client
-
-[[Return to contents]](#Contents)
-
-## ping_client
-```v
-fn (mut ctx Context) ping_client(client_id string) !
-```
-
-ping_client sends a ping to a specific client
-
-[[Return to contents]](#Contents)
-
-## ping_all_clients
-```v
-fn (mut ctx Context) ping_all_clients()
-```
-
-ping_all_clients sends a ping to all connected clients
-
-[[Return to contents]](#Contents)
-
-## process_client_removals
-```v
-fn (mut ctx Context) process_client_removals()
-```
-
-process_client_removals handles client removal requests from the channel This should be run in a separate goroutine to serialize removal operations
-
-[[Return to contents]](#Contents)
-
-## set_window_size
-```v
-fn (mut ctx Context) set_window_size(width int, height int)
-```
-
-set_window_size sets the window dimensions
-
-[[Return to contents]](#Contents)
-
-## set_window_position
-```v
-fn (mut ctx Context) set_window_position(x int, y int)
-```
-
-set_window_position sets the window position
-
-[[Return to contents]](#Contents)
-
-## set_window_title
-```v
-fn (mut ctx Context) set_window_title(title string)
-```
-
-set_window_title sets the window title
-
-[[Return to contents]](#Contents)
-
-## open_window
-```v
-fn (mut ctx Context) open_window(html_filename string) !
-```
-
-open_window opens an additional display window using the current window configuration and security token.
-
-[[Return to contents]](#Contents)
-
-## open_window_with
-```v
-fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) !
-```
-
-open_window_with opens an additional display window with an explicit window configuration. Backend-specific options come from ctx.config.browser.
-
-[[Return to contents]](#Contents)
-
-## set_js_sandbox
-```v
-fn (mut ctx Context) set_js_sandbox(config JsSandboxConfig)
-```
-
-set_js_sandbox configures JavaScript execution security
-
-[[Return to contents]](#Contents)
-
-## set_browser_config
-```v
-fn (mut ctx Context) set_browser_config(config BrowserConfig)
-```
-
-set_browser_config configures browser startup options
-
-[[Return to contents]](#Contents)
-
-## set_webview_config
-```v
-fn (mut ctx Context) set_webview_config(config WebViewConfig)
-```
-
-set_webview_config configures WebView/WebKit backend options (used when display.kind == .webview).
+close_client disconnects a specific client
 
 [[Return to contents]](#Contents)
 
@@ -905,6 +666,42 @@ fn (mut ctx Context) close_displays()
 ```
 
 close_displays tears down all live display sessions. No-op for the detached external-browser backend; REQUIRED for in-process backends (WebView) so native windows/handles are released on shutdown.
+
+[[Return to contents]](#Contents)
+
+## get_client
+```v
+fn (mut ctx Context) get_client(client_id string) ?Client
+```
+
+get_client returns client info by ID
+
+[[Return to contents]](#Contents)
+
+## get_client_count
+```v
+fn (mut ctx Context) get_client_count() int
+```
+
+get_client_count returns the number of connected clients
+
+[[Return to contents]](#Contents)
+
+## get_clients
+```v
+fn (mut ctx Context) get_clients() []string
+```
+
+get_clients returns list of connected client IDs
+
+[[Return to contents]](#Contents)
+
+## get_config
+```v
+fn (ctx Context) get_config() Config
+```
+
+get_config returns the current configuration
 
 [[Return to contents]](#Contents)
 
@@ -926,12 +723,129 @@ get_token returns the security token
 
 [[Return to contents]](#Contents)
 
-## get_config
+## on_event
 ```v
-fn (ctx Context) get_config() Config
+fn (mut ctx Context) on_event(event_type EventType, handler EventHandler)
 ```
 
-get_config returns the current configuration
+on_event registers an event handler
+
+[[Return to contents]](#Contents)
+
+## open_window
+```v
+fn (mut ctx Context) open_window(html_filename string) !
+```
+
+open_window opens an additional display window using the current window configuration and security token.
+
+[[Return to contents]](#Contents)
+
+## open_window_with
+```v
+fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) !
+```
+
+open_window_with opens an additional display window with an explicit window configuration. Backend-specific options come from ctx.config.browser.
+
+[[Return to contents]](#Contents)
+
+## ping_all_clients
+```v
+fn (mut ctx Context) ping_all_clients()
+```
+
+ping_all_clients sends a ping to all connected clients
+
+[[Return to contents]](#Contents)
+
+## ping_client
+```v
+fn (mut ctx Context) ping_client(client_id string) !
+```
+
+ping_client sends a ping to a specific client
+
+[[Return to contents]](#Contents)
+
+## post_js
+```v
+fn (mut ctx Context) post_js(js_code string) !
+```
+
+post_js executes JavaScript in the frontend fire-and-forget: the result (or error) is discarded and the pending callback is unregistered immediately. Safe to call from INSIDE route handlers, unlike run_js(timeout_ms > 0), which deadlocks there: a handler runs on the connection read loop, the very goroutine that would deliver js_result.
+
+[[Return to contents]](#Contents)
+
+## post_js_client
+```v
+fn (mut ctx Context) post_js_client(client_id string, js_code string) !
+```
+
+post_js_client is post_js targeting one specific client.
+
+[[Return to contents]](#Contents)
+
+## process_client_removals
+```v
+fn (mut ctx Context) process_client_removals()
+```
+
+process_client_removals handles client removal requests from the channel This should be run in a separate goroutine to serialize removal operations
+
+[[Return to contents]](#Contents)
+
+## run_js
+```v
+fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string
+```
+
+run_js executes JavaScript in the frontend and returns the result
+
+[[Return to contents]](#Contents)
+
+## run_js_client
+```v
+fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout_ms int) !string
+```
+
+run_js_client executes JavaScript on a specific client
+
+[[Return to contents]](#Contents)
+
+## send_to_client
+```v
+fn (mut ctx Context) send_to_client(client_id string, message string) !
+```
+
+send_to_client sends a message to a specific client
+
+[[Return to contents]](#Contents)
+
+## set_browser_config
+```v
+fn (mut ctx Context) set_browser_config(config BrowserConfig)
+```
+
+set_browser_config configures browser startup options
+
+[[Return to contents]](#Contents)
+
+## set_js_sandbox
+```v
+fn (mut ctx Context) set_js_sandbox(config JsSandboxConfig)
+```
+
+set_js_sandbox configures JavaScript execution security
+
+[[Return to contents]](#Contents)
+
+## set_webview_config
+```v
+fn (mut ctx Context) set_webview_config(config WebViewConfig)
+```
+
+set_webview_config configures WebView/WebKit backend options (used when display.kind == .webview).
 
 [[Return to contents]](#Contents)
 
@@ -1165,14 +1079,9 @@ cleanup removes extracted files
 ```v
 struct Request {
 pub:
-	id          string
 	verb        Verb
 	path        string
-	parameters  map[string]string
-	headers     map[string]string
-	body        string
 	client_id   string
-	timestamp   time.Time
 	raw_message map[string]json2.Any // Original message for compatibility
 }
 ```
@@ -1185,9 +1094,8 @@ Request represents a type-safe request
 ```v
 struct Response {
 pub mut:
-	status  int               = 200
-	headers map[string]string = {}
-	body    string
+	status int = 200
+	body   string
 }
 ```
 
@@ -1312,4 +1220,4 @@ Note: only size/position/title are actually enforced by the browser launch; the 
 
 [[Return to contents]](#Contents)
 
-#### Powered by vdoc. Generated on: 26 Aug 2026 12:03:12
+#### Powered by vdoc. Generated on: 26 Aug 2026 12:48:25

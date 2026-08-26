@@ -50,9 +50,10 @@ import vxui
 
 fn (mut app App) handler(msg map[string]json2.Any) string {
     user_input := msg['name'] or { '' }.str()
-    // Always escape user input!
-    safe_input := vxui.escape_html(user_input)
-    return '<div>Hello ${safe_input}</div>'
+    // Always escape user input before injecting into JavaScript!
+    safe_input := vxui.escape_js(user_input)
+    app.run_js('console.log("${safe_input}")', 1000) or {}
+    return '<div>Hello</div>'
 }
 ```
 
@@ -75,7 +76,7 @@ fn (mut app App) update(msg map[string]json2.Any) string {
     
     // Validate required fields
     if email := params['email'] {
-        if !vxui.is_valid_email(email.str()) {
+        if !email.str().contains('@') {
             return '<div class="error">Invalid email</div>'
         }
     }

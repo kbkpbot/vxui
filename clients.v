@@ -1,6 +1,5 @@
 module vxui
 
-import net
 import net.websocket
 import time
 import x.json2

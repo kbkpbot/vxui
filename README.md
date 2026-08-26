@@ -340,14 +340,15 @@ fn (mut app App) broadcast_msg(msg map[string]json2.Any) string {
 
 ### Window Management
 
-Control browser window size and position:
+Configure browser window size via `WindowConfig`:
 
 ```v
 fn main() {
     mut app := App{}
-    app.set_window_size(1200, 800)
-    app.set_window_position(-1, -1)  // -1 = center
-    app.set_window_title('My Application')
+    app.Context.config.window = vxui.WindowConfig{
+        width:  1200
+        height: 800
+    }
     vxui.run(mut app, './ui/index.html')!
 }
 ```
@@ -425,15 +426,17 @@ import vxui
 
 fn (mut app App) handler(msg map[string]json2.Any) string {
     user_input := msg['name'] or { '' }.str()
-    safe := vxui.escape_html(user_input)
-    return '<div>Hello ${safe}</div>'
+    // escape before injecting into a JavaScript context
+    safe := vxui.escape_js(user_input)
+    app.run_js('console.log("${safe}")', 1000) or {}
+    return '<div>Hello</div>'
 }
 ```
 
 ### Security Best Practices
 
 1. **Always validate input** — Use `sanitize_path()` for file paths
-2. **Escape output** — Use `escape_html()`, `escape_js()`, `escape_attr()` 
+2. **Escape output** — Use `escape_js()` when injecting values into JavaScript contexts
 3. **Keep tokens secure** — Tokens are auto-generated and passed via URL
 4. **Limit JS execution** — Configure `js_sandbox` settings appropriately
 
