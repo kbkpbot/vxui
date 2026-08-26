@@ -560,13 +560,7 @@ fn (mut ctx Context) handle_control_message(mut ws websocket.Client, message map
 	// bookkeeping still requires a valid token.
 	if cmd := message['cmd'] {
 		if cmd.str() == 'ping' {
-			if message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
-				ctx.handle_pong(message)
-			}
-			ctx.send_cmd(mut ws, 'pong', {
-				'client_id': message['client_id'] or { json2.Any('') }
-				'timestamp': json2.Any(time.now().unix_milli())
-			})!
+			ctx.handle_ping(mut ws, message)!
 			return true
 		}
 	}
@@ -590,34 +584,58 @@ fn (mut ctx Context) handle_control_message(mut ws websocket.Client, message map
 	}
 
 	if cmd := message['cmd'] {
-		if cmd.str() == 'js_result' {
-			ctx.handle_js_result(message)
-			return true
-		}
-		if cmd.str() == 'pong' {
-			ctx.handle_pong(message)
-			return true
-		}
-		if cmd.str() == 'client_close' {
-			// Client is closing, send removal request to channel
-			client_id := message['client_id'] or { json2.Any('') }.str()
-			ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
-			return true
-		}
-		// Authenticated utility command: enumerate connected clients
-		if cmd.str() == 'get_clients' {
-			mut ids := []json2.Any{}
-			for id in ctx.get_clients() {
-				ids << json2.Any(id)
+		match cmd.str() {
+			'js_result' {
+				ctx.handle_js_result(message)
+				return true
 			}
-			ctx.send_cmd(mut ws, 'clients', {
-				'ids': json2.Any(ids)
-			})!
-			return true
+			'pong' {
+				ctx.handle_pong(message)
+				return true
+			}
+			'client_close' {
+				ctx.handle_client_close(mut ws, message)
+				return true
+			}
+			'get_clients' {
+				ctx.handle_get_clients(mut ws, message)!
+				return true
+			}
+			else {}
 		}
 	}
 
 	return false
+}
+
+// handle_ping answers a keep-alive ping. Liveness bookkeeping (handle_pong)
+// only runs for token-authenticated pings; the pong reply is always sent.
+fn (mut ctx Context) handle_ping(mut conn &websocket.Client, message map[string]json2.Any) ! {
+	if message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
+		ctx.handle_pong(message)
+	}
+	ctx.send_cmd(mut conn, 'pong', {
+		'client_id': message['client_id'] or { json2.Any('') }
+		'timestamp': json2.Any(time.now().unix_milli())
+	})!
+}
+
+// handle_get_clients enumerates connected clients (token-gated by the caller).
+fn (mut ctx Context) handle_get_clients(mut _conn &websocket.Client, _message map[string]json2.Any) ! {
+	mut ids := []json2.Any{}
+	for id in ctx.get_clients() {
+		ids << json2.Any(id)
+	}
+	ctx.send_cmd(mut _conn, 'clients', {
+		'ids': json2.Any(ids)
+	})!
+}
+
+// handle_client_close forwards a client-initiated close to the serialized
+// removal channel (token-gated by the caller).
+fn (mut ctx Context) handle_client_close(mut _conn &websocket.Client, message map[string]json2.Any) {
+	client_id := message['client_id'] or { json2.Any('') }.str()
+	ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
 }
 
 // dispatch_rpc routes an rpcID-bearing message to its tagged route handler
@@ -1077,6 +1095,8 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	mut empty_since := time.Time{} // when the last client left (grace window)
 
+	mut break_now := false
+
 	for {
 		ws_state = ctx.ws.get_state()
 
@@ -1092,68 +1112,21 @@ pub fn run[T](mut app T, html_filename string) ! {
 			break
 		}
 
-		if client_count == 0 {
-			if had_clients {
-				// Grace window: a page RELOAD delivers client_close / FIN for
-				// the old connection and reconnects a moment later. Exiting
-				// immediately here turned every F5 into an app suicide.
-				// Wait ~1.5s; a reconnecting client clears empty_since.
-				if empty_since.is_zero() {
-					empty_since = time.now()
-				}
-
-				if time.now().unix_milli() - empty_since.unix_milli() > 1500 {
-					ctx.logger.info('All clients disconnected, shutting down')
-
-					break
-				}
-			} else {
-				// Never had clients, wait for timeout
-
-				elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
-
-				if elapsed_ms > ctx.config.close_timer_ms {
-					ctx.logger.info('No clients connected for ${ctx.config.close_timer_ms}ms, shutting down')
-
-					break
-				}
-			}
-		} else {
-			had_clients = true
-
-			empty_since = time.Time{}
-
-			last_client_time = time.now()
+		// Close-timer / all-clients-disconnected grace logic
+		break_now, had_clients, empty_since, last_client_time = ctx.should_shutdown(had_clients,
+			empty_since, last_client_time, client_count)
+		if break_now {
+			break
 		}
 
 		app.check_client_timeouts()
 
 		// Heartbeat: send ping to all clients periodically
-
-		now := time.now()
-
-		if client_count > 0
-			&& now.unix_milli() - last_ping_time.unix_milli() >= ctx.config.ws_ping_interval_ms {
-			last_ping_time = now
-
-			app.ping_all_clients()
-
-			ctx.logger.debug('Sent heartbeat ping to all clients')
-		}
+		last_ping_time = ctx.maybe_heartbeat(last_ping_time, client_count)
 
 		// Hot reload check
-
-		if ctx.config.dev.enabled && ctx.config.dev.hot_reload && client_count > 0 {
-			if now.unix_milli() - last_hot_reload_check.unix_milli() >= ctx.config.dev.watch_ms {
-				last_hot_reload_check = now
-				new_mtimes := scan_file_mtimes(watch_dirs)
-				if has_files_changed(file_mtimes, new_mtimes) {
-					ctx.logger.info('Files changed, triggering hot reload')
-					file_mtimes = new_mtimes.clone()
-					app.trigger_hot_reload() or { ctx.logger.warn('Hot reload failed: ${err}') }
-				}
-			}
-		}
+		last_hot_reload_check = ctx.maybe_hot_reload(watch_dirs, mut file_mtimes,
+			last_hot_reload_check, client_count)
 
 		time.sleep(10 * time.millisecond)
 	}
@@ -1165,6 +1138,91 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	ctx.ws.free()
 	ctx.logger.info('vxui shutdown complete')
+}
+
+// should_shutdown encapsulates the close-timer / all-clients-disconnected
+// grace logic of the run loop. It returns whether the loop should break
+// plus the (possibly updated) grace-state locals had_clients / empty_since /
+// last_client_time.
+fn (mut ctx Context) should_shutdown(had_clients bool, empty_since time.Time, last_client_time time.Time, client_count int) (bool, bool, time.Time, time.Time) {
+	if client_count == 0 {
+		if had_clients {
+			// Grace window: a page RELOAD delivers client_close / FIN for
+			// the old connection and reconnects a moment later. Exiting
+			// immediately here turned every F5 into an app suicide.
+			// Wait ~1.5s; a reconnecting client clears empty_since.
+			mut new_empty_since := empty_since
+			if new_empty_since.is_zero() {
+				new_empty_since = time.now()
+			}
+
+			if time.now().unix_milli() - new_empty_since.unix_milli() > 1500 {
+				ctx.logger.info('All clients disconnected, shutting down')
+
+				return true, had_clients, new_empty_since, last_client_time
+			}
+
+			return false, had_clients, new_empty_since, last_client_time
+		} else {
+			// Never had clients, wait for timeout
+
+			elapsed_ms := time.now().unix_milli() - last_client_time.unix_milli()
+
+			if elapsed_ms > ctx.config.close_timer_ms {
+				ctx.logger.info('No clients connected for ${ctx.config.close_timer_ms}ms, shutting down')
+
+				return true, had_clients, empty_since, last_client_time
+			}
+		}
+	} else {
+		// Had a client this tick: clear grace state
+		return false, true, time.Time{}, time.now()
+	}
+
+	return false, had_clients, empty_since, last_client_time
+}
+
+// maybe_heartbeat sends a ping to all clients when the ping interval has
+// elapsed and at least one client is connected. It returns the (possibly
+// updated) last_ping_time.
+fn (mut ctx Context) maybe_heartbeat(last_ping_time time.Time, client_count int) time.Time {
+	now := time.now()
+
+	if client_count > 0
+		&& now.unix_milli() - last_ping_time.unix_milli() >= ctx.config.ws_ping_interval_ms {
+		ctx.ping_all_clients()
+
+		ctx.logger.debug('Sent heartbeat ping to all clients')
+
+		return now
+	}
+
+	return last_ping_time
+}
+
+// maybe_hot_reload triggers a browser reload when watched files change, but
+// only in dev mode with hot_reload enabled and at least one client connected.
+// It returns the (possibly updated) last_hot_reload_check timestamp.
+fn (mut ctx Context) maybe_hot_reload(watch_dirs []string, mut file_mtimes map[string]time.Time, last_hot_reload_check time.Time, client_count int) time.Time {
+	if ctx.config.dev.enabled && ctx.config.dev.hot_reload && client_count > 0 {
+		now := time.now()
+
+		if now.unix_milli() - last_hot_reload_check.unix_milli() >= ctx.config.dev.watch_ms {
+			new_mtimes := scan_file_mtimes(watch_dirs)
+
+			if has_files_changed(file_mtimes, new_mtimes) {
+				ctx.logger.info('Files changed, triggering hot reload')
+
+				file_mtimes = new_mtimes.clone()
+
+				ctx.trigger_hot_reload() or { ctx.logger.warn('Hot reload failed: ${err}') }
+			}
+
+			return now
+		}
+	}
+
+	return last_hot_reload_check
 }
 
 // check_client_timeouts removes clients that haven't responded to pings
