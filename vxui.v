@@ -563,11 +563,10 @@ fn (mut ctx Context) handle_control_message(mut ws websocket.Client, message map
 			if message_token_valid(message, ctx.config.require_auth, ctx.config.token) {
 				ctx.handle_pong(message)
 			}
-			mut pong := map[string]json2.Any{}
-			pong['cmd'] = json2.Any('pong')
-			pong['client_id'] = message['client_id'] or { json2.Any('') }
-			pong['timestamp'] = json2.Any(time.now().unix_milli())
-			ws.write(json2.encode(pong).bytes(), .text_frame)!
+			ctx.send_cmd(mut ws, 'pong', {
+				'client_id': message['client_id'] or { json2.Any('') }
+				'timestamp': json2.Any(time.now().unix_milli())
+			})!
 			return true
 		}
 	}
@@ -611,10 +610,9 @@ fn (mut ctx Context) handle_control_message(mut ws websocket.Client, message map
 			for id in ctx.get_clients() {
 				ids << json2.Any(id)
 			}
-			mut resp := map[string]json2.Any{}
-			resp['cmd'] = json2.Any('clients')
-			resp['ids'] = json2.Any(ids)
-			ws.write(json2.encode(resp).bytes(), .text_frame)!
+			ctx.send_cmd(mut ws, 'clients', {
+				'ids': json2.Any(ids)
+			})!
 			return true
 		}
 	}
@@ -644,8 +642,11 @@ fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i
 		// unknown route: previously a completely silent 404 — the player
 		// clicks a button and nothing happens, no trace anywhere
 		ctx.logger.warn('rpc 404: no route for ${req.verb} ${req.path} (client ${client_id})')
-		err_resp := '{"rpcID":"${rpc_id}", "error":"route_not_found", "message":"no route for ${req.path}"}'
-		ws.write(err_resp.bytes(), .text_frame)!
+		mut err_m := map[string]json2.Any{}
+		err_m['rpcID'] = json2.Any('${rpc_id}')
+		err_m['error'] = json2.Any('route_not_found')
+		err_m['message'] = json2.Any('no route for ${req.path}')
+		ws.write(json2.encode(err_m).bytes(), .text_frame)!
 		return
 	}
 
@@ -771,13 +772,12 @@ fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]jso
 	ctx.trigger_event(EventType.client_connected, client_id, 'Client authenticated', {}, none,
 		none, none)
 
-	mut response := map[string]json2.Any{}
-	response['cmd'] = json2.Any('auth_ok')
-	response['client_id'] = json2.Any(client_id)
+	mut auth_extra := map[string]json2.Any{}
+	auth_extra['client_id'] = json2.Any(client_id)
 	if ctx.config.js_sandbox.enabled {
-		response['js_sandbox'] = json2.encode(ctx.config.js_sandbox)
+		auth_extra['js_sandbox'] = json2.encode(ctx.config.js_sandbox)
 	}
-	ws.write(json2.encode(response).bytes(), .text_frame)!
+	ctx.send_cmd(mut ws, 'auth_ok', auth_extra)!
 
 	// Apply the configured window/page title on the freshly connected client
 	effective_title := if ctx.config.window.title != '' {
@@ -788,11 +788,10 @@ fn (mut ctx Context) handle_auth(mut ws websocket.Client, message map[string]jso
 		''
 	}
 	if effective_title != '' {
-		mut title_cmd := map[string]json2.Any{}
-		title_cmd['cmd'] = json2.Any('run_js')
-		title_cmd['js_id'] = json2.Any('title-${client_id}')
-		title_cmd['script'] = json2.Any("document.title = '${escape_js(effective_title)}'")
-		ws.write(json2.encode(title_cmd).bytes(), .text_frame)!
+		mut title_extra := map[string]json2.Any{}
+		title_extra['js_id'] = json2.Any('title-${client_id}')
+		title_extra['script'] = json2.Any("document.title = '${escape_js(effective_title)}'")
+		ctx.send_cmd(mut ws, 'run_js', title_extra)!
 	}
 }
 
@@ -885,9 +884,11 @@ fn handle_request[T](mut app T, ctx &Context, req Request, message map[string]js
 	for key, val in ctx.routes {
 		if val.path == req.path && (req.verb in val.verb || Verb.any_verb in val.verb) {
 			result := fire_call[T](mut app, key, message) or {
+				mut err_m := map[string]json2.Any{}
+				err_m['error'] = json2.Any('${err}')
 				return Response{
 					status: 500
-					body:   '{"error": "${err}"}'
+					body:   json2.encode(err_m)
 				}
 			}
 			return Response{
@@ -1263,12 +1264,11 @@ fn (mut ctx Context) execute_js(client_id string, js_code string, timeout_ms int
 		ctx.mu.unlock()
 	}
 
-	mut cmd := map[string]json2.Any{}
-	cmd['cmd'] = json2.Any('run_js')
-	cmd['js_id'] = json2.Any(js_id)
-	cmd['script'] = json2.Any(js_code)
-	cmd['timeout'] = json2.Any(timeout_ms)
-	client_conn.write(json2.encode(cmd).bytes(), .text_frame)!
+	ctx.send_cmd(mut client_conn, 'run_js', {
+		'js_id':   json2.Any(js_id)
+		'script':  json2.Any(js_code)
+		'timeout': json2.Any(timeout_ms)
+	})!
 
 	ctx.trigger_event(EventType.js_execution, client_id, js_code, {
 		'js_id': json2.Any(js_id)
@@ -1465,6 +1465,32 @@ pub fn (mut ctx Context) send_to_client(client_id string, message string) ! {
 	conn.write_string(message)!
 }
 
+// send_cmd writes a JSON control-message envelope ({'cmd': cmd, ...extra})
+// to a single connection. The envelope shape matches the hand-built maps
+// used throughout handle_control_message / execute_js / heartbeat, so the
+// frontend sees identical frames. This is the single place that builds a
+// cmd frame for a known connection.
+fn (mut ctx Context) send_cmd(mut conn &websocket.Client, cmd string, extra map[string]json2.Any) ! {
+	mut m := map[string]json2.Any{}
+	m['cmd'] = cmd
+	for k, v in extra {
+		m[k] = v
+	}
+	conn.write(json2.encode(m).bytes(), .text_frame)!
+}
+
+// broadcast_cmd writes a JSON control-message envelope ({'cmd': cmd, ...extra})
+// to every connected client. Per-client write failures are skipped, matching
+// broadcast().
+fn (mut ctx Context) broadcast_cmd(cmd string, extra map[string]json2.Any) {
+	mut m := map[string]json2.Any{}
+	m['cmd'] = cmd
+	for k, v in extra {
+		m[k] = v
+	}
+	ctx.broadcast(json2.encode(m)) or {}
+}
+
 // =============================================================================
 // Heartbeat
 // =============================================================================
@@ -1483,22 +1509,16 @@ pub fn (mut ctx Context) ping_client(client_id string) ! {
 
 	ctx.mu.runlock()
 
-	mut cmd := map[string]json2.Any{}
-	cmd['cmd'] = json2.Any('ping')
-	cmd['timestamp'] = json2.Any(time.now().unix_milli())
-	conn.write(json2.encode(cmd).bytes(), .text_frame)!
+	ctx.send_cmd(mut conn, 'ping', {
+		'timestamp': json2.Any(time.now().unix_milli())
+	})!
 }
 
 // ping_all_clients sends a ping to all connected clients
 pub fn (mut ctx Context) ping_all_clients() {
-	mut cmd := map[string]json2.Any{}
-	cmd['cmd'] = json2.Any('ping')
-	cmd['timestamp'] = json2.Any(time.now().unix_milli())
-	msg := json2.encode(cmd)
-
-	for mut conn in ctx.client_connections('') {
-		conn.write(msg.bytes(), .text_frame) or {}
-	}
+	ctx.broadcast_cmd('ping', {
+		'timestamp': json2.Any(time.now().unix_milli())
+	})
 }
 
 // process_client_removals handles client removal requests from the channel
@@ -1613,17 +1633,9 @@ pub fn (ctx Context) get_config() Config {
 // trigger_hot_reload sends a reload command to all connected clients.
 // Per-client write failures are skipped, see broadcast().
 pub fn (mut ctx Context) trigger_hot_reload() ! {
-	mut cmd := map[string]json2.Any{}
-	cmd['cmd'] = json2.Any('reload')
-	cmd['timestamp'] = json2.Any(time.now().unix_milli())
-	msg := json2.encode(cmd)
-
-	for mut conn in ctx.client_connections('') {
-		conn.write(msg.bytes(), .text_frame) or {
-			ctx.logger.debug('hot reload: client write failed, skipped: ${err}')
-			continue
-		}
-	}
+	ctx.broadcast_cmd('reload', {
+		'timestamp': json2.Any(time.now().unix_milli())
+	})
 }
 
 // scan_file_mtimes scans directories and returns file modification times
