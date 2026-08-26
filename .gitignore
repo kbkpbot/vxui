@@ -29,3 +29,6 @@ generate_doc.sh
 
 # Field improvement report (local only)
 doc/vxui-improvements.md
+
+# Superpowers skill-generated docs (local only)
+docs/superpowers/
