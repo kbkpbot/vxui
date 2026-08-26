@@ -3,16 +3,84 @@ module vxui
 import os
 import rand
 
-// DisplayKind selects which display backend renders the UI.
-pub enum DisplayKind {
-	browser // external system browser (default)
-	webview // reserved: in-process platform WebView/WebKit (not yet implemented)
+// DisplayFamily groups display backends by how they present the page.
+pub enum DisplayFamily {
+	process  // external child process (e.g. a system browser)
+	embedded // in-process native view (e.g. WebView2 / WKWebView / WebKitGTK)
 }
 
-// DisplayConfig selects and scopes the display backend.
+struct DisplayBackendInfo {
+	id     string
+	family DisplayFamily
+}
+
+// DisplayFactory builds a Display for a given app Config.
+type DisplayFactory = fn (&Config) !Display
+
+// DisplayRegistry holds the known backend ids, their families, and factories.
+struct DisplayRegistry {
+mut:
+	backends   map[string]DisplayBackendInfo
+	factories  map[string]DisplayFactory
+	registered bool
+}
+
+fn (mut r DisplayRegistry) ensure() {
+	if r.registered { return }
+	r.backends['browser'] = DisplayBackendInfo{'browser', .process}
+	r.backends['chrome'] = DisplayBackendInfo{'chrome', .process}
+	r.backends['firefox'] = DisplayBackendInfo{'firefox', .process}
+	r.backends['edge'] = DisplayBackendInfo{'edge', .process}
+	r.backends['brave'] = DisplayBackendInfo{'brave', .process}
+	r.backends['safari'] = DisplayBackendInfo{'safari', .process}
+	r.backends['system'] = DisplayBackendInfo{'system', .process}
+	r.backends['webview2'] = DisplayBackendInfo{'webview2', .embedded}
+	r.backends['wkwebview'] = DisplayBackendInfo{'wkwebview', .embedded}
+	r.backends['webkitgtk'] = DisplayBackendInfo{'webkitgtk', .embedded}
+	r.backends['android'] = DisplayBackendInfo{'android', .embedded}
+	r.factories['browser'] = fn (cfg &Config) !Display {
+		return BrowserDisplay{
+			config: &cfg.browser
+		}
+	}
+	r.factories['chrome'] = r.factories['browser']
+	r.factories['firefox'] = r.factories['browser']
+	r.factories['edge'] = r.factories['browser']
+	r.factories['brave'] = r.factories['browser']
+	r.factories['safari'] = r.factories['browser']
+	r.factories['system'] = r.factories['browser']
+	r.factories['webview2'] = fn (cfg &Config) !Display {
+		return WebViewDisplay{
+			config: &cfg.webview
+			id:     'webview2'
+		}
+	}
+	r.factories['wkwebview'] = fn (cfg &Config) !Display {
+		return WebViewDisplay{
+			config: &cfg.webview
+			id:     'wkwebview'
+		}
+	}
+	r.factories['webkitgtk'] = fn (cfg &Config) !Display {
+		return WebViewDisplay{
+			config: &cfg.webview
+			id:     'webkitgtk'
+		}
+	}
+	r.factories['android'] = fn (cfg &Config) !Display {
+		return WebViewDisplay{
+			config: &cfg.webview
+			id:     'android'
+		}
+	}
+	r.registered = true
+}
+
+// DisplayConfig selects and scopes the display backend by string id.
+// id 'auto' (or empty) resolves at runtime via resolve_auto().
 pub struct DisplayConfig {
 pub mut:
-	kind DisplayKind = .browser
+	id string = 'auto'
 }
 
 // DisplaySessionConfig carries the generic, backend-agnostic parameters needed
@@ -190,10 +258,11 @@ pub struct WebViewConfig {}
 // real backend only needs to implement spawn() (and fill WebViewConfig).
 pub struct WebViewDisplay {
 	config &WebViewConfig
+	id     string
 }
 
 pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
-	return error('WebView display backend is not implemented yet')
+	return error('native WebView FFI not implemented on this platform (${b.id})')
 }
 
 struct WebViewSession {}
@@ -206,22 +275,35 @@ pub fn (mut s WebViewSession) set_title(t string) {}
 
 pub fn (mut s WebViewSession) set_position(x int, y int) {}
 
-// new_display constructs the configured backend. It receives the whole app
-// Config so each backend extracts its OWN sub-config — this keeps the
-// construction wiring backend-agnostic (no hardcoded BrowserConfig).
-pub fn new_display(kind DisplayKind, app_cfg &Config) !Display {
-	match kind {
-		.browser {
-			return BrowserDisplay{
-				config: &app_cfg.browser
-			}
-		}
-		.webview {
-			return WebViewDisplay{
-				config: &app_cfg.webview
-			}
-		}
+// new_display constructs the backend identified by `id`. An empty id or 'auto'
+// resolves at runtime via resolve_auto(). It receives the whole app Config so
+// each backend extracts its OWN sub-config — this keeps the construction wiring
+// backend-agnostic (no hardcoded BrowserConfig).
+pub fn new_display(id string, app_cfg &Config) !Display {
+	mut r := DisplayRegistry{}
+	r.ensure()
+	resolved := if id == '' || id == 'auto' { resolve_auto(app_cfg) } else { id }
+	f := r.factories[resolved] or { return error('unknown display backend: ${resolved}') }
+	return f(app_cfg)
+}
+
+// resolve_auto picks the first available process-family browser backend.
+// Linux-first; extend per platform. Falls back to 'system'.
+pub fn resolve_auto(cfg &Config) string {
+	for candidate in ['chrome', 'google-chrome', 'chromium', 'firefox', 'edge', 'brave', 'system'] {
+		if candidate == 'system' { return 'system' }
+		path := os.find_abs_path_of_executable(candidate) or { '' }
+		if path != '' { return candidate }
 	}
+	return 'system'
+}
+
+// backend_family returns the family a backend id belongs to (defaults to .process).
+pub fn backend_family(id string) DisplayFamily {
+	mut r := DisplayRegistry{}
+	r.ensure()
+	info := r.backends[id] or { return .process }
+	return info.family
 }
 
 // =============================================================================

@@ -85,7 +85,7 @@ fn init[T](mut app T) ! {
 
 	ctx.ws = startup_ws_server(mut app, .ip, ctx.ws_port)!
 
-	ctx.display = new_display(ctx.config.display.kind, &ctx.config) or { return err }
+	ctx.display = new_display(ctx.config.display.id, &ctx.config) or { return err }
 }
 
 // =============================================================================
@@ -109,7 +109,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	// Apply dev mode settings
 	if ctx.config.dev.enabled {
-		if ctx.config.display.kind == .browser {
+		if backend_family(ctx.config.display.id) == .process {
 			ctx.config.browser.devtools = ctx.config.dev.auto_devtools
 		}
 		ctx.logger.info('Development mode enabled')
