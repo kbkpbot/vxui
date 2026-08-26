@@ -522,7 +522,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		raw_payload := msg.payload.bytestr()
 		raw_message := json2.decode[json2.Any](raw_payload)!
 		mut message := raw_message.as_map()
-		ctx.logger.debug('Received message: ${message}')
+		ctx.logger.debug('Received message keys: ${message.keys()}')
 
 		handled := ctx.handle_control_message(mut ws, message, raw_payload)!
 		if handled {
@@ -1084,10 +1084,15 @@ pub fn run[T](mut app T, html_filename string) ! {
 		y:      ctx.config.window.y
 		title:  ctx.config.window.title
 	}
-	ctx.display_session = ctx.display.spawn(html_filename, session_cfg)!
+	ctx.display_session = ctx.display.spawn(html_filename, session_cfg) or {
+		// A failed spawn (e.g. no browser found, or a reserved backend not
+		// yet implemented) must not leave the WS server/port bound.
+		ctx.ws.free()
+		return err
+	}
 
 	ctx.logger.info('Browser started, waiting for connections on port ${ctx.ws_port}...')
-	ctx.logger.debug('Token: ${ctx.config.token}')
+	ctx.logger.debug('Auth token generated (hidden from logs)')
 
 	ctx.trigger_event(EventType.after_start, '', 'Application started', {}, none, none, none)
 
@@ -1614,9 +1619,14 @@ pub fn (mut ctx Context) open_window_with(html_filename string, window WindowCon
 		title:  window.title
 	}
 	sess := ctx.display.spawn(html_filename, cfg)!
-	ctx.display_sessions << sess
+	// Keep the primary session in `display_session` only; secondary windows
+	// go into `display_sessions`. Never store the same instance in both, or
+	// close_displays() would close it twice (a double-free for in-process
+	// WebView backends).
 	if ctx.display_session == none {
 		ctx.display_session = sess
+	} else {
+		ctx.display_sessions << sess
 	}
 }
 

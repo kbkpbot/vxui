@@ -2,7 +2,6 @@
 
 
 ## Contents
-- [detect_browser](#detect_browser)
 - [escape_attr](#escape_attr)
 - [escape_html](#escape_html)
 - [escape_js](#escape_js)
