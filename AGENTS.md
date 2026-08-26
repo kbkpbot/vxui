@@ -28,7 +28,7 @@
 ├── LICENSE             # MIT License
 ├── vxui.png            # Architecture diagram
 ├── vxui.v              # Main framework: WebSocket server, routing, run_js, multi-client
-├── display.v           # Pluggable display backend (BrowserDisplay + Display/DisplaySession interfaces)
+├── display.v           # Pluggable display backend: Display/DisplaySession interfaces, DisplayKind, BrowserDisplay + reserved WebViewDisplay
 ├── embed.v             # Packed app support for single executable distribution
 ├── utils.v             # Utility and security functions
 ├── vxui_test.v         # Unit tests
@@ -174,7 +174,7 @@ mut:
     ws      websocket.Server // WebSocket server instance
     routes  map[string]Route // Route mapping
 pub mut:
-    config       Config      // Unified configuration (token, close_timer_ms, window, browser, ...)
+    config       Config      // Unified configuration (token, close_timer_ms, window, display, browser, webview, ...)
     logger       &log.Log    // Logger
 }
 ```
@@ -195,6 +195,83 @@ pub mut:
     remote_debug_port int      // Chrome remote debugging port (e.g., 9222)
 }
 ```
+
+`BrowserConfig` is the configuration for the **`.browser`** backend only. Other
+backends (e.g. the reserved `.webview`) keep their options on their own config
+struct and ignore `BrowserConfig`.
+
+### Display backends (pluggable)
+
+vxui's UI presentation is behind a small, backend-agnostic `Display` interface.
+The core never hardcodes how the page gets on screen — it only speaks WebSocket
+to it. This lets the same app run in an external browser today and a platform
+WebView/WebKit later without touching routing, `run_js`, window management, or
+shutdown logic.
+
+```v
+// DisplayKind selects which backend renders the UI.
+pub enum DisplayKind {
+    browser // external system browser (default)
+    webview // reserved: in-process platform WebView/WebKit (not yet implemented)
+}
+
+// DisplayConfig selects and scopes the display backend.
+pub struct DisplayConfig {
+pub mut:
+    kind DisplayKind = .browser
+}
+
+// DisplaySession is a live, presented window (close / resize / retitle / move).
+pub interface DisplaySession {
+mut:
+    close() !
+    set_size(w int, h int)
+    set_title(t string)
+    set_position(x int, y int)
+}
+
+// Display turns an HTML file into one or more presented windows.
+pub interface Display {
+mut:
+    spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
+}
+```
+
+Per-backend configuration lives on the backend's own struct and is merged by the
+backend during `spawn` — the core only forwards generic `DisplaySessionConfig`
+(`port`/`token`/`width`/`height`/`x`/`y`/`title`):
+
+| Backend  | Config struct      | Setter                 | Notes                                  |
+|----------|--------------------|------------------------|----------------------------------------|
+| `.browser` | `BrowserConfig`  | `set_browser_config`   | External browser launch (default)      |
+| `.webview` | `WebViewConfig`  | `set_webview_config`   | Reserved stub; `spawn` not implemented |
+
+```v
+// Select the backend (defaults to .browser)
+app.config.display.kind = .browser
+
+// Configure the chosen backend
+app.set_browser_config(vxui.BrowserConfig{ headless: true })
+app.set_webview_config(vxui.WebViewConfig{ /* reserved */ })
+
+// Tear down all live sessions (driven automatically on shutdown; required for
+// in-process backends such as WebView to release native windows/handles).
+app.close_displays()
+```
+
+**Adding a new backend is a pure add-on:** implement one struct that satisfies
+`Display` (i.e. a `spawn(html_path, cfg) !DisplaySession` method) and add a
+matching config struct + a `Config.<backend>` field + a `.backend` branch in
+`new_display`. No edits to `init`/`run`/`open_window*`/`set_window_*`/dev-mode
+are needed — `new_display(kind, &Config)` extracts each backend's own sub-config
+from the whole `Config`, and `open_window`/`close_displays` already operate
+through the `Display`/`DisplaySession` interfaces. The reserved `WebViewDisplay`
+is a ready template: fill `WebViewConfig` and implement its `spawn`.
+
+> **Note:** `BrowserConfig`-specific options (incl. `remote_debug_port`,
+> `window_mode`, `devtools`) apply only to the `.browser` backend. Dev-mode's
+> automatic `devtools` toggle is gated on `kind == .browser`, so non-browser
+> backends are never affected.
 
 ### Attribute Tags
 
@@ -343,6 +420,33 @@ app.broadcast(broadcast_msg)!
 - Performs OOB swap using htmx internal APIs
 - Updates CSS variables from `data-bg`, `data-accent`, `data-font-size` attributes
 - Rebinds htmx event listeners on new elements
+
+### Pluggable Display Backend
+
+The UI presentation layer is behind a backend-agnostic `Display` interface, so
+the same app can run in an external browser or (in future) an in-process
+WebView/WebKit without changing routing, `run_js`, window management, or
+shutdown. Select the backend and configure it:
+
+```v
+// Default: external system browser
+app.config.display.kind = .browser
+app.set_browser_config(vxui.BrowserConfig{ headless: true })
+
+// Future: in-process WebView/WebKit (reserved; spawn not implemented yet)
+app.config.display.kind = .webview
+app.set_webview_config(vxui.WebViewConfig{})
+```
+
+Construction is fully generic — `new_display(kind, &Config)` extracts each
+backend's own sub-config (`Config.browser` / `Config.webview`). `close()` is
+driven on shutdown via `close_displays()`, which is a no-op for the detached
+browser but required for in-process backends to release native windows.
+
+**To add a new backend**, implement one struct with `spawn(html_path, cfg)
+!DisplaySession`, add a config struct + a `Config.<backend>` field + a
+`.backend` branch in `new_display`. No edits to core wiring are needed. See the
+*Display backends (pluggable)* subsection above for the full interface contract.
 
 ### Single Executable Distribution
 

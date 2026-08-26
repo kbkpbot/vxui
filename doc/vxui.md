@@ -19,8 +19,17 @@
 - [sanitize_path](#sanitize_path)
 - [open_window](#open_window)
 - [open_window_with](#open_window_with)
+- [new_display](#new_display)
+- [set_webview_config](#set_webview_config)
+- [close_displays](#close_displays)
 - [truncate_string](#truncate_string)
 - [Verb](#Verb)
+- [Display](#Display)
+- [DisplayConfig](#DisplayConfig)
+- [DisplayKind](#DisplayKind)
+- [DisplaySession](#DisplaySession)
+- [WebViewConfig](#WebViewConfig)
+- [WebViewDisplay](#WebViewDisplay)
 - [BrowserConfig](#BrowserConfig)
 - [Client](#Client)
 - [Config](#Config)
@@ -51,15 +60,6 @@
   - [cleanup](#cleanup)
 - [Route](#Route)
 - [WindowConfig](#WindowConfig)
-
-## detect_browser
-```v
-fn detect_browser() !BrowserConfig
-```
-
-detect_browser detects available browser on the system
-
-[[Return to contents]](#Contents)
 
 ## escape_attr
 ```v
@@ -235,13 +235,22 @@ Verb represents HTTP methods
 
 ## BrowserConfig
 ```v
-struct BrowserConfig {
-	path string
-	args []string
+@[heap]
+pub struct BrowserConfig {
+pub mut:
+	custom_args       []string
+	profile_dir       string
+	headless          bool
+	devtools          bool
+	no_sandbox        bool
+	window_mode       WindowMode = .app
+	user_data_dir     string
+	preferred_path    string
+	remote_debug_port int
 }
 ```
 
-BrowserConfig holds browser path and arguments
+BrowserConfig holds browser launch options for the `.browser` display backend
 
 [[Return to contents]](#Contents)
 
@@ -592,6 +601,122 @@ pub mut:
 ```
 
 WindowConfig holds window configuration
+
+[[Return to contents]](#Contents)
+
+## Display backend API
+
+> The UI presentation layer is behind a backend-agnostic `Display` interface.
+> The core only speaks WebSocket to the page; a backend only has to get the
+> page on screen. Adding a backend is a pure add-on (implement `spawn`, add a
+> config struct + a `Config.<backend>` field + a `.backend` branch in
+> `new_display`). See AGENTS.md for the full contract.
+
+### DisplayKind
+```v
+pub enum DisplayKind {
+	browser // external system browser (default)
+	webview // reserved: in-process platform WebView/WebKit (not yet implemented)
+}
+```
+
+DisplayKind selects which display backend renders the UI
+
+### DisplayConfig
+```v
+pub struct DisplayConfig {
+pub mut:
+	kind DisplayKind = .browser
+}
+```
+
+DisplayConfig selects and scopes the display backend
+
+### DisplaySession
+```v
+pub interface DisplaySession {
+mut:
+	close() !
+	set_size(w int, h int)
+	set_title(t string)
+	set_position(x int, y int)
+}
+```
+
+DisplaySession is a live, presented window
+
+### Display
+```v
+pub interface Display {
+mut:
+	spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
+}
+```
+
+Display turns an HTML file into one or more presented windows
+
+### DisplaySessionConfig
+```v
+pub struct DisplaySessionConfig {
+	port   u16
+	token  string
+	width  int
+	height int
+	x      int
+	y      int
+	title  string
+}
+```
+
+DisplaySessionConfig carries the generic, backend-agnostic window parameters
+
+### BrowserDisplay
+```v
+pub struct BrowserDisplay {
+	config &BrowserConfig
+}
+```
+
+BrowserDisplay launches an external browser process (the `.browser` backend)
+
+### WebViewConfig
+```v
+@[heap]
+pub struct WebViewConfig {}
+```
+
+WebViewConfig holds in-process WebView/WebKit backend options (reserved; empty today)
+
+### WebViewDisplay
+```v
+pub struct WebViewDisplay {
+	config &WebViewConfig
+}
+```
+
+WebViewDisplay is a reserved `.webview` backend; its `spawn` is not yet implemented
+
+### new_display
+```v
+pub fn new_display(kind DisplayKind, app_cfg &Config) !Display
+```
+
+new_display constructs the configured display backend, extracting the backend's
+own sub-config from the whole `Config`
+
+### set_webview_config
+```v
+pub fn (mut ctx Context) set_webview_config(config WebViewConfig)
+```
+
+set_webview_config configures WebView/WebKit backend options (when `display.kind == .webview`)
+
+### close_displays
+```v
+pub fn (mut ctx Context) close_displays()
+```
+
+close_displays tears down all live display sessions; driven on shutdown
 
 [[Return to contents]](#Contents)
 
