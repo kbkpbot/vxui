@@ -429,6 +429,8 @@ fn init[T](mut app T) ! {
 	}
 
 	ctx.ws = startup_ws_server(mut app, .ip, ctx.ws_port)!
+
+	ctx.display = new_display(ctx.config.display.kind, &ctx.config.browser) or { return err }
 }
 
 // generate_token creates a random security token
@@ -1068,8 +1070,16 @@ pub fn run[T](mut app T, html_filename string) ! {
 		ctx.logger.info('Development mode enabled')
 	}
 
-	start_browser_with_config(html_filename, ctx.ws_port, ctx.config.token, ctx.config.window,
-		ctx.config.browser)!
+	session_cfg := DisplaySessionConfig{
+		port:   ctx.ws_port
+		token:  ctx.config.token
+		width:  ctx.config.window.width
+		height: ctx.config.window.height
+		x:      ctx.config.window.x
+		y:      ctx.config.window.y
+		title:  ctx.config.window.title
+	}
+	ctx.display_session = ctx.display.spawn(html_filename, session_cfg)!
 
 	ctx.logger.info('Browser started, waiting for connections on port ${ctx.ws_port}...')
 	ctx.logger.debug('Token: ${ctx.config.token}')
@@ -1556,17 +1566,51 @@ pub fn (mut ctx Context) process_client_removals() {
 pub fn (mut ctx Context) set_window_size(width int, height int) {
 	ctx.config.window.width = width
 	ctx.config.window.height = height
+	if mut s := ctx.display_session {
+		s.set_size(width, height)
+	}
 }
 
 // set_window_position sets the window position
 pub fn (mut ctx Context) set_window_position(x int, y int) {
 	ctx.config.window.x = x
 	ctx.config.window.y = y
+	if mut s := ctx.display_session {
+		s.set_position(x, y)
+	}
 }
 
 // set_window_title sets the window title
 pub fn (mut ctx Context) set_window_title(title string) {
 	ctx.config.window.title = title
+	if mut s := ctx.display_session {
+		s.set_title(title)
+	}
+}
+
+// open_window opens an additional display window using the current window
+// configuration and security token.
+pub fn (mut ctx Context) open_window(html_filename string) ! {
+	ctx.open_window_with(html_filename, ctx.config.window) or { return err }
+}
+
+// open_window_with opens an additional display window with an explicit window
+// configuration. Backend-specific options come from ctx.config.browser.
+pub fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) ! {
+	cfg := DisplaySessionConfig{
+		port:   ctx.ws_port
+		token:  ctx.config.token
+		width:  window.width
+		height: window.height
+		x:      window.x
+		y:      window.y
+		title:  window.title
+	}
+	sess := ctx.display.spawn(html_filename, cfg)!
+	ctx.display_sessions << sess
+	if ctx.display_session == none {
+		ctx.display_session = sess
+	}
 }
 
 // set_js_sandbox configures JavaScript execution security
