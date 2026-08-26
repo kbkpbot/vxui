@@ -28,7 +28,7 @@ pub struct Context {
 mut:
 	ws_port            u16
 	ws                 websocket.Server
-	display            Display
+	display            Display = NullDisplay{}
 	display_session    ?DisplaySession
 	display_sessions   []DisplaySession
 	routes             map[string]Route
@@ -44,7 +44,7 @@ mut:
 	// dispatch is a type-erased trampoline (monomorphized per App type) that
 	// runs the registered route handler for a message. Initialized to nil;
 	// startup_ws_server sets it before the server accepts any frame.
-	dispatch fn (mut ctx Context, method_name string, message map[string]json2.Any) !Response = unsafe { nil }
+	dispatch fn (mut ctx Context, _method_name string, message map[string]json2.Any) !Response = unsafe { nil }
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}

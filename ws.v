@@ -287,7 +287,7 @@ fn dispatch_rpc(mut ctx Context, mut ws websocket.Client, rpc_id i64, mut messag
 // fire_ws is the type-erased trampoline monomorphized per App type. It
 // recovers the concrete App pointer from `ctx.app_ptr` and dispatches the
 // message to the matching route handler via handle_request/fire_call.
-fn fire_ws[T](mut ctx Context, method_name string, message map[string]json2.Any) !Response {
+fn fire_ws[T](mut ctx Context, _method_name string, message map[string]json2.Any) !Response {
 	mut p := ctx.app_ptr
 	mut app := unsafe { p as &T }
 	return handle_request[T](mut app, ctx, build_request(message, ''), message)

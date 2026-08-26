@@ -399,6 +399,15 @@ pub fn (mut s WebViewSession) set_title(t string) {}
 
 pub fn (mut s WebViewSession) set_position(x int, y int) {}
 
+// NullDisplay is the default, no-op display backend. It satisfies the `Display`
+// interface so `Context{}` / `App{}` can be constructed without an uninitialized
+// interface field; run() replaces it with a real backend via new_display().
+struct NullDisplay {}
+
+pub fn (mut d NullDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	return error('no display backend configured; call vxui.run with a valid config.display.id')
+}
+
 // new_display constructs the backend identified by `id`. An empty id or 'auto'
 // resolves at runtime via resolve_auto(). It receives the whole app Config so
 // each backend extracts its OWN sub-config — this keeps the construction wiring
