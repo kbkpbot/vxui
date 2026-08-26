@@ -138,17 +138,20 @@ Usage:
     }
 
     /**
-     * Get WebSocket port from URL parameters
+     * Get WebSocket port. A host-injected window.__VXUI_PORT overrides the
+     * URL param (used by future WebView backends); URL param is the fallback.
      */
     function getWsPort() {
-        return getUrlParam('vxui_ws_port') || '8080'
+        if (window.__VXUI_PORT) return window.__VXUI_PORT;
+        return getUrlParam('vxui_ws_port') || '8080';
     }
 
     /**
-     * Get security token from URL parameters
+     * Get security token. window.__VXUI_TOKEN overrides the URL param.
      */
     function getToken() {
-        return getUrlParam('vxui_token') || ''
+        if (window.__VXUI_TOKEN) return window.__VXUI_TOKEN;
+        return getUrlParam('vxui_token') || '';
     }
 
     /**
