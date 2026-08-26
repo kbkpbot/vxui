@@ -433,7 +433,7 @@ fn init[T](mut app T) ! {
 
 	ctx.ws = startup_ws_server(mut app, .ip, ctx.ws_port)!
 
-	ctx.display = new_display(ctx.config.display.kind, &ctx.config.browser) or { return err }
+	ctx.display = new_display(ctx.config.display.kind, &ctx.config) or { return err }
 }
 
 // generate_token creates a random security token
@@ -1069,7 +1069,9 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	// Apply dev mode settings
 	if ctx.config.dev.enabled {
-		ctx.config.browser.devtools = ctx.config.dev.auto_devtools
+		if ctx.config.display.kind == .browser {
+			ctx.config.browser.devtools = ctx.config.dev.auto_devtools
+		}
 		ctx.logger.info('Development mode enabled')
 	}
 
@@ -1197,6 +1199,8 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
 		none)
+
+	ctx.close_displays()
 
 	ctx.ws.free()
 	ctx.logger.info('vxui shutdown complete')
@@ -1624,6 +1628,25 @@ pub fn (mut ctx Context) set_js_sandbox(config JsSandboxConfig) {
 // set_browser_config configures browser startup options
 pub fn (mut ctx Context) set_browser_config(config BrowserConfig) {
 	ctx.config.browser = config
+}
+
+// set_webview_config configures WebView/WebKit backend options (used when
+// display.kind == .webview).
+pub fn (mut ctx Context) set_webview_config(config WebViewConfig) {
+	ctx.config.webview = config
+}
+
+// close_displays tears down all live display sessions. No-op for the detached
+// external-browser backend; REQUIRED for in-process backends (WebView) so
+// native windows/handles are released on shutdown.
+pub fn (mut ctx Context) close_displays() {
+	for mut s in ctx.display_sessions {
+		s.close() or {}
+	}
+	if mut s := ctx.display_session {
+		s.close() or {}
+	}
+	ctx.display_sessions = []
 }
 
 // set_rate_limit was removed along with the rate-limiting subsystem:
