@@ -2,6 +2,7 @@
 
 
 ## Contents
+- [detect_browser_type](#detect_browser_type)
 - [escape_attr](#escape_attr)
 - [escape_html](#escape_html)
 - [escape_js](#escape_js)
@@ -9,43 +10,85 @@
 - [generate_id](#generate_id)
 - [generate_routes](#generate_routes)
 - [get_free_port](#get_free_port)
-- [handle_message](#handle_message)
+- [is_app_mode_supported](#is_app_mode_supported)
 - [is_valid_email](#is_valid_email)
+- [new_display](#new_display)
+- [new_error_detail](#new_error_detail)
+- [new_error_detail_with_cause](#new_error_detail_with_cause)
+- [new_error_detail_with_details](#new_error_detail_with_details)
 - [new_packed_app](#new_packed_app)
 - [parse_attrs](#parse_attrs)
 - [run](#run)
 - [run_packed](#run_packed)
 - [sanitize_path](#sanitize_path)
-- [open_window](#open_window)
-- [open_window_with](#open_window_with)
-- [new_display](#new_display)
-- [set_webview_config](#set_webview_config)
-- [close_displays](#close_displays)
+- [sanitize_utf8](#sanitize_utf8)
 - [truncate_string](#truncate_string)
-- [Verb](#Verb)
+- [BrowserType.from](#BrowserType.from)
+- [DisplayKind.from](#DisplayKind.from)
+- [EventType.from](#EventType.from)
+- [Verb.from](#Verb.from)
+- [VxuiError.from](#VxuiError.from)
+- [WindowMode.from](#WindowMode.from)
 - [Display](#Display)
-- [DisplayConfig](#DisplayConfig)
-- [DisplayKind](#DisplayKind)
 - [DisplaySession](#DisplaySession)
-- [WebViewConfig](#WebViewConfig)
-- [WebViewDisplay](#WebViewDisplay)
+- [BrowserSession](#BrowserSession)
+  - [close](#close)
+  - [set_size](#set_size)
+  - [set_title](#set_title)
+  - [set_position](#set_position)
+- [EventHandler](#EventHandler)
+- [WebViewSession](#WebViewSession)
+  - [close](#close)
+  - [set_size](#set_size)
+  - [set_title](#set_title)
+  - [set_position](#set_position)
+- [BrowserType](#BrowserType)
+- [DisplayKind](#DisplayKind)
+- [EventType](#EventType)
+- [Verb](#Verb)
+- [VxuiError](#VxuiError)
+- [WindowMode](#WindowMode)
 - [BrowserConfig](#BrowserConfig)
+- [BrowserDisplay](#BrowserDisplay)
+  - [spawn](#spawn)
 - [Client](#Client)
 - [Config](#Config)
 - [Context](#Context)
+  - [on_event](#on_event)
   - [run_js](#run_js)
   - [run_js_client](#run_js_client)
+  - [post_js](#post_js)
+  - [post_js_client](#post_js_client)
   - [get_clients](#get_clients)
   - [get_client_count](#get_client_count)
+  - [get_client](#get_client)
   - [close_client](#close_client)
   - [broadcast](#broadcast)
+  - [broadcast_except](#broadcast_except)
+  - [send_to_client](#send_to_client)
+  - [ping_client](#ping_client)
+  - [ping_all_clients](#ping_all_clients)
+  - [process_client_removals](#process_client_removals)
   - [set_window_size](#set_window_size)
   - [set_window_position](#set_window_position)
   - [set_window_title](#set_window_title)
-  - [set_resizable](#set_resizable)
+  - [open_window](#open_window)
+  - [open_window_with](#open_window_with)
+  - [set_js_sandbox](#set_js_sandbox)
+  - [set_browser_config](#set_browser_config)
+  - [set_webview_config](#set_webview_config)
+  - [close_displays](#close_displays)
   - [get_port](#get_port)
   - [get_token](#get_token)
+  - [get_config](#get_config)
+  - [trigger_hot_reload](#trigger_hot_reload)
+- [DevConfig](#DevConfig)
+- [DisplayConfig](#DisplayConfig)
+- [DisplaySessionConfig](#DisplaySessionConfig)
 - [EmbeddedFile](#EmbeddedFile)
+- [EventData](#EventData)
+- [JsSandboxConfig](#JsSandboxConfig)
+- [LogConfig](#LogConfig)
 - [PackedApp](#PackedApp)
   - [add_file](#add_file)
   - [add_file_string](#add_file_string)
@@ -57,8 +100,28 @@
   - [list_files](#list_files)
   - [total_size](#total_size)
   - [cleanup](#cleanup)
+- [Request](#Request)
+- [Response](#Response)
 - [Route](#Route)
+- [VxuiErrorDetail](#VxuiErrorDetail)
+  - [msg](#msg)
+  - [code](#code)
+  - [str](#str)
+  - [with_cause](#with_cause)
+  - [with_detail](#with_detail)
+- [WebViewConfig](#WebViewConfig)
+- [WebViewDisplay](#WebViewDisplay)
+  - [spawn](#spawn)
 - [WindowConfig](#WindowConfig)
+
+## detect_browser_type
+```v
+fn detect_browser_type(browser_path string) BrowserType
+```
+
+detect_browser_type determines the browser type from path
+
+[[Return to contents]](#Contents)
 
 ## escape_attr
 ```v
@@ -92,7 +155,9 @@ escape_js escapes JavaScript special characters Use this when outputting data in
 fn fire_call[T](mut app T, method_name string, message map[string]json2.Any) !string
 ```
 
-fire_call calls the method
+fire_call calls the method Only methods carrying route attributes (@['/path'] and/or a verb) are dispatchable; untagged helper methods are invisible to routing.
+
+NOTE on V comptime limits (tested on V 0.5.2 / 9142d68): the dispatch call below is instantiated ONCE FOR EVERY string-returning method of T, regardless of attributes — runtime `if` guards do not gate comptime instantiation, `$for attr in method.attributes` nesting parses but does not gate it either, and `continue` is illegal inside `$for`. Helpers on the app struct must therefore return void/non-string types (or take no parameters): a string-returning helper with custom parameters will not compile. generate_routes fails fast when a TAGGED method has the wrong return type, which keeps this constraint discoverable at startup.
 
 [[Return to contents]](#Contents)
 
@@ -123,12 +188,12 @@ get_free_port try to get a free port to websocket listen to
 
 [[Return to contents]](#Contents)
 
-## handle_message
+## is_app_mode_supported
 ```v
-fn handle_message[T](mut app T, message map[string]json2.Any) !string
+fn is_app_mode_supported(browser_type BrowserType) bool
 ```
 
-handle_message checks routes and calls the handler
+is_app_mode_supported returns true if browser supports app mode
 
 [[Return to contents]](#Contents)
 
@@ -138,6 +203,42 @@ fn is_valid_email(email string) bool
 ```
 
 is_valid_email validates email format (basic check)
+
+[[Return to contents]](#Contents)
+
+## new_display
+```v
+fn new_display(kind DisplayKind, app_cfg &Config) !Display
+```
+
+new_display constructs the configured backend. It receives the whole app Config so each backend extracts its OWN sub-config — this keeps the construction wiring backend-agnostic (no hardcoded BrowserConfig).
+
+[[Return to contents]](#Contents)
+
+## new_error_detail
+```v
+fn new_error_detail(code VxuiError, message string) VxuiErrorDetail
+```
+
+new_error_detail creates a new VxuiErrorDetail
+
+[[Return to contents]](#Contents)
+
+## new_error_detail_with_cause
+```v
+fn new_error_detail_with_cause(code VxuiError, message string, cause IError) VxuiErrorDetail
+```
+
+new_error_detail_with_cause creates a new VxuiErrorDetail with an underlying cause
+
+[[Return to contents]](#Contents)
+
+## new_error_detail_with_details
+```v
+fn new_error_detail_with_details(code VxuiError, message string, details map[string]string) VxuiErrorDetail
+```
+
+new_error_detail_with_details creates a new VxuiErrorDetail with details
 
 [[Return to contents]](#Contents)
 
@@ -173,7 +274,7 @@ run opens the `html_filename` in browser and starts the event loop
 fn run_packed[T](mut app T, mut packed PackedApp, entry_file string) !
 ```
 
-run_packed runs the app with packed (embedded) resources This allows distributing a single executable with all frontend files embedded
+run_packed runs the app with packed (embedded) resources
 
 [[Return to contents]](#Contents)
 
@@ -182,28 +283,16 @@ run_packed runs the app with packed (embedded) resources This allows distributin
 fn sanitize_path(path string) !string
 ```
 
-sanitize_path validates and sanitizes the file path
+sanitize_path validates and sanitizes the file path Handles both plain and URL-encoded path traversal attempts
 
 [[Return to contents]](#Contents)
 
-## open_window
+## sanitize_utf8
 ```v
-fn (mut ctx Context) open_window(html_filename string) !
+fn sanitize_utf8(s string) string
 ```
 
-Opens an additional display window using the current window config and
-security token.
-
-[[Return to contents]](#Contents)
-
-## open_window_with
-```v
-fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) !
-```
-
-Opens an additional display window with an explicit window configuration.
-Backend-specific options (browser args, window mode, remote debug port) come
-from `ctx.config.browser`.
+sanitize_utf8 returns `s` with every invalid UTF-8 byte replaced by the Unicode replacement character (U+FFFD). The websocket layer REJECTS text frames that are not valid UTF-8, so any payload built from byte-wise slicing of multibyte strings must be passed through this helper before being returned from a route handler.
 
 [[Return to contents]](#Contents)
 
@@ -213,6 +302,191 @@ fn truncate_string(s string, max_len int) string
 ```
 
 truncate_string truncates a string to max length with ellipsis
+
+[[Return to contents]](#Contents)
+
+## BrowserType.from
+```v
+fn BrowserType.from[W](input W) !BrowserType
+```
+
+[[Return to contents]](#Contents)
+
+## DisplayKind.from
+```v
+fn DisplayKind.from[W](input W) !DisplayKind
+```
+
+[[Return to contents]](#Contents)
+
+## EventType.from
+```v
+fn EventType.from[W](input W) !EventType
+```
+
+[[Return to contents]](#Contents)
+
+## Verb.from
+```v
+fn Verb.from[W](input W) !Verb
+```
+
+[[Return to contents]](#Contents)
+
+## VxuiError.from
+```v
+fn VxuiError.from[W](input W) !VxuiError
+```
+
+[[Return to contents]](#Contents)
+
+## WindowMode.from
+```v
+fn WindowMode.from[W](input W) !WindowMode
+```
+
+[[Return to contents]](#Contents)
+
+## Display
+```v
+interface Display {
+mut:
+	spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
+}
+```
+
+Display is the pluggable backend that turns an HTML file into one or more presented windows. The core talks to the page exclusively via WebSocket; the Display only has to get the page on screen.
+
+[[Return to contents]](#Contents)
+
+## DisplaySession
+```v
+interface DisplaySession {
+mut:
+	close() !
+	set_size(w int, h int)
+	set_title(t string)
+	set_position(x int, y int)
+}
+```
+
+DisplaySession is a live, presented window. It exposes only what a backend can meaningfully do after launch; all request/response traffic flows over WebSocket and never touches this interface.
+
+[[Return to contents]](#Contents)
+
+## BrowserSession
+## close
+```v
+fn (mut s BrowserSession) close() !
+```
+
+[[Return to contents]](#Contents)
+
+## set_size
+```v
+fn (mut s BrowserSession) set_size(w int, h int)
+```
+
+[[Return to contents]](#Contents)
+
+## set_title
+```v
+fn (mut s BrowserSession) set_title(t string)
+```
+
+[[Return to contents]](#Contents)
+
+## set_position
+```v
+fn (mut s BrowserSession) set_position(x int, y int)
+```
+
+[[Return to contents]](#Contents)
+
+## EventHandler
+```v
+type EventHandler = fn (EventData)
+```
+
+EventHandler is a callback function type for events
+
+[[Return to contents]](#Contents)
+
+## WebViewSession
+## close
+```v
+fn (mut s WebViewSession) close() !
+```
+
+[[Return to contents]](#Contents)
+
+## set_size
+```v
+fn (mut s WebViewSession) set_size(w int, h int)
+```
+
+[[Return to contents]](#Contents)
+
+## set_title
+```v
+fn (mut s WebViewSession) set_title(t string)
+```
+
+[[Return to contents]](#Contents)
+
+## set_position
+```v
+fn (mut s WebViewSession) set_position(x int, y int)
+```
+
+[[Return to contents]](#Contents)
+
+## BrowserType
+```v
+enum BrowserType {
+	chrome
+	firefox
+	safari
+	edge
+	brave
+	chromium
+	unknown
+}
+```
+
+BrowserType represents different browser types
+
+[[Return to contents]](#Contents)
+
+## DisplayKind
+```v
+enum DisplayKind {
+	browser // external system browser (default)
+	webview // reserved: in-process platform WebView/WebKit (not yet implemented)
+}
+```
+
+DisplayKind selects which display backend renders the UI.
+
+[[Return to contents]](#Contents)
+
+## EventType
+```v
+enum EventType {
+	before_start
+	after_start
+	client_connecting
+	client_connected
+	client_disconnected
+	before_shutdown
+	error
+	js_execution
+	before_request
+	after_request
+}
+```
+
+EventType represents different lifecycle events
 
 [[Return to contents]](#Contents)
 
@@ -232,24 +506,91 @@ Verb represents HTTP methods
 
 [[Return to contents]](#Contents)
 
-## BrowserConfig
+## VxuiError
 ```v
-@[heap]
-pub struct BrowserConfig {
-pub mut:
-	custom_args       []string
-	profile_dir       string
-	headless          bool
-	devtools          bool
-	no_sandbox        bool
-	window_mode       WindowMode = .app
-	user_data_dir     string
-	preferred_path    string
-	remote_debug_port int
+enum VxuiError {
+	unknown
+	client_not_found
+	no_clients
+	no_valid_connection
+	js_timeout
+	js_validation_failed
+	js_result_too_large
+	auth_failed
+	auth_invalid_token
+	connection_error
+	connection_closed
+	port_not_available
+	browser_not_found
+	file_not_found
+	path_traversal
+	route_not_found
+	invalid_message
+	request_timeout
+	// Additional error codes for unified error handling
+	profile_create_failed
+	process_fork_failed
+	hidden_file_access
+	null_byte_detected
+	absolute_path_not_allowed
+	invalid_method
+	method_not_allowed
+	attribute_parse_error
 }
 ```
 
-BrowserConfig holds browser launch options for the `.browser` display backend
+VxuiError represents error codes
+
+[[Return to contents]](#Contents)
+
+## WindowMode
+```v
+enum WindowMode {
+	app    // standalone window WITHOUT address bar/tab strip (default)
+	kiosk  // borderless fullscreen
+	normal // an ordinary browser tab
+}
+```
+
+WindowMode selects how the page window is presented. Only meaningful for Chromium-family browsers; Firefox/Safari open a normal tab regardless.
+
+[[Return to contents]](#Contents)
+
+## BrowserConfig
+```v
+struct BrowserConfig {
+pub mut:
+	custom_args       []string // Additional custom arguments
+	profile_dir       string   // Custom profile directory (empty = default)
+	headless          bool     // Run in headless mode (for testing)
+	devtools          bool     // Open DevTools automatically
+	no_sandbox        bool     // Disable sandbox (for root/CI)
+	window_mode       WindowMode = .app // presentation of the app window (see WindowMode)
+	user_data_dir     string // Custom user data directory
+	preferred_path    string // Preferred browser path (skip detection)
+	remote_debug_port int    // Chrome remote debugging port (0 = disabled)
+}
+```
+
+BrowserConfig holds browser startup configuration
+
+[[Return to contents]](#Contents)
+
+## BrowserDisplay
+```v
+struct BrowserDisplay {
+	config &BrowserConfig
+}
+```
+
+BrowserDisplay launches an external browser process.
+
+[[Return to contents]](#Contents)
+
+## spawn
+```v
+fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
+```
 
 [[Return to contents]](#Contents)
 
@@ -257,11 +598,14 @@ BrowserConfig holds browser launch options for the `.browser` display backend
 ```v
 struct Client {
 pub:
-	id        string
-	token     string
-	connected time.Time
+	id            string
+	token         string
+	connected     time.Time
+	request_count int
+	last_request  time.Time
 pub mut:
-	connection &websocket.Client = unsafe { nil }
+	connection ?&websocket.Client
+	last_ping  time.Time
 }
 ```
 
@@ -273,54 +617,55 @@ Client represents a connected browser client
 ```v
 struct Config {
 pub mut:
+	// Application settings
+	app_name string = default_app_name
+
+	// Development settings
+	dev DevConfig // Development mode settings
+
 	// Connection settings
-	close_timer      int = 50 // Close app after N cycles with no browser (each cycle is ~1ms)
-	ws_ping_interval_ms int = 30000 // WebSocket ping interval in milliseconds (default 30s)
-	ws_pong_timeout_ms  int = 60000 // Watchdog timeout: closes if no pong received within this many ms (default 60s, = 2 × ws_ping_interval_ms)
+	close_timer_ms      int = 5000  // Close app after N ms with no browser
+	ws_ping_interval_ms int = 30000 // WebSocket ping interval
+	ws_pong_timeout_ms  int = 60000 // Timeout for pong response
 
 	// Security settings
 	token        string // Security token (auto-generated if empty)
 	require_auth bool = true // Require token authentication
+	allow_remote bool // Accept connections from non-loopback interfaces (default false)
 
 	// Client settings
 	multi_client bool // Allow multiple browser clients
-	max_clients  int = 10 // Maximum number of concurrent clients (0 = unlimited)
+	// When multi_client is off, let a NEW successful authentication evict
+	// stale sessions instead of letting a restored/crashed browser tab hold
+	// the single slot forever. Defaults to true: without it, a simple F5
+	// reload races the async client cleanup and the fresh connection gets
+	// rejected — the app appears dead after a refresh.
+	evict_on_new bool = true
+	max_clients  int  = 10 // Maximum concurrent clients (0 = unlimited)
 
 	// JavaScript execution settings
-	js_timeout_default int = 5000 // Default timeout for run_js() in milliseconds
-	js_poll_interval   int = 10   // Polling interval for JS result in milliseconds
+	js_timeout int = 5000 // Default timeout for run_js()
+	js_poll_ms int = 10   // Polling interval for JS result
+	js_sandbox JsSandboxConfig // JS execution sandbox
 
 	// Window settings
 	window WindowConfig
+
+	// Browser settings
+	browser BrowserConfig
+
+	// WebView settings (reserved: in-process WebView/WebKit backend, not yet implemented)
+	webview WebViewConfig
+
+	// Display backend selection
+	display DisplayConfig
+
+	// Logging settings
+	log LogConfig
 }
 ```
 
-Config holds vxui runtime configuration
-
-[[Return to contents]](#Contents)
-
-## Ping and Watchdog
-
-The WebSocket ping/patch mechanism serves two purposes:
-
-1. **Liveness probing** — detects connections that have gone silent (no data flowing). This is essential for remote deployments (`allow_remote = true`) where the process may crash without closing the socket cleanly.
-
-2. **Watchdog** — the server's ping thread periodically sends ping frames and closes any connection whose pong response is not received within `ws_pong_timeout_ms`. The effective threshold is `2 × ws_ping_interval_ms`.
-
-### Recommended settings by deployment type
-
-| Deployment | `ws_ping_interval_ms` | `ws_pong_timeout_ms` | Rationale |
-|---|---|---|---|
-| **Loopback (default, `allow_remote = false`)** | 30000 (30s) | 60000 (60s) | Progress death is detected by `on_close`; long interval avoids false positives during large transfers. |
-| **Remote / `allow_remote = true`** | 10000 (10s) | 15000 (15s) | Network partitions and middleboxes require more responsive detection. |
-| **Activity‑aware mode** (future: any received frame refreshes the timer) | 20000 (20s) | 30000 (30s) | Complements the vlib watchdog patch; pong still fires for idle detection. |
-
-### Known behavior
-
-- The library's ping thread fires every `ws_ping_interval_ms / 1000` seconds. A connection whose pong staleness exceeds `ws_pong_timeout_ms` is closed with code 1001 (going away).
-- During large file uploads (or any handler-blocking operation), the read loop may be temporarily unavailable to process pong frames. With the recommended loopback settings (30s interval / 60s timeout) and chunked uploads (≥1.5MB chunks, size multiple of 3 for base64 alignment), the watchdog never fires because each chunk processes in ~10s, well under the 60s threshold.
-- If a handler genuinely blocks for >60s (e.g., slow disk write), the connection will be killed — this is intentional, as it indicates a stuck server thread.
-- The `on_close` event fires when the connection is terminated, allowing the application to clean up gracefully.
+Config is the unified configuration for vxui
 
 [[Return to contents]](#Contents)
 
@@ -328,22 +673,31 @@ The WebSocket ping/patch mechanism serves two purposes:
 ```v
 struct Context {
 mut:
-	ws_port      u16
-	ws           websocket.Server
-	routes       map[string]Route
-	clients      map[string]Client // client_id -> Client
-	mu           sync.RwMutex
-	js_callbacks map[string]chan string // JS execution callbacks
+	ws_port            u16
+	ws                 websocket.Server
+	display            Display
+	display_session    ?DisplaySession
+	display_sessions   []DisplaySession
+	routes             map[string]Route
+	clients            map[string]Client
+	mu                 sync.RwMutex
+	js_callbacks       map[string]chan string
+	event_handlers     map[EventType][]EventHandler
+	client_remove_chan chan ClientRemoveMsg // channel for serialized client removal
 pub mut:
-	close_timer  int      = 50 // close app after `close_timer` cycles with no browser
-	logger       &log.Log = &log.Log{}
-	token        string // Security token for client authentication
-	multi_client bool   // Allow multiple clients
-	window       WindowConfig
+	config Config
+	logger &log.Log = &log.Log{}
 }
 ```
 
-Context is the main struct of vxui
+[[Return to contents]](#Contents)
+
+## on_event
+```v
+fn (mut ctx Context) on_event(event_type EventType, handler EventHandler)
+```
+
+on_event registers an event handler
 
 [[Return to contents]](#Contents)
 
@@ -352,7 +706,7 @@ Context is the main struct of vxui
 fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string
 ```
 
-run_js executes JavaScript in the frontend and returns the result timeout is in milliseconds, 0 means no wait
+run_js executes JavaScript in the frontend and returns the result
 
 [[Return to contents]](#Contents)
 
@@ -362,6 +716,24 @@ fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout_ms 
 ```
 
 run_js_client executes JavaScript on a specific client
+
+[[Return to contents]](#Contents)
+
+## post_js
+```v
+fn (mut ctx Context) post_js(js_code string) !
+```
+
+post_js executes JavaScript in the frontend fire-and-forget: the result (or error) is discarded and the pending callback is unregistered immediately. Safe to call from INSIDE route handlers, unlike run_js(timeout_ms > 0), which deadlocks there: a handler runs on the connection read loop, the very goroutine that would deliver js_result.
+
+[[Return to contents]](#Contents)
+
+## post_js_client
+```v
+fn (mut ctx Context) post_js_client(client_id string, js_code string) !
+```
+
+post_js_client is post_js targeting one specific client.
 
 [[Return to contents]](#Contents)
 
@@ -383,6 +755,15 @@ get_client_count returns the number of connected clients
 
 [[Return to contents]](#Contents)
 
+## get_client
+```v
+fn (mut ctx Context) get_client(client_id string) ?Client
+```
+
+get_client returns client info by ID
+
+[[Return to contents]](#Contents)
+
 ## close_client
 ```v
 fn (mut ctx Context) close_client(client_id string) !
@@ -397,7 +778,52 @@ close_client disconnects a specific client
 fn (mut ctx Context) broadcast(message string) !
 ```
 
-broadcast sends a message to all connected clients
+broadcast sends a message to all connected clients. A write failure on one client (e.g. a stale connection) is skipped so the remaining clients still receive the message.
+
+[[Return to contents]](#Contents)
+
+## broadcast_except
+```v
+fn (mut ctx Context) broadcast_except(message string, except_client_id string) !
+```
+
+broadcast_except sends a message to all clients except one. Per-client write failures are skipped, see broadcast().
+
+[[Return to contents]](#Contents)
+
+## send_to_client
+```v
+fn (mut ctx Context) send_to_client(client_id string, message string) !
+```
+
+send_to_client sends a message to a specific client
+
+[[Return to contents]](#Contents)
+
+## ping_client
+```v
+fn (mut ctx Context) ping_client(client_id string) !
+```
+
+ping_client sends a ping to a specific client
+
+[[Return to contents]](#Contents)
+
+## ping_all_clients
+```v
+fn (mut ctx Context) ping_all_clients()
+```
+
+ping_all_clients sends a ping to all connected clients
+
+[[Return to contents]](#Contents)
+
+## process_client_removals
+```v
+fn (mut ctx Context) process_client_removals()
+```
+
+process_client_removals handles client removal requests from the channel This should be run in a separate goroutine to serialize removal operations
 
 [[Return to contents]](#Contents)
 
@@ -415,7 +841,7 @@ set_window_size sets the window dimensions
 fn (mut ctx Context) set_window_position(x int, y int)
 ```
 
-set_window_position sets the window position (-1 for center)
+set_window_position sets the window position
 
 [[Return to contents]](#Contents)
 
@@ -428,12 +854,57 @@ set_window_title sets the window title
 
 [[Return to contents]](#Contents)
 
-## set_resizable
+## open_window
 ```v
-fn (mut ctx Context) set_resizable(resizable bool)
+fn (mut ctx Context) open_window(html_filename string) !
 ```
 
-set_resizable sets whether the window can be resized
+open_window opens an additional display window using the current window configuration and security token.
+
+[[Return to contents]](#Contents)
+
+## open_window_with
+```v
+fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) !
+```
+
+open_window_with opens an additional display window with an explicit window configuration. Backend-specific options come from ctx.config.browser.
+
+[[Return to contents]](#Contents)
+
+## set_js_sandbox
+```v
+fn (mut ctx Context) set_js_sandbox(config JsSandboxConfig)
+```
+
+set_js_sandbox configures JavaScript execution security
+
+[[Return to contents]](#Contents)
+
+## set_browser_config
+```v
+fn (mut ctx Context) set_browser_config(config BrowserConfig)
+```
+
+set_browser_config configures browser startup options
+
+[[Return to contents]](#Contents)
+
+## set_webview_config
+```v
+fn (mut ctx Context) set_webview_config(config WebViewConfig)
+```
+
+set_webview_config configures WebView/WebKit backend options (used when display.kind == .webview).
+
+[[Return to contents]](#Contents)
+
+## close_displays
+```v
+fn (mut ctx Context) close_displays()
+```
+
+close_displays tears down all live display sessions. No-op for the detached external-browser backend; REQUIRED for in-process backends (WebView) so native windows/handles are released on shutdown.
 
 [[Return to contents]](#Contents)
 
@@ -455,6 +926,70 @@ get_token returns the security token
 
 [[Return to contents]](#Contents)
 
+## get_config
+```v
+fn (ctx Context) get_config() Config
+```
+
+get_config returns the current configuration
+
+[[Return to contents]](#Contents)
+
+## trigger_hot_reload
+```v
+fn (mut ctx Context) trigger_hot_reload() !
+```
+
+trigger_hot_reload sends a reload command to all connected clients. Per-client write failures are skipped, see broadcast().
+
+[[Return to contents]](#Contents)
+
+## DevConfig
+```v
+struct DevConfig {
+pub mut:
+	enabled       bool // Enable development mode
+	hot_reload    bool = true // Enable hot reload (refresh browser on file change)
+	watch_dirs    []string // Directories to watch for changes (default: html file dir)
+	watch_ms      int  = 500  // File watch interval in milliseconds
+	auto_devtools bool = true // Auto-open DevTools in dev mode
+	show_errors   bool = true // Show error overlay in browser
+}
+```
+
+DevConfig holds development mode settings
+
+[[Return to contents]](#Contents)
+
+## DisplayConfig
+```v
+struct DisplayConfig {
+pub mut:
+	kind DisplayKind = .browser
+}
+```
+
+DisplayConfig selects and scopes the display backend.
+
+[[Return to contents]](#Contents)
+
+## DisplaySessionConfig
+```v
+struct DisplaySessionConfig {
+	port   u16
+	token  string
+	width  int
+	height int
+	x      int
+	y      int
+	title  string
+}
+```
+
+DisplaySessionConfig carries the generic, backend-agnostic parameters needed to present one UI window. Backend-specific options (e.g. Chromium window mode, WebView runtime flags) live on the backend's own config and are merged by the backend during spawn — the core never hardcodes them.
+
+[[Return to contents]](#Contents)
+
 ## EmbeddedFile
 ```v
 struct EmbeddedFile {
@@ -465,6 +1000,62 @@ pub:
 ```
 
 EmbeddedFile represents an embedded file
+
+[[Return to contents]](#Contents)
+
+## EventData
+```v
+struct EventData {
+pub:
+	event_type EventType
+	client_id  string
+	message    string
+	data       map[string]json2.Any
+	request    ?Request
+	response   ?Response
+	err        ?VxuiErrorDetail
+}
+```
+
+EventData contains event information
+
+[[Return to contents]](#Contents)
+
+## JsSandboxConfig
+```v
+struct JsSandboxConfig {
+pub mut:
+	enabled            bool = true        // Enable sandbox restrictions
+	timeout_ms         int  = 5000        // Max execution time
+	max_result_size    int  = 1024 * 1024 // Max result size in bytes (1MB)
+	allow_eval         bool // Allow eval() in frontend (dangerous!)
+	forbidden_patterns []string = [// Forbidden patterns
+		'eval(',
+		'Function(',
+		'setTimeout(',
+		'setInterval(',
+		'XMLHttpRequest',
+		'fetch(',
+		'WebSocket',
+		'import(',
+	]
+}
+```
+
+JsSandboxConfig controls JavaScript execution security
+
+[[Return to contents]](#Contents)
+
+## LogConfig
+```v
+struct LogConfig {
+pub mut:
+	level  log.Level = .info
+	output string    = 'stderr'
+}
+```
+
+LogConfig holds logging settings. `output` accepts 'stderr' (default), 'stdout', or a file path. The previous max_file_size/rotate_files/show_* fields never had any effect and were removed (see CHANGELOG).
 
 [[Return to contents]](#Contents)
 
@@ -570,6 +1161,40 @@ cleanup removes extracted files
 
 [[Return to contents]](#Contents)
 
+## Request
+```v
+struct Request {
+pub:
+	id          string
+	verb        Verb
+	path        string
+	parameters  map[string]string
+	headers     map[string]string
+	body        string
+	client_id   string
+	timestamp   time.Time
+	raw_message map[string]json2.Any // Original message for compatibility
+}
+```
+
+Request represents a type-safe request
+
+[[Return to contents]](#Contents)
+
+## Response
+```v
+struct Response {
+pub mut:
+	status  int               = 200
+	headers map[string]string = {}
+	body    string
+}
+```
+
+Response represents a type-safe response
+
+[[Return to contents]](#Contents)
+
 ## Route
 ```v
 struct Route {
@@ -582,141 +1207,109 @@ Route represents a registered route
 
 [[Return to contents]](#Contents)
 
-## WindowConfig
+## VxuiErrorDetail
 ```v
-struct WindowConfig {
-pub mut:
-	width       int  = 800
-	height      int  = 600
-	x           int  = -1 // -1 means center
-	y           int  = -1
-	min_width   int  = 100
-	min_height  int  = 100
-	resizable   bool = true
-	frameless   bool
-	transparent bool
-	title       string
+struct VxuiErrorDetail {
+pub:
+	code    VxuiError
+	message string
+	details map[string]string
+	cause   ?IError // Underlying error that caused this error
 }
 ```
 
-WindowConfig holds window configuration
+VxuiErrorDetail represents a structured error with code and details
 
 [[Return to contents]](#Contents)
 
-## Display backend API
-
-> The UI presentation layer is behind a backend-agnostic `Display` interface.
-> The core only speaks WebSocket to the page; a backend only has to get the
-> page on screen. Adding a backend is a pure add-on (implement `spawn`, add a
-> config struct + a `Config.<backend>` field + a `.backend` branch in
-> `new_display`). See AGENTS.md for the full contract.
-
-### DisplayKind
+## msg
 ```v
-pub enum DisplayKind {
-	browser // external system browser (default)
-	webview // reserved: in-process platform WebView/WebKit (not yet implemented)
-}
+fn (e VxuiErrorDetail) msg() string
 ```
 
-DisplayKind selects which display backend renders the UI
+msg returns the error message (implements IError interface)
 
-### DisplayConfig
+[[Return to contents]](#Contents)
+
+## code
 ```v
-pub struct DisplayConfig {
-pub mut:
-	kind DisplayKind = .browser
-}
+fn (e VxuiErrorDetail) code() int
 ```
 
-DisplayConfig selects and scopes the display backend
+code returns the error code (implements IError interface)
 
-### DisplaySession
+[[Return to contents]](#Contents)
+
+## str
 ```v
-pub interface DisplaySession {
-mut:
-	close() !
-	set_size(w int, h int)
-	set_title(t string)
-	set_position(x int, y int)
-}
+fn (e VxuiErrorDetail) str() string
 ```
 
-DisplaySession is a live, presented window
+str returns the error message
 
-### Display
+[[Return to contents]](#Contents)
+
+## with_cause
 ```v
-pub interface Display {
-mut:
-	spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
-}
+fn (e VxuiErrorDetail) with_cause(cause IError) VxuiErrorDetail
 ```
 
-Display turns an HTML file into one or more presented windows
+with_cause creates a new error with an underlying cause
 
-### DisplaySessionConfig
+[[Return to contents]](#Contents)
+
+## with_detail
 ```v
-pub struct DisplaySessionConfig {
-	port   u16
-	token  string
-	width  int
-	height int
-	x      int
-	y      int
-	title  string
-}
+fn (e VxuiErrorDetail) with_detail(key string, value string) VxuiErrorDetail
 ```
 
-DisplaySessionConfig carries the generic, backend-agnostic window parameters
+with_detail adds a detail to the error
 
-### BrowserDisplay
+[[Return to contents]](#Contents)
+
+## WebViewConfig
 ```v
-pub struct BrowserDisplay {
-	config &BrowserConfig
-}
+struct WebViewConfig {}
 ```
 
-BrowserDisplay launches an external browser process (the `.browser` backend)
+WebViewConfig holds in-process WebView/WebKit backend options. Empty today; filled when a real WebView backend lands. @[heap] so a reference can be taken.
 
-### WebViewConfig
+[[Return to contents]](#Contents)
+
+## WebViewDisplay
 ```v
-@[heap]
-pub struct WebViewConfig {}
-```
-
-WebViewConfig holds in-process WebView/WebKit backend options (reserved; empty today)
-
-### WebViewDisplay
-```v
-pub struct WebViewDisplay {
+struct WebViewDisplay {
 	config &WebViewConfig
 }
 ```
 
-WebViewDisplay is a reserved `.webview` backend; its `spawn` is not yet implemented
-
-### new_display
-```v
-pub fn new_display(kind DisplayKind, app_cfg &Config) !Display
-```
-
-new_display constructs the configured display backend, extracting the backend's
-own sub-config from the whole `Config`
-
-### set_webview_config
-```v
-pub fn (mut ctx Context) set_webview_config(config WebViewConfig)
-```
-
-set_webview_config configures WebView/WebKit backend options (when `display.kind == .webview`)
-
-### close_displays
-```v
-pub fn (mut ctx Context) close_displays()
-```
-
-close_displays tears down all live display sessions; driven on shutdown
+WebViewDisplay is a reserved in-process WebView/WebKit backend. Its spawn is not yet implemented; it exists to prove the wiring is backend-agnostic — a real backend only needs to implement spawn() (and fill WebViewConfig).
 
 [[Return to contents]](#Contents)
 
-#### Powered by vdoc. Generated on: 24 Feb 2026 10:49:48
+## spawn
+```v
+fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
+```
+
+[[Return to contents]](#Contents)
+
+## WindowConfig
+```v
+struct WindowConfig {
+pub mut:
+	width  int = 800
+	height int = 600
+	x      int = -1 // -1 means center
+	y      int = -1 // -1 means center
+	title  string // window/page title; falls back to config.app_name when set
+}
+```
+
+WindowConfig holds window configuration.
+
+Note: only size/position/title are actually enforced by the browser launch; the previous resizable/min-size/frameless fields never had any effect and were removed (see CHANGELOG).
+
+[[Return to contents]](#Contents)
+
+#### Powered by vdoc. Generated on: 26 Aug 2026 12:04:03
