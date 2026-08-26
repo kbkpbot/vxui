@@ -1,18 +1,20 @@
 module vxui
 
 fn test_new_display_browser_returns_backend() {
-	d := new_display(.browser, &BrowserConfig{}) or { panic(err.msg()) }
+	d := new_display(.browser, &Config{
+		browser: BrowserConfig{}
+	}) or { panic(err.msg()) }
 	match d {
 		BrowserDisplay { assert true }
 		else { assert false, 'expected BrowserDisplay' }
 	}
 }
 
-fn test_new_display_webview_errors() {
-	if disp := new_display(.webview, &BrowserConfig{}) {
-		assert false, 'expected new_display(.webview) to error, got ${disp}'
-	} else {
-		assert true
+fn test_new_display_webview_constructs() {
+	d := new_display(.webview, &Config{}) or { panic(err.msg()) }
+	match d {
+		WebViewDisplay { assert true }
+		else { assert false, 'expected WebViewDisplay' }
 	}
 }
 

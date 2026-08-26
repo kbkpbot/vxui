@@ -303,6 +303,9 @@ pub mut:
 	// Browser settings
 	browser BrowserConfig
 
+	// WebView settings (reserved: in-process WebView/WebKit backend, not yet implemented)
+	webview WebViewConfig
+
 	// Display backend selection
 	display DisplayConfig
 

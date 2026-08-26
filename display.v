@@ -180,16 +180,46 @@ pub fn (mut s BrowserSession) set_title(t string) {}
 
 pub fn (mut s BrowserSession) set_position(x int, y int) {}
 
-// new_display constructs the configured backend.
-pub fn new_display(kind DisplayKind, browser_cfg &BrowserConfig) !Display {
+// WebViewConfig holds in-process WebView/WebKit backend options. Empty today;
+// filled when a real WebView backend lands. @[heap] so a reference can be taken.
+@[heap]
+pub struct WebViewConfig {}
+
+// WebViewDisplay is a reserved in-process WebView/WebKit backend. Its spawn is
+// not yet implemented; it exists to prove the wiring is backend-agnostic — a
+// real backend only needs to implement spawn() (and fill WebViewConfig).
+pub struct WebViewDisplay {
+	config &WebViewConfig
+}
+
+pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	return error('WebView display backend is not implemented yet')
+}
+
+struct WebViewSession {}
+
+pub fn (mut s WebViewSession) close() ! {}
+
+pub fn (mut s WebViewSession) set_size(w int, h int) {}
+
+pub fn (mut s WebViewSession) set_title(t string) {}
+
+pub fn (mut s WebViewSession) set_position(x int, y int) {}
+
+// new_display constructs the configured backend. It receives the whole app
+// Config so each backend extracts its OWN sub-config — this keeps the
+// construction wiring backend-agnostic (no hardcoded BrowserConfig).
+pub fn new_display(kind DisplayKind, app_cfg &Config) !Display {
 	match kind {
 		.browser {
 			return BrowserDisplay{
-				config: browser_cfg
+				config: &app_cfg.browser
 			}
 		}
 		.webview {
-			return error('WebView display backend is not implemented yet')
+			return WebViewDisplay{
+				config: &app_cfg.webview
+			}
 		}
 	}
 }
