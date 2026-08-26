@@ -48,6 +48,22 @@
     <td><img src="enchart.png" alt="Enchart" width="400"></td>
     <td><img src="todo.png" alt="Todo App" width="400"></td>
   </tr>
+  <tr>
+    <td align="center"><b>Gomoku — two-window play</b></td>
+    <td align="center"><b>2048</b></td>
+  </tr>
+  <tr>
+    <td><img src="game-gomoku.png" alt="Gomoku" width="400"></td>
+    <td><img src="game-2048.png" alt="2048" width="400"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Minesweeper</b></td>
+    <td align="center"><b>Markdown Editor</b></td>
+  </tr>
+  <tr>
+    <td><img src="game-minesweeper.png" alt="Minesweeper" width="400"></td>
+    <td><img src="markdown-editor.png" alt="Markdown Editor" width="400"></td>
+  </tr>
 </table>
 
 ---
