@@ -155,7 +155,10 @@ pub struct ProcessDisplay {
 	config &BrowserConfig
 }
 
-fn (b ProcessDisplay) build_launch_url(abs_path string, port u16, token string) string {
+// launch_url builds the file:// URL the frontend loads, carrying the WebSocket
+// port + auth token as query params. Shared by the process (browser) and
+// embedded (WebView) backends so both present the page identically.
+fn launch_url(abs_path string, port u16, token string) string {
 	mut params := 'vxui_ws_port=${port}'
 	if token != '' {
 		params += '&vxui_token=${token}'
@@ -258,7 +261,7 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 			eff_engine = engine_from_path(browser_path)
 		}
 	}
-	url := b.build_launch_url(abs_path, cfg.port, cfg.token)
+	url := launch_url(abs_path, cfg.port, cfg.token)
 	browser_name := os.base(browser_path)
 	if eff_engine == .safari {
 		$if macos {
@@ -372,32 +375,130 @@ pub fn (mut s ProcessSession) set_title(t string) {}
 
 pub fn (mut s ProcessSession) set_position(x int, y int) {}
 
-// WebViewConfig holds in-process WebView/WebKit backend options. Empty today;
-// filled when a real WebView backend lands. @[heap] so a reference can be taken.
+// WebViewConfig holds in-process WebView/WebKit backend options. @[heap] so a
+// reference can be taken.
 @[heap]
 pub struct WebViewConfig {}
 
-// WebViewDisplay is a reserved in-process WebView/WebKit backend. Its spawn is
-// not yet implemented; it exists to prove the wiring is backend-agnostic — a
-// real backend only needs to implement spawn() (and fill WebViewConfig).
+$if linux {
+	#pkgconfig webkit2gtk-4.1
+	#pkgconfig gtk+-3.0
+	// Pull in the real GTK/WebKit headers so the C compiler sees correct
+	// prototypes for the `fn C.*` calls below. V does not emit prototypes for
+	// `fn C.*` declarations, so without these the compiler assumes `int` returns
+	// and truncates 64-bit pointers (e.g. gtk_window_new) to 32 bits.
+	#include <gtk/gtk.h>
+	#include <webkit2/webkit2.h>
+
+	// C callback marshaled onto the GTK thread via g_idle_add to quit the loop.
+	fn gtk_quit_idle(data voidptr) int {
+		C.gtk_main_quit()
+		return 0
+	}
+
+	// NOTE: pointer params/returns use `voidptr` (not `&C.GtkWidget`). When a `fn
+	// C.*` lives in an imported module, V can otherwise emit an implicit `int`
+	// prototype and truncate 64-bit pointers to 32 bits.
+	fn C.gtk_init_check(argc voidptr, argv voidptr) bool
+	fn C.gtk_main()
+	fn C.gtk_main_quit()
+	fn C.gtk_window_new(typ int) voidptr
+	fn C.gtk_window_set_default_size(w voidptr, width int, height int)
+	fn C.gtk_window_set_title(w voidptr, title &char)
+	fn C.gtk_window_set_position(w voidptr, pos int)
+	fn C.gtk_window_close(w voidptr)
+	fn C.gtk_window_resize(w voidptr, width int, height int)
+	fn C.gtk_window_move(w voidptr, x int, y int)
+	fn C.gtk_container_add(c voidptr, child voidptr)
+	fn C.gtk_widget_show_all(w voidptr)
+	fn C.gtk_scrolled_window_new(hadj voidptr, vadj voidptr) voidptr
+	fn C.webkit_web_view_new() voidptr
+	fn C.webkit_web_view_load_uri(view voidptr, uri &char)
+	fn C.g_idle_add(cb voidptr, data voidptr) u32
+}
+
+// WebViewDisplay is the in-process WebView/WebKit backend. On Linux it uses
+// WebKitGTK to host the vxui HTML inside a native window; other platforms still
+// return the "not implemented" error until a native WebView lands there.
 pub struct WebViewDisplay {
 	config &WebViewConfig
 	id     string
 }
 
 pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
-	return error('native WebView FFI not implemented on this platform (${b.id})')
+	$if linux {
+		abs_path := os.abs_path(html_path)
+		if !os.exists(abs_path) {
+			return error('HTML file not found: ${abs_path}')
+		}
+		url := launch_url(abs_path, cfg.port, cfg.token)
+		if !C.gtk_init_check(voidptr(0), voidptr(0)) {
+			return error('webkitgtk: gtk_init_check failed (no display?)')
+		}
+		window := C.gtk_window_new(0) // GTK_WINDOW_TOPLEVEL
+		if window == voidptr(0) {
+			return error('webkitgtk: gtk_window_new returned null')
+		}
+		C.gtk_window_set_default_size(window, cfg.width, cfg.height)
+		if cfg.title != '' {
+			C.gtk_window_set_title(window, &char(cfg.title.str))
+		}
+		C.gtk_window_set_position(window, 1) // GTK_WIN_POS_CENTER
+		scrolled := C.gtk_scrolled_window_new(voidptr(0), voidptr(0))
+		C.gtk_container_add(window, scrolled)
+		view := C.webkit_web_view_new()
+		C.gtk_container_add(scrolled, view)
+		C.webkit_web_view_load_uri(view, &char(url.str))
+		C.gtk_widget_show_all(window)
+		// Run the GTK main loop on its own OS thread so the vxui WebSocket
+		// event loop (on the caller's thread) keeps servicing clients.
+		spawn fn () {
+			C.gtk_main()
+		}()
+		return &WebViewSession{ window: voidptr(window), view: voidptr(view) }
+	} $else {
+		return error('native WebView FFI not implemented on this platform (${b.id})')
+	}
 }
 
-struct WebViewSession {}
+struct WebViewSession {
+mut:
+	window voidptr // GtkWidget*
+	view   voidptr // WebKitWebView*
+}
 
-pub fn (mut s WebViewSession) close() ! {}
+pub fn (mut s WebViewSession) close() ! {
+	$if linux {
+		if s.window != voidptr(0) {
+			// gtk_main_quit must run on the GTK thread; marshal via the idle queue.
+			C.g_idle_add(voidptr(gtk_quit_idle), voidptr(0))
+		}
+	}
+}
 
-pub fn (mut s WebViewSession) set_size(w int, h int) {}
+pub fn (mut s WebViewSession) set_size(w int, h int) {
+	$if linux {
+		if s.window != voidptr(0) {
+			C.gtk_window_resize(s.window, w, h)
+		}
+	}
+}
 
-pub fn (mut s WebViewSession) set_title(t string) {}
+pub fn (mut s WebViewSession) set_title(t string) {
+	$if linux {
+		if s.window != voidptr(0) {
+			C.gtk_window_set_title(s.window, &char(t.str))
+		}
+	}
+}
 
-pub fn (mut s WebViewSession) set_position(x int, y int) {}
+pub fn (mut s WebViewSession) set_position(x int, y int) {
+	$if linux {
+		if s.window != voidptr(0) {
+			C.gtk_window_move(s.window, x, y)
+		}
+	}
+}
 
 // NullDisplay is the default, no-op display backend. It satisfies the `Display`
 // interface so `Context{}` / `App{}` can be constructed without an uninitialized
