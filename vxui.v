@@ -302,6 +302,9 @@ pub mut:
 	// Browser settings
 	browser BrowserConfig
 
+	// Display backend selection
+	display DisplayConfig
+
 	// Logging settings
 	log LogConfig
 }
@@ -368,6 +371,9 @@ pub struct Context {
 mut:
 	ws_port            u16
 	ws                 websocket.Server
+	display            Display
+	display_session    ?DisplaySession
+	display_sessions   []DisplaySession
 	routes             map[string]Route
 	clients            map[string]Client
 	mu                 sync.RwMutex
