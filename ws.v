@@ -29,6 +29,13 @@ fn generate_client_id() string {
 // they can never observe a stale/aliased Context instance.
 fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&websocket.Server {
 	mut ctx := context_of(mut app)
+	// Erase the concrete App type so the (non-generic) WebSocket callbacks can
+	// still reach the user's route handlers through `dispatch`. `context_of`
+	// returns `&app.Context`; because Context is the embedded field at offset 0,
+	// that pointer is also the address of the concrete App (stable for the
+	// program's lifetime).
+	ctx.app_ptr = unsafe { voidptr(context_of(mut app)) }
+	ctx.dispatch = fire_ws[T]
 	mut s := websocket.new_server(family, listen_port, '')
 	// The library's ping thread also WATCHDOGS clients: it closes any
 	// connection whose pong is older than 2x this interval. A 1-second
@@ -39,45 +46,17 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 	ping_secs := ctx.config.ws_ping_interval_ms / 1000
 	s.set_ping_interval(if ping_secs < 1 { 1 } else { ping_secs })
 
-	s.on_connect(fn [mut app] [T](mut s websocket.ServerClient) !bool {
-		mut ctx := context_of(mut app)
-		ctx.trigger_event(EventType.client_connecting, '', 'Client connecting...', {}, none, none,
-			none)
-
-		// Loopback gate: the server binds all interfaces, so unless the user
-		// explicitly opted in, only local processes may connect. Use the PEER
-		// address — sock.address() is the local endpoint we were dialed on.
-		if !ctx.config.allow_remote {
-			mut peer := '?'
-			if a := s.client.conn.peer_addr() {
-				peer = a.str().all_before_last(':')
-			}
-			if !addr_is_loopback(peer) {
-				ctx.logger.warn('Rejecting non-loopback connection from ${peer} (set config.allow_remote = true to permit)')
-				return false
-			}
-		}
-
-		// Check client limit
-		ctx.mu.rlock()
-		client_count := ctx.clients.len
-		ctx.mu.runlock()
-
-		if !ctx.config.multi_client && !ctx.config.evict_on_new && client_count > 0 {
-			ctx.logger.warn('Rejecting connection: multi_client is disabled')
-			return false
-		}
-
-		if ctx.config.max_clients > 0 && client_count >= ctx.config.max_clients {
-			ctx.logger.warn('Rejecting connection: max_clients limit reached')
-			return false
-		}
-
+	// on_connect accepts every connection; the loopback/client-limit gate that
+	// used to live here cannot run here because `on_connect` is a plain
+	// (non-capturing) function pointer with no user-data slot. The gate is
+	// applied in on_message instead, on the first frame of each not-yet
+	// authenticated connection (which DOES carry the Context via `ref`).
+	s.on_connect(fn (mut con websocket.ServerClient) !bool {
 		return true
 	})!
 
-	s.on_message(fn [mut app] [T](mut ws websocket.Client, msg &websocket.Message) ! {
-		mut ctx := context_of(mut app)
+	s.on_message_ref(fn (mut ws websocket.Client, msg &websocket.Message, v voidptr) ! {
+		mut ctx := unsafe { &Context(v) }
 		if msg.opcode == .pong {
 			// protocol-level pong: the websocket library answers control
 			// pings itself; nothing to do here. Application liveness uses
@@ -87,6 +66,45 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		raw_payload := msg.payload.bytestr()
 		raw_message := json2.decode[json2.Any](raw_payload)!
 		mut message := raw_message.as_map()
+
+		// Connection gate for not-yet-authenticated sockets (moved from
+		// on_connect, which lacks a user-data slot). Runs once per connection.
+		if ctx.find_client_id_by_connection(ws) == '' {
+			ctx.trigger_event(EventType.client_connecting, '', 'Client connecting...', {}, none,
+				none, none)
+
+			// Loopback gate: the server binds all interfaces, so unless the
+			// user explicitly opted in, only local processes may connect.
+			if !ctx.config.allow_remote {
+				mut peer := '?'
+				if a := ws.conn.peer_addr() {
+					peer = a.str().all_before_last(':')
+				}
+				if !addr_is_loopback(peer) {
+					ctx.logger.warn('Rejecting non-loopback connection from ${peer} (set config.allow_remote = true to permit)')
+					ws.close(1008, 'Non-loopback connection rejected')!
+					return
+				}
+			}
+
+			// Check client limit
+			ctx.mu.rlock()
+			client_count := ctx.clients.len
+			ctx.mu.runlock()
+
+			if !ctx.config.multi_client && !ctx.config.evict_on_new && client_count > 0 {
+				ctx.logger.warn('Rejecting connection: multi_client is disabled')
+				ws.close(1008, 'multi_client is disabled')!
+				return
+			}
+
+			if ctx.config.max_clients > 0 && client_count >= ctx.config.max_clients {
+				ctx.logger.warn('Rejecting connection: max_clients limit reached')
+				ws.close(1008, 'max_clients limit reached')!
+				return
+			}
+		}
+
 		ctx.logger.debug('Received message keys: ${message.keys()}')
 
 		handled := ctx.handle_control_message(mut ws, message, raw_payload)!
@@ -95,12 +113,12 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		}
 
 		if rpc_id := message['rpcID'] {
-			dispatch_rpc(mut app, mut ctx, mut ws, rpc_id.i64(), mut message)!
+			dispatch_rpc(mut ctx, mut ws, rpc_id.i64(), mut message)!
 		}
-	})
+	}, unsafe { voidptr(ctx) })
 
-	s.on_close(fn [mut app] [T](mut ws websocket.Client, code int, reason string) ! {
-		mut ctx := context_of(mut app)
+	s.on_close_ref(fn (mut ws websocket.Client, code int, reason string, v voidptr) ! {
+		mut ctx := unsafe { &Context(v) }
 		ctx.logger.info('Client disconnected: code=${code}, reason=${reason}')
 
 		// Send removal request to channel (serialized processing)
@@ -108,7 +126,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		if client_id_to_remove != '' {
 			ctx.client_remove_chan <- ClientRemoveMsg{client_id_to_remove, 'on_close'}
 		}
-	})
+	}, unsafe { voidptr(ctx) })
 
 	start_server_in_thread_and_wait_till_it_is_ready_to_accept_connections(mut s)
 	return s
@@ -223,8 +241,11 @@ fn (mut ctx Context) handle_client_close(mut _conn &websocket.Client, message ma
 }
 
 // dispatch_rpc routes an rpcID-bearing message to its tagged route handler
-// and writes the JSON response back on the same connection.
-fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i64, mut message map[string]json2.Any) ! {
+// and writes the JSON response back on the same connection. It is non-generic:
+// the concrete App type is reached through the type-erased `ctx.dispatch`
+// trampoline (set in startup_ws_server), so the WebSocket callbacks need not
+// be generic themselves.
+fn dispatch_rpc(mut ctx Context, mut ws websocket.Client, rpc_id i64, mut message map[string]json2.Any) ! {
 	client_id := ctx.find_client_id_by_connection(ws)
 	// Make the caller's identity available to handlers: multi-player apps
 	// (games, collaborative tools) need to know WHO issued a request, not
@@ -239,8 +260,9 @@ fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i
 	// Trigger before_request event
 	ctx.trigger_event(EventType.before_request, client_id, '', message, req, none, none)
 
-	// Handle message
-	response := handle_request(mut app, ctx, req, message) or {
+	// Handle message. handle_request only ever returns a Response (no `!` in
+	// practice), but the `or` block preserves the original 404 trace path.
+	response := ctx.dispatch(mut &ctx, req.path, message) or {
 		// unknown route: previously a completely silent 404 — the player
 		// clicks a button and nothing happens, no trace anywhere
 		ctx.logger.warn('rpc 404: no route for ${req.verb} ${req.path} (client ${client_id})')
@@ -260,6 +282,15 @@ fn dispatch_rpc[T](mut app T, mut ctx Context, mut ws websocket.Client, rpc_id i
 		ctx.log_write_failure(req.path, rpc_id, json_response, err)
 		return
 	}
+}
+
+// fire_ws is the type-erased trampoline monomorphized per App type. It
+// recovers the concrete App pointer from `ctx.app_ptr` and dispatches the
+// message to the matching route handler via handle_request/fire_call.
+fn fire_ws[T](mut ctx Context, method_name string, message map[string]json2.Any) !Response {
+	mut p := ctx.app_ptr
+	mut app := unsafe { p as &T }
+	return handle_request[T](mut app, ctx, build_request(message, ''), message)
 }
 
 // find_client_id_by_connection finds client ID by WebSocket connection

@@ -8,6 +8,7 @@ import os
 import time
 import log
 import sync
+import x.json2
 
 // verb_strings maps string to Verb enum
 // default_app_name is the fallback window/page title marker; a user-changed
@@ -36,6 +37,14 @@ mut:
 	js_callbacks       map[string]chan string
 	event_handlers     map[EventType][]EventHandler
 	client_remove_chan chan ClientRemoveMsg // channel for serialized client removal
+	// app_ptr is an erased pointer to the concrete user App struct (set at
+	// startup). It lets the non-generic WebSocket callbacks reach the user's
+	// route methods via `dispatch` without making the callbacks generic.
+	app_ptr voidptr
+	// dispatch is a type-erased trampoline (monomorphized per App type) that
+	// runs the registered route handler for a message. Initialized to nil;
+	// startup_ws_server sets it before the server accepts any frame.
+	dispatch fn (mut ctx Context, method_name string, message map[string]json2.Any) !Response = unsafe { nil }
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}

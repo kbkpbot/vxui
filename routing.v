@@ -53,10 +53,20 @@ fn build_request(message map[string]json2.Any, client_id string) Request {
 		path = p.str()
 	}
 
+	// When the caller passes an empty client_id, fall back to the one already
+	// injected into the message (dispatch_rpc adds it before dispatch). This
+	// keeps the type-erased trampoline path equivalent to the direct call.
+	mut cid := client_id
+	if cid == '' {
+		if c := message['client_id'] {
+			cid = c.str()
+		}
+	}
+
 	return Request{
 		verb:        verb
 		path:        path
-		client_id:   client_id
+		client_id:   cid
 		raw_message: message
 	}
 }
