@@ -37,32 +37,32 @@
     <td align="center"><b>Element Plus</b></td>
   </tr>
   <tr>
-    <td><img src="gallery.png" alt="Gallery" width="400"></td>
-    <td><img src="element-plus.png" alt="Element Plus" width="400"></td>
+    <td><img src="screenshots/gallery.png" alt="Gallery" width="400"></td>
+    <td><img src="screenshots/element-plus.png" alt="Element Plus" width="400"></td>
   </tr>
   <tr>
     <td align="center"><b>Real-time Charts</b></td>
     <td align="center"><b>Todo App</b></td>
   </tr>
   <tr>
-    <td><img src="enchart.png" alt="Enchart" width="400"></td>
-    <td><img src="todo.png" alt="Todo App" width="400"></td>
+    <td><img src="screenshots/enchart.png" alt="Enchart" width="400"></td>
+    <td><img src="screenshots/todo.png" alt="Todo App" width="400"></td>
   </tr>
   <tr>
     <td align="center"><b>Gomoku — two-window play</b></td>
     <td align="center"><b>2048</b></td>
   </tr>
   <tr>
-    <td><img src="game-gomoku.png" alt="Gomoku" width="400"></td>
-    <td><img src="game-2048.png" alt="2048" width="400"></td>
+    <td><img src="screenshots/game-gomoku.png" alt="Gomoku" width="400"></td>
+    <td><img src="screenshots/game-2048.png" alt="2048" width="400"></td>
   </tr>
   <tr>
     <td align="center"><b>Minesweeper</b></td>
     <td align="center"><b>Markdown Editor</b></td>
   </tr>
   <tr>
-    <td><img src="game-minesweeper.png" alt="Minesweeper" width="400"></td>
-    <td><img src="markdown-editor.png" alt="Markdown Editor" width="400"></td>
+    <td><img src="screenshots/game-minesweeper.png" alt="Minesweeper" width="400"></td>
+    <td><img src="screenshots/markdown-editor.png" alt="Markdown Editor" width="400"></td>
   </tr>
 </table>
 
