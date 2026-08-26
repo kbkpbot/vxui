@@ -224,8 +224,10 @@ fn resolve_config_path() string {
 	if env != '' {
 		return env
 	}
-	cands := [os.join_path(os.getwd(), 'vxui.json'), os.join_path(os.home_dir(), '.vxui',
-	'config.json')]
+	cands := [
+		os.join_path(os.getwd(), 'vxui.json'),
+		os.join_path(os.home_dir(), '.vxui', 'config.json'),
+	]
 	for cand in cands {
 		if os.exists(cand) {
 			return cand
