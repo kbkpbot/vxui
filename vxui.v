@@ -98,6 +98,13 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	ctx.trigger_event(EventType.before_start, '', 'Starting application', {}, none, none, none)
 
+	// Apply an optional config file (--config / VXUI_CONFIG / vxui.json) BEFORE
+	// init()/new_display() so backend selection and other settings take effect.
+	cp := resolve_config_path()
+	if cp != '' {
+		apply_config_file(mut ctx.config, cp) or { ctx.logger.warn('config file: ${err}') }
+	}
+
 	init(mut app)!
 
 	ctx.routes = generate_routes(app)!

@@ -1,0 +1,5 @@
+{
+  "display": { "id": "chrome" },
+  "browser": { "engine": "chrome", "headless": false, "no_sandbox": true },
+  "window": { "width": 1200, "height": 800, "title": "vxui App" }
+}
