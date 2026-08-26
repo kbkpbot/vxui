@@ -22,9 +22,9 @@ jobs:
       - name: Check formatting
         if: runner.os == 'Linux'
         run: |
-          v fmt -diff vxui.v browser.v embed.v utils.v vxui_test.v > /dev/null || {
+          v fmt -diff vxui.v display.v embed.v utils.v vxui_test.v > /dev/null || {
             echo "Formatting issues found. Run: v fmt -w *.v"
-            v fmt -diff vxui.v browser.v embed.v utils.v vxui_test.v
+            v fmt -diff vxui.v display.v embed.v utils.v vxui_test.v
             exit 1
           }
 

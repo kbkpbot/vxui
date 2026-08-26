@@ -239,17 +239,18 @@ pub enum WindowMode {
 }
 
 // BrowserConfig holds browser startup configuration
+@[heap]
 pub struct BrowserConfig {
 pub mut:
-	custom_args       []string   // Additional custom arguments
-	profile_dir       string     // Custom profile directory (empty = default)
-	headless          bool       // Run in headless mode (for testing)
-	devtools          bool       // Open DevTools automatically
-	no_sandbox        bool       // Disable sandbox (for root/CI)
+	custom_args       []string // Additional custom arguments
+	profile_dir       string   // Custom profile directory (empty = default)
+	headless          bool     // Run in headless mode (for testing)
+	devtools          bool     // Open DevTools automatically
+	no_sandbox        bool     // Disable sandbox (for root/CI)
 	window_mode       WindowMode = .app // presentation of the app window (see WindowMode)
-	user_data_dir     string     // Custom user data directory
-	preferred_path    string     // Preferred browser path (skip detection)
-	remote_debug_port int        // Chrome remote debugging port (0 = disabled)
+	user_data_dir     string // Custom user data directory
+	preferred_path    string // Preferred browser path (skip detection)
+	remote_debug_port int    // Chrome remote debugging port (0 = disabled)
 }
 
 // LogConfig holds logging settings.
@@ -289,7 +290,7 @@ pub mut:
 	// reload races the async client cleanup and the fresh connection gets
 	// rejected — the app appears dead after a refresh.
 	evict_on_new bool = true
-	max_clients  int = 10 // Maximum concurrent clients (0 = unlimited)
+	max_clients  int  = 10 // Maximum concurrent clients (0 = unlimited)
 
 	// JavaScript execution settings
 	js_timeout int = 5000 // Default timeout for run_js()
