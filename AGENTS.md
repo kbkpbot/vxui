@@ -28,7 +28,7 @@
 ├── LICENSE             # MIT License
 ├── vxui.png            # Architecture diagram
 ├── vxui.v              # Main framework: WebSocket server, routing, run_js, multi-client
-├── display.v           # Pluggable display backend: Display/DisplaySession interfaces, DisplayKind, BrowserDisplay + reserved WebViewDisplay
+├── display.v           # Pluggable display backend: Display/DisplaySession interfaces, registry + BrowserEngine adapters, ProcessDisplay + reserved WebViewDisplay
 ├── embed.v             # Packed app support for single executable distribution
 ├── utils.v             # Utility and security functions
 ├── vxui_test.v         # Unit tests
@@ -196,9 +196,12 @@ pub mut:
 }
 ```
 
-`BrowserConfig` is the configuration for the **`.browser`** backend only. Other
-backends (e.g. the reserved `.webview`) keep their options on their own config
-struct and ignore `BrowserConfig`.
+`BrowserConfig` is the configuration for the **process-family** backends
+(`browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system`) — all of
+which use `ProcessDisplay`. The reserved control-family backends
+(`webview2`, `wkwebview`, `webkitgtk`, `android`) keep their (currently empty)
+options on `WebViewConfig` and ignore `BrowserConfig`. `BrowserConfig.engine`
+is now a `BrowserEngine` (see below); the remaining fields are unchanged.
 
 ### Display backends (pluggable)
 
@@ -209,16 +212,23 @@ WebView/WebKit later without touching routing, `run_js`, window management, or
 shutdown logic.
 
 ```v
-// DisplayKind selects which backend renders the UI.
-pub enum DisplayKind {
-    browser // external system browser (default)
-    webview // reserved: in-process platform WebView/WebKit (not yet implemented)
-}
-
-// DisplayConfig selects and scopes the display backend.
+// Config.display.id selects which backend renders the UI.
+// 'auto' (or empty) resolves at runtime via resolve_auto().
 pub struct DisplayConfig {
 pub mut:
-    kind DisplayKind = .browser
+    id string = 'auto'
+}
+
+// BrowserEngine selects which browser executable + launch flags the
+// process family uses.
+pub enum BrowserEngine {
+    auto   // probe system (default)
+    chrome // Chromium-family (google-chrome / chromium)
+    firefox
+    edge   // Chromium-family (microsoft-edge)
+    brave  // Chromium-family (brave)
+    safari // macOS Safari
+    system // platform default launcher
 }
 
 // DisplaySession is a live, presented window (close / resize / retitle / move).
@@ -237,21 +247,35 @@ mut:
 }
 ```
 
+Backends are selected by a string **id** and resolved through an internal
+**registry** (`register_display_backend`). `new_display(id string, &Config)`
+looks up the factory for that id and constructs the backend; an empty id or
+`'auto'` is resolved at runtime via `resolve_auto()` (Linux: first found of
+chrome/firefox/edge/brave/system; falls back to `system`). Unknown ids error
+clearly.
+
+**Built-in ids:**
+
+| Family    | id(s)                                                  | Backend        | Notes |
+|-----------|--------------------------------------------------------|----------------|-------|
+| process   | `browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system` | `ProcessDisplay` | External browser launch (default); engine chosen by the id, or by `BrowserConfig.engine` when id is `browser`. |
+| embedded  | `webview2`, `wkwebview`, `webkitgtk`, `android`        | `WebViewDisplay` | **Reserved.** Their native WebView FFI is platform-bound and currently returns a clear `native WebView FFI not implemented on this platform (<id>)` error. These ids are the extension point for adding a real web-control backend. |
+
 Per-backend configuration lives on the backend's own struct and is merged by the
 backend during `spawn` — the core only forwards generic `DisplaySessionConfig`
 (`port`/`token`/`width`/`height`/`x`/`y`/`title`):
 
-| Backend  | Config struct      | Setter                 | Notes                                  |
-|----------|--------------------|------------------------|----------------------------------------|
-| `.browser` | `BrowserConfig`  | `set_browser_config`   | External browser launch (default)      |
-| `.webview` | `WebViewConfig`  | `set_webview_config`   | Reserved stub; `spawn` not implemented |
+| Backend family | Config struct    | Setter               |
+|----------------|------------------|----------------------|
+| process        | `BrowserConfig`  | `set_browser_config` |
+| embedded       | `WebViewConfig`  | `set_webview_config` |
 
 ```v
-// Select the backend (defaults to .browser)
-app.config.display.kind = .browser
+// Select the backend (defaults to 'auto')
+app.config.display.id = 'browser'
 
 // Configure the chosen backend
-app.set_browser_config(vxui.BrowserConfig{ headless: true })
+app.set_browser_config(vxui.BrowserConfig{ engine: .chrome, headless: true })
 app.set_webview_config(vxui.WebViewConfig{ /* reserved */ })
 
 // Tear down all live sessions (driven automatically on shutdown; required for
@@ -259,19 +283,43 @@ app.set_webview_config(vxui.WebViewConfig{ /* reserved */ })
 app.close_displays()
 ```
 
-**Adding a new backend is a pure add-on:** implement one struct that satisfies
-`Display` (i.e. a `spawn(html_path, cfg) !DisplaySession` method) and add a
-matching config struct + a `Config.<backend>` field + a `.backend` branch in
-`new_display`. No edits to `init`/`run`/`open_window*`/`set_window_*`/dev-mode
-are needed — `new_display(kind, &Config)` extracts each backend's own sub-config
+**Adding a new backend is a pure add-on:** register a factory with
+`register_display_backend(id, family, factory fn (&Config) !Display)` — no edits
+to core wiring (`init`/`run`/`open_window*`/`set_window_*`/dev-mode are
+untouched). `new_display(id, &Config)` extracts each backend's own sub-config
 from the whole `Config`, and `open_window`/`close_displays` already operate
 through the `Display`/`DisplaySession` interfaces. The reserved `WebViewDisplay`
 is a ready template: fill `WebViewConfig` and implement its `spawn`.
 
 > **Note:** `BrowserConfig`-specific options (incl. `remote_debug_port`,
-> `window_mode`, `devtools`) apply only to the `.browser` backend. Dev-mode's
-> automatic `devtools` toggle is gated on `kind == .browser`, so non-browser
-> backends are never affected.
+> `window_mode`, `devtools`) apply only to process-family backends. Dev-mode's
+> automatic `devtools` toggle is gated on the resolved backend's family being
+> `process`, so the reserved embedded backends are never affected.
+
+### Config-file display switching
+
+A user can switch display backends by editing a JSON config file — no code
+change needed. The file is applied at `run()` startup via `apply_config_file`,
+which overlays the file onto `Config` (code-set values not present in the file
+are preserved; unknown fields are ignored). Resolution order (first exists wins):
+`--config <path>` / `--config=<path>` CLI flag, the `VXUI_CONFIG` environment
+variable, `./vxui.json` in the working directory, then `~/.vxui/config.json`.
+
+Example `vxui.json`:
+
+```json
+{
+  "display": { "id": "chrome" },
+  "browser": { "engine": "chrome", "no_sandbox": true },
+  "window": { "width": 1200, "height": 800, "title": "vxui App" }
+}
+```
+
+Change `"id"` to `"webview2"` to target the (reserved) WebView backend. The
+recognised keys are `display.id`, `browser.*` (`engine`, `headless`, `devtools`,
+`no_sandbox`, `window_mode`, `profile_dir`, `user_data_dir`, `preferred_path`,
+`remote_debug_port`, `custom_args`), `window.*`, `dev.*` (`auto_devtools`), and
+optional `token` / `multi_client` / `evict_on_new` / `close_timer_ms`.
 
 ### Attribute Tags
 
@@ -421,23 +469,30 @@ shutdown. Select the backend and configure it:
 
 ```v
 // Default: external system browser
-app.config.display.kind = .browser
-app.set_browser_config(vxui.BrowserConfig{ headless: true })
+app.config.display.id = 'browser'
+app.set_browser_config(vxui.BrowserConfig{ engine: .chrome, headless: true })
 
-// Future: in-process WebView/WebKit (reserved; spawn not implemented yet)
-app.config.display.kind = .webview
+// Future: in-process WebView/WebKit (reserved; spawn returns a clear error until
+// the native FFI is implemented)
+app.config.display.id = 'webview2'
 app.set_webview_config(vxui.WebViewConfig{})
 ```
 
-Construction is fully generic — `new_display(kind, &Config)` extracts each
+Construction is fully generic — `new_display(id, &Config)` extracts each
 backend's own sub-config (`Config.browser` / `Config.webview`). `close()` is
 driven on shutdown via `close_displays()`, which is a no-op for the detached
 browser but required for in-process backends to release native windows.
 
-**To add a new backend**, implement one struct with `spawn(html_path, cfg)
-!DisplaySession`, add a config struct + a `Config.<backend>` field + a
-`.backend` branch in `new_display`. No edits to core wiring are needed. See the
+The reserved control backends (`webview2`, `wkwebview`, `webkitgtk`, `android`)
+are scaffolding: their `spawn` returns `native WebView FFI not implemented on
+this platform (<id>)` rather than rendering. They are the extension point for
+adding a real web-control backend — implement `WebViewDisplay.spawn` and fill
+`WebViewConfig`. No edits to core wiring are needed; see the
 *Display backends (pluggable)* subsection above for the full interface contract.
+
+You can also select the backend without touching code, via a config file:
+see *Config-file display switching* under the *Display backends (pluggable)*
+section.
 
 ### Single Executable Distribution
 

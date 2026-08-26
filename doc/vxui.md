@@ -2,50 +2,54 @@
 
 
 ## Contents
+- [apply_config_file](#apply_config_file)
+- [backend_family](#backend_family)
 - [detect_browser_type](#detect_browser_type)
 - [escape_js](#escape_js)
 - [fire_call](#fire_call)
 - [generate_routes](#generate_routes)
 - [get_free_port](#get_free_port)
 - [is_app_mode_supported](#is_app_mode_supported)
+- [load_config_file](#load_config_file)
 - [new_display](#new_display)
 - [new_error_detail](#new_error_detail)
 - [new_error_detail_with_cause](#new_error_detail_with_cause)
 - [new_error_detail_with_details](#new_error_detail_with_details)
 - [new_packed_app](#new_packed_app)
 - [parse_attrs](#parse_attrs)
+- [resolve_auto](#resolve_auto)
 - [run](#run)
 - [run_packed](#run_packed)
 - [sanitize_path](#sanitize_path)
 - [sanitize_utf8](#sanitize_utf8)
+- [BrowserEngine.from](#BrowserEngine.from)
 - [BrowserType.from](#BrowserType.from)
-- [DisplayKind.from](#DisplayKind.from)
+- [DisplayFamily.from](#DisplayFamily.from)
 - [EventType.from](#EventType.from)
 - [Verb.from](#Verb.from)
 - [VxuiError.from](#VxuiError.from)
 - [WindowMode.from](#WindowMode.from)
 - [Display](#Display)
 - [DisplaySession](#DisplaySession)
-- [BrowserSession](#BrowserSession)
+- [EventHandler](#EventHandler)
+- [ProcessSession](#ProcessSession)
   - [close](#close)
   - [set_size](#set_size)
   - [set_title](#set_title)
   - [set_position](#set_position)
-- [EventHandler](#EventHandler)
 - [WebViewSession](#WebViewSession)
   - [close](#close)
   - [set_size](#set_size)
   - [set_title](#set_title)
   - [set_position](#set_position)
+- [BrowserEngine](#BrowserEngine)
 - [BrowserType](#BrowserType)
-- [DisplayKind](#DisplayKind)
+- [DisplayFamily](#DisplayFamily)
 - [EventType](#EventType)
 - [Verb](#Verb)
 - [VxuiError](#VxuiError)
 - [WindowMode](#WindowMode)
 - [BrowserConfig](#BrowserConfig)
-- [BrowserDisplay](#BrowserDisplay)
-  - [spawn](#spawn)
 - [Client](#Client)
 - [Config](#Config)
 - [Context](#Context)
@@ -79,6 +83,7 @@
 - [DisplaySessionConfig](#DisplaySessionConfig)
 - [EmbeddedFile](#EmbeddedFile)
 - [EventData](#EventData)
+- [FileConfig](#FileConfig)
 - [JsSandboxConfig](#JsSandboxConfig)
 - [LogConfig](#LogConfig)
 - [PackedApp](#PackedApp)
@@ -92,6 +97,8 @@
   - [list_files](#list_files)
   - [total_size](#total_size)
   - [cleanup](#cleanup)
+- [ProcessDisplay](#ProcessDisplay)
+  - [spawn](#spawn)
 - [Request](#Request)
 - [Response](#Response)
 - [Route](#Route)
@@ -105,6 +112,24 @@
 - [WebViewDisplay](#WebViewDisplay)
   - [spawn](#spawn)
 - [WindowConfig](#WindowConfig)
+
+## apply_config_file
+```v
+fn apply_config_file(mut cfg Config, path string) !
+```
+
+apply_config_file overlays a config file onto an existing Config. It is meant to be called BEFORE init()/new_display() so that the chosen backend and other settings take effect during startup. Code-set values not present in the file are preserved.
+
+[[Return to contents]](#Contents)
+
+## backend_family
+```v
+fn backend_family(id string) DisplayFamily
+```
+
+backend_family returns the family a backend id belongs to (defaults to .process).
+
+[[Return to contents]](#Contents)
 
 ## detect_browser_type
 ```v
@@ -162,12 +187,21 @@ is_app_mode_supported returns true if browser supports app mode
 
 [[Return to contents]](#Contents)
 
-## new_display
+## load_config_file
 ```v
-fn new_display(kind DisplayKind, app_cfg &Config) !Display
+fn load_config_file(path string) !FileConfig
 ```
 
-new_display constructs the configured backend. It receives the whole app Config so each backend extracts its OWN sub-config — this keeps the construction wiring backend-agnostic (no hardcoded BrowserConfig).
+load_config_file reads and decodes a JSON config file into a FileConfig. Unknown fields are ignored; missing sections simply yield empty maps.
+
+[[Return to contents]](#Contents)
+
+## new_display
+```v
+fn new_display(id string, app_cfg &Config) !Display
+```
+
+new_display constructs the backend identified by `id`. An empty id or 'auto' resolves at runtime via resolve_auto(). It receives the whole app Config so each backend extracts its OWN sub-config — this keeps the construction wiring backend-agnostic (no hardcoded BrowserConfig).
 
 [[Return to contents]](#Contents)
 
@@ -216,6 +250,15 @@ parse_attrs parses function attributes for verbs and path
 
 [[Return to contents]](#Contents)
 
+## resolve_auto
+```v
+fn resolve_auto(cfg &Config) string
+```
+
+resolve_auto picks the first available process-family browser backend. Linux-first; extend per platform. Falls back to 'system'.
+
+[[Return to contents]](#Contents)
+
 ## run
 ```v
 fn run[T](mut app T, html_filename string) !
@@ -252,6 +295,13 @@ sanitize_utf8 returns `s` with every invalid UTF-8 byte replaced by the Unicode 
 
 [[Return to contents]](#Contents)
 
+## BrowserEngine.from
+```v
+fn BrowserEngine.from[W](input W) !BrowserEngine
+```
+
+[[Return to contents]](#Contents)
+
 ## BrowserType.from
 ```v
 fn BrowserType.from[W](input W) !BrowserType
@@ -259,9 +309,9 @@ fn BrowserType.from[W](input W) !BrowserType
 
 [[Return to contents]](#Contents)
 
-## DisplayKind.from
+## DisplayFamily.from
 ```v
-fn DisplayKind.from[W](input W) !DisplayKind
+fn DisplayFamily.from[W](input W) !DisplayFamily
 ```
 
 [[Return to contents]](#Contents)
@@ -321,41 +371,41 @@ DisplaySession is a live, presented window. It exposes only what a backend can m
 
 [[Return to contents]](#Contents)
 
-## BrowserSession
-## close
-```v
-fn (mut s BrowserSession) close() !
-```
-
-[[Return to contents]](#Contents)
-
-## set_size
-```v
-fn (mut s BrowserSession) set_size(w int, h int)
-```
-
-[[Return to contents]](#Contents)
-
-## set_title
-```v
-fn (mut s BrowserSession) set_title(t string)
-```
-
-[[Return to contents]](#Contents)
-
-## set_position
-```v
-fn (mut s BrowserSession) set_position(x int, y int)
-```
-
-[[Return to contents]](#Contents)
-
 ## EventHandler
 ```v
 type EventHandler = fn (EventData)
 ```
 
 EventHandler is a callback function type for events
+
+[[Return to contents]](#Contents)
+
+## ProcessSession
+## close
+```v
+fn (mut s ProcessSession) close() !
+```
+
+[[Return to contents]](#Contents)
+
+## set_size
+```v
+fn (mut s ProcessSession) set_size(w int, h int)
+```
+
+[[Return to contents]](#Contents)
+
+## set_title
+```v
+fn (mut s ProcessSession) set_title(t string)
+```
+
+[[Return to contents]](#Contents)
+
+## set_position
+```v
+fn (mut s ProcessSession) set_position(x int, y int)
+```
 
 [[Return to contents]](#Contents)
 
@@ -388,6 +438,23 @@ fn (mut s WebViewSession) set_position(x int, y int)
 
 [[Return to contents]](#Contents)
 
+## BrowserEngine
+```v
+enum BrowserEngine {
+	auto   // probe system (default)
+	chrome // Chromium-family (google-chrome / chromium)
+	firefox
+	edge   // Chromium-family (microsoft-edge)
+	brave  // Chromium-family (brave)
+	safari // macOS Safari
+	system // platform default launcher
+}
+```
+
+BrowserEngine selects which browser executable + launch flags the process family uses. `.auto` (the default) probes the system and resolves to the first usable engine at spawn time.
+
+[[Return to contents]](#Contents)
+
 ## BrowserType
 ```v
 enum BrowserType {
@@ -405,15 +472,15 @@ BrowserType represents different browser types
 
 [[Return to contents]](#Contents)
 
-## DisplayKind
+## DisplayFamily
 ```v
-enum DisplayKind {
-	browser // external system browser (default)
-	webview // reserved: in-process platform WebView/WebKit (not yet implemented)
+enum DisplayFamily {
+	process  // external child process (e.g. a system browser)
+	embedded // in-process native view (e.g. WebView2 / WKWebView / WebKitGTK)
 }
 ```
 
-DisplayKind selects which display backend renders the UI.
+DisplayFamily groups display backends by how they present the page.
 
 [[Return to contents]](#Contents)
 
@@ -511,28 +578,11 @@ pub mut:
 	user_data_dir     string // Custom user data directory
 	preferred_path    string // Preferred browser path (skip detection)
 	remote_debug_port int    // Chrome remote debugging port (0 = disabled)
+	engine            BrowserEngine = .auto // Which engine/executable to launch
 }
 ```
 
 BrowserConfig holds browser startup configuration
-
-[[Return to contents]](#Contents)
-
-## BrowserDisplay
-```v
-struct BrowserDisplay {
-	config &BrowserConfig
-}
-```
-
-BrowserDisplay launches an external browser process.
-
-[[Return to contents]](#Contents)
-
-## spawn
-```v
-fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
-```
 
 [[Return to contents]](#Contents)
 
@@ -879,11 +929,11 @@ DevConfig holds development mode settings
 ```v
 struct DisplayConfig {
 pub mut:
-	kind DisplayKind = .browser
+	id string = 'auto'
 }
 ```
 
-DisplayConfig selects and scopes the display backend.
+DisplayConfig selects and scopes the display backend by string id. id 'auto' (or empty) resolves at runtime via resolve_auto().
 
 [[Return to contents]](#Contents)
 
@@ -932,6 +982,26 @@ pub:
 ```
 
 EventData contains event information
+
+[[Return to contents]](#Contents)
+
+## FileConfig
+```v
+struct FileConfig {
+mut:
+	display        map[string]json2.Any
+	browser        map[string]json2.Any
+	webview        map[string]json2.Any
+	window         map[string]json2.Any
+	dev            map[string]json2.Any
+	token          string
+	multi_client   bool
+	evict_on_new   bool
+	close_timer_ms int
+}
+```
+
+FileConfig is the serializable subset of Config that may be set from a JSON config file. Nested sections are kept as `map[string]json2.Any` so the file can carry extra/unknown fields without breaking the decoder. Only the fields recognised by apply_config_file are read; everything else is ignored.
 
 [[Return to contents]](#Contents)
 
@@ -1075,6 +1145,25 @@ cleanup removes extracted files
 
 [[Return to contents]](#Contents)
 
+## ProcessDisplay
+```v
+struct ProcessDisplay {
+	engine BrowserEngine
+	config &BrowserConfig
+}
+```
+
+ProcessDisplay launches an external browser process. It is parameterized by a BrowserEngine so each id selects the right executable + flags; the Chromium-family and Firefox/Safari behaviors are chosen per engine at spawn.
+
+[[Return to contents]](#Contents)
+
+## spawn
+```v
+fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
+```
+
+[[Return to contents]](#Contents)
+
 ## Request
 ```v
 struct Request {
@@ -1188,6 +1277,7 @@ WebViewConfig holds in-process WebView/WebKit backend options. Empty today; fill
 ```v
 struct WebViewDisplay {
 	config &WebViewConfig
+	id     string
 }
 ```
 
@@ -1220,4 +1310,4 @@ Note: only size/position/title are actually enforced by the browser launch; the 
 
 [[Return to contents]](#Contents)
 
-#### Powered by vdoc. Generated on: 26 Aug 2026 12:48:04
+#### Powered by vdoc. Generated on: 26 Aug 2026 13:43:58

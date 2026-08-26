@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Added `WebViewConfig` + a reserved `WebViewDisplay` stub, `Context.set_webview_config`,
   and `close_displays()` driven on shutdown. Adding a WebView/WebKit backend is now a
   pure add-on (implement `WebViewDisplay.spawn`).
+- **Display backends are now selected by a string `id` resolved through a registry.**
+  `Config.display` is now `DisplayConfig{ id string = 'auto' }`; `DisplayKind` enum
+  removed. Use `new_display(id string, &Config) !Display` — `id` of `''` or `'auto'`
+  resolves via `resolve_auto()`. Built-in ids: process family `browser`, `chrome`,
+  `firefox`, `edge`, `brave`, `safari`, `system`; reserved control-family ids
+  `webview2`, `wkwebview`, `webkitgtk`, `android` (registered; their native WebView
+  FFI is platform-bound and currently returns a clear
+  `native WebView FFI not implemented on this platform (<id>)` error). Register a
+  new backend with `register_display_backend(id, family, factory)` — no core wiring edits.
+- `BrowserConfig.engine` is now a `BrowserEngine` (`.auto/.chrome/.firefox/.edge/
+  .brave/.safari/.system`) that selects the executable + launch flags; the previously
+  implicit "current browser" selection is replaced by an explicit engine (the `browser`
+  id uses `Config.browser.engine`, defaulting to `.auto`). The remaining `BrowserConfig`
+  fields (headless, devtools, no_sandbox, window_mode, profile_dir, user_data_dir,
+  preferred_path, remote_debug_port, custom_args) are unchanged.
 - Refactor: split the monolithic `vxui.v` into focused modules
   (`errors.v`, `events.v`, `config.v`, `clients.v`, `ws.v`, `routing.v`,
   `jsexec.v`, `displaymgr.v`); `Context`/`run` remain in `vxui.v`.
@@ -58,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `invalid token`) and token rejections log cmd/keys/payload preview, e.g.
   `rejected ... cmd=ping keys=[cmd,client_id,timestamp]` — instantly separating
   "heartbeat forgot its token" from forged messages.
+- **Config-file display backend selection**: a JSON config file can switch the
+  display backend (and other safe options) without code changes. `run()` resolves
+  a config file by search order — `--config <path>` / `--config=<path>` CLI flag,
+  the `VXUI_CONFIG` env var, `./vxui.json`, then `~/.vxui/config.json` — and applies
+  it via `apply_config_file` (unknown fields ignored; code-set values preserved).
+  Recognised keys: `display.id`, `browser.*` (engine, headless, devtools,
+  no_sandbox, window_mode, profile_dir, user_data_dir, preferred_path,
+  remote_debug_port, custom_args), `window.*`, `dev.*` (auto_devtools), plus
+  optional `token` / `multi_client` / `evict_on_new` / `close_timer_ms`.
 - **Security gates** — the WebSocket server now (1) rejects connections from
   non-loopback interfaces unless `config.allow_remote = true`, and (2) enforces
   `config.require_auth` on every regular message: a missing token is rejected with
