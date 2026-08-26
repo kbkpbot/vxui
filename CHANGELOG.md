@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- Display layer refactored behind a pluggable `Display`/`DisplaySession`
+  interface. The external `start_browser` / `start_browser_with_token` /
+  `start_browser_with_config` functions were removed; open extra windows via
+  `Context.open_window` / `Context.open_window_with`. `run()` now launches the
+  UI through the configured `Display` backend (default: `BrowserDisplay`).
+  `browser.v` was replaced by `display.v`.
+
 ### Added
 
 - **`WindowMode`** (`BrowserConfig.window_mode = .app | .kiosk | .normal`, default

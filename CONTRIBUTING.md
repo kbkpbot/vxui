@@ -141,7 +141,7 @@ docs: update README with Windows instructions
 
 ```
 vxui/
-├── browser.v      # Browser detection and launching
+├── display.v      # Pluggable display backend (BrowserDisplay + Display/DisplaySession interfaces)
 ├── router.v       # Routing logic
 ├── utils.v        # Utility functions
 ├── vxui.v         # Core WebSocket server

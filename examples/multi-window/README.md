@@ -49,7 +49,7 @@ Main Window          Settings Window
 - **Main Window** (`/`): Displays the content using `AppConfig`
 - **Settings Window** (`/settings`): Form for editing `AppConfig`
 - **Update Handler** (`/update-settings`): Broadcasts changes to all windows
-- **Open Handler** (`/open-settings`): Opens new settings window via `start_browser_with_token()`
+- **Open Handler** (`/open-settings`): Opens new settings window via `app.Context.open_window_with('./ui/settings.html', ...)`
 
 ### Data Flow
 
@@ -69,6 +69,6 @@ Main Window          Settings Window
 ## Technical Details
 
 - Uses `multi_client = true` for multiple window support
-- `spawn` + `start_browser_with_token()` opens new windows programmatically
+- `app.Context.open_window_with(...)` opens new windows programmatically
 - `broadcast()` sends updates to all connected clients
 - `hx-swap-oob` enables partial page updates without full refresh

@@ -28,7 +28,7 @@
 ├── LICENSE             # MIT License
 ├── vxui.png            # Architecture diagram
 ├── vxui.v              # Main framework: WebSocket server, routing, run_js, multi-client
-├── browser.v           # Browser detection and launching
+├── display.v           # Pluggable display backend (BrowserDisplay + Display/DisplaySession interfaces)
 ├── embed.v             # Packed app support for single executable distribution
 ├── utils.v             # Utility and security functions
 ├── vxui_test.v         # Unit tests

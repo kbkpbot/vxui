@@ -17,8 +17,8 @@
 - [run](#run)
 - [run_packed](#run_packed)
 - [sanitize_path](#sanitize_path)
-- [start_browser](#start_browser)
-- [start_browser_with_token](#start_browser_with_token)
+- [open_window](#open_window)
+- [open_window_with](#open_window_with)
 - [truncate_string](#truncate_string)
 - [Verb](#Verb)
 - [BrowserConfig](#BrowserConfig)
@@ -187,21 +187,24 @@ sanitize_path validates and sanitizes the file path
 
 [[Return to contents]](#Contents)
 
-## start_browser
+## open_window
 ```v
-fn start_browser(filename string, vxui_ws_port u16) !
+fn (mut ctx Context) open_window(html_filename string) !
 ```
 
-start_browser starts the browser and open the `filename`
+Opens an additional display window using the current window config and
+security token.
 
 [[Return to contents]](#Contents)
 
-## start_browser_with_token
+## open_window_with
 ```v
-fn start_browser_with_token(filename string, vxui_ws_port u16, token string, window WindowConfig) !
+fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) !
 ```
 
-start_browser_with_token starts the browser with security token and window config
+Opens an additional display window with an explicit window configuration.
+Backend-specific options (browser args, window mode, remote debug port) come
+from `ctx.config.browser`.
 
 [[Return to contents]](#Contents)
 
