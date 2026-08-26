@@ -312,14 +312,14 @@ fn (mut app App) invite(_ map[string]json2.Any) string {
 				'--remote-allow-origins=*',
 			]
 		}
-		vxui.start_browser_with_config(default_page_html_file, app.ws_port,
-			app.config.token, vxui.WindowConfig{
-				width:  640
-				height: 900
-				x:      120
-				y:      120
-				title:  'Gomoku — Player 2'
-			}, cfg) or {
+		app.Context.set_browser_config(cfg)
+		app.Context.open_window_with(default_page_html_file, vxui.WindowConfig{
+			width:  640
+			height: 900
+			x:      120
+			y:      120
+			title:  'Gomoku — Player 2'
+		}) or {
 			app.mu.lock()
 			app.invite_err = 'Could not launch the second window: ${err.msg()}'
 			app.mu.unlock()

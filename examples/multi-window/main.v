@@ -2,7 +2,6 @@ module main
 
 import vxui
 import x.json2
-import time
 
 // AppConfig represents the shared application configuration
 struct AppConfig {
@@ -72,20 +71,13 @@ fn (mut app App) update_settings(message map[string]json2.Any) string {
 // Open new settings window
 @['/open-settings']
 fn (mut app App) open_settings(_ map[string]json2.Any) string {
-	port := app.Context.get_port()
-	token := app.Context.get_token()
-
-	spawn fn (port u16, token string) {
-		time.sleep(100 * time.millisecond)
-		vxui.start_browser_with_token('./ui/settings.html', port, token, vxui.WindowConfig{
-			width:     340
-			height:    480
-			title:     'Settings'
-		}) or {
-			eprintln('Failed to open settings: ${err}')
-		}
-	}(port, token)
-
+	app.Context.open_window_with('./ui/settings.html', vxui.WindowConfig{
+		width:  340
+		height: 480
+		title:  'Settings'
+	}) or {
+		eprintln('Failed to open settings: ${err}')
+	}
 	return ''
 }
 
@@ -635,9 +627,9 @@ fn main() {
 	app.Context.config.multi_client = true
 	app.Context.config.close_timer_ms = 30000
 	app.Context.config.window = vxui.WindowConfig{
-		width:     800
-		height:    550
-		title:     'Multi-Window Demo'
+		width:  800
+		height: 550
+		title:  'Multi-Window Demo'
 	}
 	// Enable Chrome remote debugging for development (connect via localhost:9222)
 	app.Context.config.browser.remote_debug_port = 9222
