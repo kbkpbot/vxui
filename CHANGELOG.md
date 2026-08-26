@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Context.open_window` / `Context.open_window_with`. `run()` now launches the
   UI through the configured `Display` backend (default: `BrowserDisplay`).
   `browser.v` was replaced by `display.v`.
+- Display construction generalized: `new_display` now takes `&Config` and each
+  backend extracts its own sub-config (`Config.browser` / `Config.webview`).
+  Added `WebViewConfig` + a reserved `WebViewDisplay` stub, `Context.set_webview_config`,
+  and `close_displays()` driven on shutdown. Adding a WebView/WebKit backend is now a
+  pure add-on (implement `WebViewDisplay.spawn`).
 
 ### Added
 
