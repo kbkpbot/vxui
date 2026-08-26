@@ -5,8 +5,8 @@ fn test_new_display_browser_returns_backend() {
 		browser: BrowserConfig{}
 	}) or { panic(err.msg()) }
 	match d {
-		BrowserDisplay { assert true }
-		else { assert false, 'expected BrowserDisplay' }
+		ProcessDisplay { assert true }
+		else { assert false, 'expected ProcessDisplay' }
 	}
 }
 
@@ -19,7 +19,8 @@ fn test_new_display_webview_constructs() {
 }
 
 fn test_browser_display_build_launch_url() {
-	b := BrowserDisplay{
+	b := ProcessDisplay{
+		engine: .chrome
 		config: &BrowserConfig{}
 	}
 	url := b.build_launch_url('/tmp/index.html', 8080, 'secret')
@@ -27,7 +28,8 @@ fn test_browser_display_build_launch_url() {
 }
 
 fn test_browser_display_build_launch_url_no_token() {
-	b := BrowserDisplay{
+	b := ProcessDisplay{
+		engine: .chrome
 		config: &BrowserConfig{}
 	}
 	url := b.build_launch_url('/tmp/index.html', 8080, '')

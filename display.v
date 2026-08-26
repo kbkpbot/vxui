@@ -39,16 +39,47 @@ fn (mut r DisplayRegistry) ensure() {
 	r.backends['webkitgtk'] = DisplayBackendInfo{'webkitgtk', .embedded}
 	r.backends['android'] = DisplayBackendInfo{'android', .embedded}
 	r.factories['browser'] = fn (cfg &Config) !Display {
-		return BrowserDisplay{
+		return ProcessDisplay{
+			engine: .auto
 			config: &cfg.browser
 		}
 	}
-	r.factories['chrome'] = r.factories['browser']
-	r.factories['firefox'] = r.factories['browser']
-	r.factories['edge'] = r.factories['browser']
-	r.factories['brave'] = r.factories['browser']
-	r.factories['safari'] = r.factories['browser']
-	r.factories['system'] = r.factories['browser']
+	r.factories['chrome'] = fn (cfg &Config) !Display {
+		return ProcessDisplay{
+			engine: .chrome
+			config: &cfg.browser
+		}
+	}
+	r.factories['firefox'] = fn (cfg &Config) !Display {
+		return ProcessDisplay{
+			engine: .firefox
+			config: &cfg.browser
+		}
+	}
+	r.factories['edge'] = fn (cfg &Config) !Display {
+		return ProcessDisplay{
+			engine: .edge
+			config: &cfg.browser
+		}
+	}
+	r.factories['brave'] = fn (cfg &Config) !Display {
+		return ProcessDisplay{
+			engine: .brave
+			config: &cfg.browser
+		}
+	}
+	r.factories['safari'] = fn (cfg &Config) !Display {
+		return ProcessDisplay{
+			engine: .safari
+			config: &cfg.browser
+		}
+	}
+	r.factories['system'] = fn (cfg &Config) !Display {
+		return ProcessDisplay{
+			engine: .system
+			config: &cfg.browser
+		}
+	}
 	r.factories['webview2'] = fn (cfg &Config) !Display {
 		return WebViewDisplay{
 			config: &cfg.webview
@@ -116,12 +147,15 @@ mut:
 	spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
 }
 
-// BrowserDisplay launches an external browser process.
-pub struct BrowserDisplay {
+// ProcessDisplay launches an external browser process. It is parameterized by
+// a BrowserEngine so each id selects the right executable + flags; the
+// Chromium-family and Firefox/Safari behaviors are chosen per engine at spawn.
+pub struct ProcessDisplay {
+	engine BrowserEngine
 	config &BrowserConfig
 }
 
-fn (b BrowserDisplay) build_launch_url(abs_path string, port u16, token string) string {
+fn (b ProcessDisplay) build_launch_url(abs_path string, port u16, token string) string {
 	mut params := 'vxui_ws_port=${port}'
 	if token != '' {
 		params += '&vxui_token=${token}'
@@ -129,7 +163,69 @@ fn (b BrowserDisplay) build_launch_url(abs_path string, port u16, token string) 
 	return 'file://${abs_path}?${params}'
 }
 
-pub fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
+// is_chromium_engine reports whether the engine uses Chromium-style flags
+// (--app, --window-size, --user-data-dir, ...).
+fn is_chromium_engine(e BrowserEngine) bool {
+	return e in [.chrome, .edge, .brave]
+}
+
+// engine_from_path maps a browser executable path to the engine its flags need.
+fn engine_from_path(path string) BrowserEngine {
+	t := detect_browser_type(path)
+	return match t {
+		.firefox { .firefox }
+		.safari { .safari }
+		.edge { .edge }
+		.brave { .brave }
+		else { .chrome } // chromium / chromium-browser / unknown -> chromium flags
+	}
+}
+
+// browser_executable_names returns candidate executable names for an engine.
+fn browser_executable_names(engine BrowserEngine) []string {
+	return match engine {
+		.chrome { ['google-chrome-stable', 'google-chrome', 'chromium', 'chromium-browser'] }
+		.edge { ['microsoft-edge', 'msedge', 'edge'] }
+		.brave { ['brave', 'brave-browser'] }
+		.firefox { ['firefox'] }
+		.safari { ['safari'] }
+		.system { ['x-www-browser', 'google-chrome', 'chromium', 'firefox'] }
+		.auto { ['google-chrome', 'chromium', 'firefox'] }
+	}
+}
+
+// find_engine_path locates an executable for the given engine, honoring a
+// preferred path first.
+fn find_engine_path(engine BrowserEngine, preferred string) string {
+	if preferred != '' && os.exists(preferred) {
+		return preferred
+	}
+	for name in browser_executable_names(engine) {
+		p := os.find_abs_path_of_executable(name) or { '' }
+		if p != '' { return p }
+	}
+	return ''
+}
+
+// get_firefox_args builds the Firefox-specific launch argument list. Firefox
+// does not understand Chromium switches (--app=, --window-size=), so it gets
+// its own flags.
+fn get_firefox_args(profile_path string, width int, height int, kiosk bool, url string) []string {
+	mut args := ['-new-instance', '-profile', profile_path]
+	if width > 0 && height > 0 {
+		args << '-width'
+		args << '${width}'
+		args << '-height'
+		args << '${height}'
+	}
+	if kiosk {
+		args << '-kiosk'
+	}
+	args << url
+	return args
+}
+
+pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
 	mut abs_path := os.abs_path(html_path)
 	is_temp := abs_path.starts_with(os.temp_dir())
 	if !is_temp {
@@ -141,16 +237,30 @@ pub fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 			'path': abs_path
 		})
 	}
-	browser_path := find_browser_path_with_preferred(b.config.preferred_path)
-	if browser_path == '' {
-		return new_error_detail(VxuiError.browser_not_found, 'No supported browser found')
+	mut eff_engine := b.engine
+	mut browser_path := ''
+	if eff_engine == .auto || eff_engine == .system {
+		browser_path = find_browser_path_with_preferred(b.config.preferred_path)
+		if browser_path == '' {
+			return new_error_detail(VxuiError.browser_not_found, 'No supported browser found')
+		}
+		eff_engine = engine_from_path(browser_path)
+	} else {
+		browser_path = find_engine_path(eff_engine, b.config.preferred_path)
+		if browser_path == '' {
+			browser_path = find_browser_path_with_preferred(b.config.preferred_path)
+		}
+		if browser_path == '' {
+			return new_error_detail(VxuiError.browser_not_found,
+				'No supported browser for engine ${eff_engine}')
+		}
+		if eff_engine == .auto || eff_engine == .system {
+			eff_engine = engine_from_path(browser_path)
+		}
 	}
 	url := b.build_launch_url(abs_path, cfg.port, cfg.token)
-	browser_type := detect_browser_type(browser_path)
 	browser_name := os.base(browser_path)
-	is_safari := browser_type == .safari
-	is_chrome_based := is_app_mode_supported(browser_type)
-	if is_safari {
+	if eff_engine == .safari {
 		$if macos {
 			res := os.execute('open -a Safari "${url}"')
 			if res.exit_code != 0 {
@@ -159,7 +269,7 @@ pub fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 					'stderr': res.output.trim_space()
 				})
 			}
-			return BrowserSession{}
+			return ProcessSession{}
 		}
 		return new_error_detail(VxuiError.browser_not_found, 'Safari is only supported on macOS')
 	}
@@ -179,12 +289,12 @@ pub fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 		os.mkdir_all(os.join_path(profile_path, 'Default')) or {}
 		os.write_file(prefs_path, '{"translate":{"enabled":false}}') or {}
 	}
-	mut cmd_args := get_browser_args(browser_name)
-	if b.config.custom_args.len > 0 {
-		cmd_args << b.config.custom_args
-	}
-	cmd_args << '--user-data-dir=${profile_path}'
-	if is_chrome_based {
+	if is_chromium_engine(eff_engine) {
+		mut cmd_args := get_browser_args(browser_name)
+		if b.config.custom_args.len > 0 {
+			cmd_args << b.config.custom_args
+		}
+		cmd_args << '--user-data-dir=${profile_path}'
 		if cfg.width > 0 && cfg.height > 0 {
 			cmd_args << '--window-size=${cfg.width},${cfg.height}'
 		}
@@ -213,40 +323,54 @@ pub fn (mut b BrowserDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 		cmd_args << '--enable-file-access-from-files'
 		cmd_args << '--enable-features=FileAccessAPI,NativeFileSystemAPI'
 		cmd_args << window_mode_args(b.config.window_mode, url)
-	} else {
-		if cfg.width > 0 && cfg.height > 0 {
-			cmd_args << '--width=${cfg.width}'
-			cmd_args << '--height=${cfg.height}'
-		}
-		cmd_args << url
-	}
-	$if windows {
-		mut p := os.new_process(browser_path)
-		p.set_args(cmd_args)
-		p.run()
-	} $else {
-		pid := os.fork()
-		if pid == 0 {
-			os.execvp(browser_path, cmd_args) or {
-				eprintln('Failed to start browser: ${err}')
-				exit(1)
+		$if windows {
+			mut p := os.new_process(browser_path)
+			p.set_args(cmd_args)
+			p.run()
+		} $else {
+			pid := os.fork()
+			if pid == 0 {
+				os.execvp(browser_path, cmd_args) or {
+					eprintln('Failed to start browser: ${err}')
+					exit(1)
+				}
+			} else if pid < 0 {
+				return new_error_detail(VxuiError.process_fork_failed, 'Failed to fork process')
 			}
-		} else if pid < 0 {
-			return new_error_detail(VxuiError.process_fork_failed, 'Failed to fork process')
+		}
+	} else {
+		// Firefox (and any non-Chromium engine)
+		mut cmd_args := b.config.custom_args.clone()
+		cmd_args << get_firefox_args(profile_path, cfg.width, cfg.height,
+			b.config.window_mode == .kiosk, url)
+		$if windows {
+			mut p := os.new_process(browser_path)
+			p.set_args(cmd_args)
+			p.run()
+		} $else {
+			pid := os.fork()
+			if pid == 0 {
+				os.execvp(browser_path, cmd_args) or {
+					eprintln('Failed to start browser: ${err}')
+					exit(1)
+				}
+			} else if pid < 0 {
+				return new_error_detail(VxuiError.process_fork_failed, 'Failed to fork process')
+			}
 		}
 	}
-	return BrowserSession{}
+	return ProcessSession{}
 }
 
-struct BrowserSession {}
+struct ProcessSession {}
 
-pub fn (mut s BrowserSession) close() ! {}
+pub fn (mut s ProcessSession) close() ! {}
 
-pub fn (mut s BrowserSession) set_size(w int, h int) {}
+pub fn (mut s ProcessSession) set_size(w int, h int) {}
 
-pub fn (mut s BrowserSession) set_title(t string) {}
+pub fn (mut s ProcessSession) set_title(t string) {}
 
-pub fn (mut s BrowserSession) set_position(x int, y int) {}
+pub fn (mut s ProcessSession) set_position(x int, y int) {}
 
 // WebViewConfig holds in-process WebView/WebKit backend options. Empty today;
 // filled when a real WebView backend lands. @[heap] so a reference can be taken.

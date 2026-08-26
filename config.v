@@ -46,6 +46,19 @@ pub enum WindowMode {
 	normal // an ordinary browser tab
 }
 
+// BrowserEngine selects which browser executable + launch flags the process
+// family uses. `.auto` (the default) probes the system and resolves to the
+// first usable engine at spawn time.
+pub enum BrowserEngine {
+	auto   // probe system (default)
+	chrome // Chromium-family (google-chrome / chromium)
+	firefox
+	edge   // Chromium-family (microsoft-edge)
+	brave  // Chromium-family (brave)
+	safari // macOS Safari
+	system // platform default launcher
+}
+
 // BrowserConfig holds browser startup configuration
 @[heap]
 pub struct BrowserConfig {
@@ -59,6 +72,7 @@ pub mut:
 	user_data_dir     string // Custom user data directory
 	preferred_path    string // Preferred browser path (skip detection)
 	remote_debug_port int    // Chrome remote debugging port (0 = disabled)
+	engine            BrowserEngine = .auto // Which engine/executable to launch
 }
 
 // LogConfig holds logging settings.
