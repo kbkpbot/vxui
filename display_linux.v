@@ -80,13 +80,19 @@ $if linux {
 		return 0 // FALSE: allow the default destroy to proceed
 	}
 
-	// gtk_on_destroy runs during the normal destroy chain. It records closure so
-	// wait_closed()/is_closed() observe it. The destroy signal callback is
-	// (widget, user_data) - 2 arguments - so user_data maps cleanly here.
+	// gtk_on_destroy runs at the end of the normal destroy chain, after GTK has
+	// torn the window down (so WebKit got a clean shutdown). The destroy signal
+	// callback is (widget, user_data) - 2 arguments - so user_data maps cleanly
+	// here. We record closure and terminate. We exit from HERE (not from the
+	// main thread's shutdown path) so all threads - notably the WebSocket
+	// server's disconnect-handling thread, which touches ctx.clients - are killed
+	// atomically by exit(0); running framework cleanup on the main thread instead
+	// races with that worker and aborts in V (map.hash_fn is nil).
 	fn gtk_on_destroy(_window voidptr, data voidptr) int {
 		mut s := unsafe { &WebViewSession(data) }
 		set_bool(s.quit, true)
 		s.window = unsafe { nil }
+		C.exit(0)
 		return 0
 	}
 

@@ -175,15 +175,20 @@ pub fn run[T](mut app T, html_filename string) ! {
 			ctx.logger.warn('native UI mode without a live display session')
 		}
 		_ := <-done
-	} else {
-		ctx.serve_forever(html_filename, chan int{cap: 1})
+		// On toolkit-owned-main-thread platforms the window's destroy handler has
+		// already called exit(0) once GTK finished tearing the window down (so
+		// WebKit got a clean shutdown and every thread - including the WebSocket
+		// server's disconnect worker that touches ctx.clients - is killed
+		// atomically). Running framework cleanup here instead races with that
+		// worker and aborts in V (map.hash_fn is nil), so we do not reach here.
+		return
 	}
+	ctx.serve_forever(html_filename, chan int{cap: 1})
 
-	// Shared graceful shutdown. The client-removal worker reads from a channel
-	// that is otherwise never closed, so it would outlive the process and race
-	// with the cleanup below on ctx.clients (a pre-existing bug that aborted in
-	// V). Stop the WS server first (no more on_close sends), close the channel,
-	// then join the worker so shutdown runs single-threaded and panic-free.
+	// Browser / detached-backend shutdown: the WS worker has returned (all
+	// clients gone), so the framework cleanup below does not race. Still join
+	// the client-removal worker (its channel is otherwise never closed) so the
+	// process exits cleanly instead of hanging on a live thread.
 	ctx.ws.free()
 	ctx.client_remove_chan.close()
 	rm_thread.wait()
@@ -191,9 +196,6 @@ pub fn run[T](mut app T, html_filename string) ! {
 		none)
 	ctx.close_displays()
 	ctx.logger.info('vxui shutdown complete')
-	// All cleanup done; terminate with a normal exit code. On toolkit-owned-main-
-	// thread platforms returning into libc/V atexit teardown races static
-	// destructors and aborts, so a clean exit(0) is the correct end state.
 	C.exit(0)
 }
 
