@@ -203,7 +203,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 	ctx.trigger_event(EventType.after_start, '', 'Application started', {}, none, none, none)
 
 	// Native WebView backends are now hosted in a child process (see
-	// WebViewDisplay.spawn), so the framework's main thread is free to run the
+	// DisplayBackend.spawn), so the framework's main thread is free to run the
 	// WebSocket service loop directly - identical to the external-browser path.
 	// A window close surfaces as that child exiting, which the WS layer observes
 	// as a client disconnect. No main-thread GTK ownership, no separate branch.
@@ -320,7 +320,7 @@ fn (mut ctx Context) serve_forever(html_filename string, done chan int) {
 }
 
 // is_host_mode reports whether THIS process is a native "browser" child launched
-// by WebViewDisplay.spawn (rather than the framework application itself).
+// by DisplayBackend.spawn (rather than the framework application itself).
 fn is_host_mode() bool {
 	return os.args.contains('--vxui-host')
 }
