@@ -76,6 +76,13 @@
 - **🌐 Cross-Platform** — Linux, macOS, and Windows support with auto browser detection
 - **📦 Lightweight** — Pure V implementation, no external dependencies
 - **🎯 htmx Integration** — Seamless integration with official htmx (no modifications required)
+- **🖥️ Native WebView (no system browser needed)** — On every desktop OS vxui can host the
+  UI in the platform's own web control — **WebKitGTK** on Linux, **WebView2 (Edge)** on
+  Windows, and **WKWebView** on macOS — instead of launching an external browser. Each native
+  window runs in its own lightweight child copy of the app (`--vxui-host`) driven over a private
+  control pipe, so the framework reuses the normal WebSocket service loop and gets full process
+  isolation. Select with `app.config.display.id = 'webkitgtk' | 'webview2' | 'wkwebview'`
+  (or leave it `'auto'` to prefer the native backend when present).
 - **🔧 Backend-to-Frontend** — Execute JavaScript from backend with `run_js()`
 - **👥 Multi-Client Support** — Optional support for multiple browser clients
 - **🚀 Single Executable** — Embed frontend files into binary for easy distribution
@@ -117,7 +124,7 @@ vxui = browser + htmx + websocket + V
 ### Prerequisites
 
 - [V](https://vlang.io) (v0.4.0 or later)
-- Chrome, Chromium, Edge, or Firefox
+- **Optional:** a system browser (Chrome / Chromium / Edge / Firefox) — only needed if you pick the external-browser backend. The default native WebView backend (WebKitGTK / WKWebView / WebView2) needs no browser installed.
 
 ### Install via VPM
 
@@ -184,8 +191,11 @@ fn main() {
 
 ### 3. Run
 
+> ⚠️ **Use the stable compiler.** The new V3 frontend is unstable for this project
+> (memory spikes on the WebKitGTK headers), so always pass `-old-compiler` first:
+
 ```bash
-v run main.v
+v -old-compiler run main.v
 ```
 
 ## 🏗️ Architecture
@@ -217,10 +227,32 @@ flowchart TB
 ### How it works
 
 1. **Start** — vxui finds a free port and starts a WebSocket server
-2. **Launch** — Detects and launches your system browser with the HTML file
+2. **Launch** — By default opens the UI in the platform's native WebView
+   (WebKitGTK on Linux, WKWebView on macOS, WebView2 on Windows). Each native
+   window runs in a lightweight child copy of the app, hosted via a private
+   control pipe — no system browser required. Set `config.display.id` to a
+   browser id to launch an external browser instead.
 3. **Connect** — Browser connects to WebSocket server via `vxui-ws.js`
 4. **Interact** — User actions trigger WebSocket messages instead of HTTP requests
 5. **Respond** — V handlers return HTML fragments for dynamic updates
+
+### Native WebView backend (no system browser needed)
+
+On every desktop OS vxui can host the UI in the platform's own web control:
+**WebKitGTK** on Linux, **WKWebView** on macOS, and **WebView2 (Edge)** on
+Windows. Instead of launching an external browser, vxui forks a *lightweight
+child copy of the same app* in "host" mode (`--vxui-host <pipe>`) and talks to
+it over a private control pipe — `HostHandshake` carries the page URL + window
+geometry + token (the token never touches the command line), and `HostControl`
+carries resize / move / title / close commands. The child owns its own OS window
+and main thread, so the framework reuses the exact same WebSocket service loop
+and gains full **process isolation**: a WebView crash can never take down the
+host app, and the window closing simply shows up as a WebSocket client
+disconnect that drives a clean shutdown. It also keeps single-executable
+(`run_packed`) distribution simple, because the host is the same binary.
+
+Select the backend with `app.config.display.id` (`'webkitgtk'` / `'wkwebview'`
+/ `'webview2'`), or leave it `'auto'` to prefer the native backend when present.
 
 ## 📚 Examples
 
@@ -268,7 +300,7 @@ Run examples:
 
 ```bash
 cd examples/test
-v run main.v
+v -old-compiler run main.v
 ```
 
 ## ✨ Features
@@ -387,8 +419,8 @@ fn main() {
 
 Build single executable:
 ```bash
-v -prod main.v           # Production build (~1.4 MB)
-v -prod -compress main.v # Compressed build (smaller)
+v -old-compiler -prod main.v           # Production build (~1.4 MB)
+v -old-compiler -prod -compress main.v # Compressed build (smaller)
 ```
 
 Result: A single `.exe` file containing all frontend assets!
@@ -499,6 +531,11 @@ vxui auto-detects and supports:
 | Edge | ✅ | ✅ | ✅ |
 | Firefox | ✅ | ✅ | ✅ |
 | Brave | ✅ | ❌ | ❌ |
+
+> **Prefer zero-install?** Leave `config.display.id = 'auto'` (the default): on Linux/macOS/Windows
+> vxui automatically hosts the UI in the OS-native WebView (WebKitGTK / WKWebView / WebView2) in a
+> separate lightweight child process — no browser install required. Pick an explicit browser id
+> above only when you want the external-browser path.
 
 ## 📖 Documentation
 

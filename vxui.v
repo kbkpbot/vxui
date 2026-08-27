@@ -21,7 +21,19 @@ const verb_strings = {
 	'post':   .post
 	'put':    .put
 	'delete': .delete
-	'patch':  .patch
+	'patch': .patch
+}
+
+// vxui_signal_handler asks the run loop to shut down by writing one byte to the
+// reserved self-pipe write fd. This is async-signal-safe (a stack local plus a
+// plain C write, no allocation and no V runtime calls); the loop polls the read
+// end and breaks, running the normal cleanup path. The write fd (23) is reserved
+// by run() via dup2; if that reservation failed the handler is never installed,
+// so Ctrl-C falls back to the default termination (the host child still exits via
+// PR_SET_PDEATHSIG, so no orphan webview remains).
+fn vxui_signal_handler(sig os.Signal) {
+	mut b := u8(1)
+	C.write(23, voidptr(&b), 1)
 }
 
 // Context is the main struct of vxui
@@ -29,6 +41,8 @@ pub struct Context {
 mut:
 	ws_port            u16
 	ws                 websocket.Server
+	shutdown_read_fd   int
+	shutdown_write_fd  int
 	display            Display = NullDisplay{}
 	display_session    ?DisplaySession
 	display_sessions   []DisplaySession
@@ -104,7 +118,16 @@ fn init[T](mut app T) ! {
 
 // run opens the `html_filename` in browser and starts the event loop
 pub fn run[T](mut app T, html_filename string) ! {
+	// A copy of this binary launched with --vxui-host is a native "browser"
+	// child: it owns one OS window + its own main thread and renders the page
+	// the parent framework serves over WebSocket. It must NOT start the
+	// framework (WS server, routes, lifecycle) - just the window.
+	if is_host_mode() {
+		host_main()
+		return
+	}
 	mut ctx := context_of(mut app)
+	mut cleaned := false
 
 	ctx.trigger_event(EventType.before_start, '', 'Starting application', {}, none, none, none)
 
@@ -117,12 +140,31 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	init(mut app)!
 
+	// Graceful shutdown on Ctrl-C / SIGTERM. A self-pipe lets the OS signal
+	// handler (which runs in a C/signal context and must stay async-signal-safe)
+	// wake the run loop without touching V state: it writes one byte to a reserved
+	// write fd, and the loop polls the read end. This closes both native-WebView
+	// (the host child is sent 'close') and external-browser backends cleanly,
+	// instead of leaving a detached browser open on Ctrl-C.
+	ctx.setup_signal_shutdown()
+
 	ctx.routes = generate_routes(app)!
 
 	// Start client removal handler goroutine (serializes removal to prevent races)
 	rm_thread := spawn fn [mut ctx] () {
 		ctx.process_client_removals()
 	}()
+
+	// On any early `!` exit from run(), terminate host children and log shutdown.
+	// (True panics are not interceptable in this V version; robustness there comes
+	// from PR_SET_PDEATHSIG in the host child, which exits when the parent dies.)
+	defer {
+		if !cleaned {
+			ctx.close_displays()
+			ctx.teardown_signal_shutdown()
+			ctx.logger.info('vxui shutdown complete')
+		}
+	}
 
 	// Apply dev mode settings
 	resolved_backend := resolve_backend_id(&ctx.config, ctx.config.display.id)
@@ -143,9 +185,10 @@ pub fn run[T](mut app T, html_filename string) ! {
 		title:  ctx.config.window.title
 	}
 	ctx.display_session = ctx.display.spawn(html_filename, session_cfg) or {
-		// A failed spawn (e.g. no browser found, or a reserved backend not
-		// yet implemented) must not leave the WS server/port bound.
-		ctx.ws.free()
+		// A failed spawn (e.g. no browser found, or a backend id without a
+		// native implementation such as the reserved `android`) must not leave
+		// the WS server/port bound; the deferred cleanup closes displays and
+		// frees the WS server.
 		return err
 	}
 
@@ -159,37 +202,14 @@ pub fn run[T](mut app T, html_filename string) ! {
 
 	ctx.trigger_event(EventType.after_start, '', 'Application started', {}, none, none, none)
 
-	is_native_ui := backend_family(resolved_backend) == .embedded
-	ui_on_main := is_native_ui && native_ui_owns_main_thread()
-
-	if ui_on_main {
-		done := chan int{cap: 1}
-		spawn fn [mut ctx, html_filename, done] () {
-			ctx.serve_forever(html_filename, done)
-		}()
-		if mut sess := ctx.display_session {
-			sess.wait_closed() or { ctx.logger.warn('ui loop: ${err}') }
-		} else {
-			ctx.logger.warn('native UI mode without a live display session')
-		}
-		// serve_forever breaks on its own once the window is closed (it checks
-		// sess.is_closed()) and signals done, so by the time we get here its
-		// worker is finished. Stop the WS server, join the client-removal worker
-		// (no thread left touching ctx.clients), fire the lifecycle events, then
-		// return: the main thread unwinds and the process exits normally - no
-		// forced C.exit, no teardown race. close_displays() is intentionally
-		// skipped here: the GTK/WebKit window is already destroyed by the time we
-		// reach this point, so re-freeing it would touch torn-down state.
-		_ := <-done
-		ctx.ws.free()
-		ctx.client_remove_chan.close()
-		rm_thread.wait()
-		ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
-			none)
-		ctx.logger.info('vxui shutdown complete')
-		return
-	}
+	// Native WebView backends are now hosted in a child process (see
+	// WebViewDisplay.spawn), so the framework's main thread is free to run the
+	// WebSocket service loop directly - identical to the external-browser path.
+	// A window close surfaces as that child exiting, which the WS layer observes
+	// as a client disconnect. No main-thread GTK ownership, no separate branch.
 	ctx.serve_forever(html_filename, chan int{cap: 1})
+
+	cleaned = true
 
 	// Browser / detached-backend shutdown: serve_forever has returned on the
 	// main thread (all clients gone / close timer), so the cleanup below runs
@@ -202,6 +222,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 	ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
 		none)
 	ctx.close_displays()
+	ctx.teardown_signal_shutdown()
 	ctx.logger.info('vxui shutdown complete')
 	return
 }
@@ -255,6 +276,14 @@ fn (mut ctx Context) serve_forever(html_filename string, done chan int) {
 		// Close-timer / all-clients-disconnected grace logic
 		break_now, had_clients, empty_since, last_client_time = ctx.should_shutdown(had_clients,
 			empty_since, last_client_time, client_count)
+		if ctx.shutdown_read_fd > 0 {
+			mut b := u8(0)
+			n := C.read(ctx.shutdown_read_fd, voidptr(&b), 1)
+			if n > 0 {
+				ctx.logger.info('Shutdown signal received')
+				break_now = true
+			}
+		}
 		if break_now {
 			// Ask the native window to close through its own GTK/Win32 chain
 			// so the UI loop unwinds and the process exits cleanly.
@@ -290,17 +319,72 @@ fn (mut ctx Context) serve_forever(html_filename string, done chan int) {
 	done <- 1
 }
 
-// native_ui_owns_main_thread reports whether this platform's native WebView
-// toolkit requires the process main thread (Linux/WebKitGLib).
-fn native_ui_owns_main_thread() bool {
-	$if linux {
-		return true
-	}
-	return false
+// is_host_mode reports whether THIS process is a native "browser" child launched
+// by WebViewDisplay.spawn (rather than the framework application itself).
+fn is_host_mode() bool {
+	return os.args.contains('--vxui-host')
 }
 
-// native_ui_owns_main_thread reports whether this platform's native WebView
-// toolkit requires the process main thread (Linux/WebKitGLib).
+// host_main is the entry point for a native-browser child process. The parent
+// passes the inherited control-pipe read fd as the argument right after
+// `--vxui-host` (no env, so the token/url never leak via `ps`). host_main reads
+// it, builds its one window, and runs that platform's UI loop until the window
+// is closed - then exits. The framework (the parent) keeps running its
+// WebSocket service loop untouched.
+fn host_main() {
+	mut ctl_fd := 0
+	for i, a in os.args {
+		if a == '--vxui-host' && i + 1 < os.args.len {
+			ctl_fd = os.args[i + 1].int()
+		}
+	}
+	if ctl_fd <= 0 {
+		eprintln('vxui host: control pipe fd not provided')
+		exit(1)
+	}
+	host_run(ctl_fd)
+	exit(0)
+}
+
+// setup_signal_shutdown installs SIGINT/SIGTERM handlers that request a graceful
+// shutdown, using a self-pipe so the handler stays async-signal-safe. The write
+// end is dup2'd onto fd 23 (kept open, non-CLOEXEC) and the read end is made
+// non-blocking; serve_forever polls it. On Windows there are no POSIX signals, so
+// this is a no-op there.
+fn (mut ctx Context) setup_signal_shutdown() {
+	$if !windows {
+		mut sp := [2]int{}
+		if C.pipe(&sp[0]) != 0 {
+			return
+		}
+		wfd := C.dup2(sp[1], 23)
+		C.close(sp[1])
+		if wfd != 23 {
+			C.close(sp[0])
+			return
+		}
+		// Make the read end non-blocking so the poll in the loop never blocks.
+		flags := int(C.fcntl(sp[0], 3, voidptr(0))) // F_GETFL
+		C.fcntl(sp[0], 4, voidptr(flags | 2048)) // F_SETFL | O_NONBLOCK
+		ctx.shutdown_read_fd = sp[0]
+		ctx.shutdown_write_fd = 23
+		os.signal_opt(.int, vxui_signal_handler) or {}
+		os.signal_opt(.term, vxui_signal_handler) or {}
+	}
+}
+
+// teardown_signal_shutdown closes the self-pipe fds (idempotent). Safe to call
+// from both the normal and error cleanup paths.
+fn (mut ctx Context) teardown_signal_shutdown() {
+	if ctx.shutdown_read_fd > 0 {
+		C.close(ctx.shutdown_read_fd)
+		ctx.shutdown_read_fd = 0
+	}
+	if ctx.shutdown_write_fd > 0 {
+		C.close(ctx.shutdown_write_fd)
+		ctx.shutdown_write_fd = 0
+	}
+}
 
 // should_shutdown encapsulates the close-timer / all-clients-disconnected
 // grace logic of the run loop. It returns whether the loop should break

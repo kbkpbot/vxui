@@ -56,8 +56,9 @@ pub fn (mut ctx Context) set_webview_config(config WebViewConfig) {
 }
 
 // close_displays tears down all live display sessions. No-op for the detached
-// external-browser backend; REQUIRED for in-process backends (WebView) so
-// native windows/handles are released on shutdown.
+// external-browser backend; REQUIRED for native WebView host backends so the
+// host child process is signalled to close and its pipe/handle is released on
+// shutdown.
 pub fn (mut ctx Context) close_displays() {
 	for mut s in ctx.display_sessions {
 		s.close() or {}
@@ -66,6 +67,7 @@ pub fn (mut ctx Context) close_displays() {
 		s.close() or {}
 	}
 	ctx.display_sessions = []
+	ctx.display_session = none
 }
 
 // get_port returns the WebSocket port

@@ -224,8 +224,9 @@ pub mut:
 (`browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system`) — all of
 which use `ProcessDisplay`. The embedded-family backends
 (`webview2`, `wkwebview`, `webkitgtk`, `android`) keep their options on
-`WebViewConfig` and ignore `BrowserConfig`. `webkitgtk` is implemented on
-Linux; the others are reserved and ignore `BrowserConfig`. `BrowserConfig.engine`
+`WebViewConfig` and ignore `BrowserConfig`. `webkitgtk` (Linux), `wkwebview`
+(macOS) and `webview2` (Windows) are fully implemented as native WebView host
+backends; only `android` is still a reserved placeholder. `BrowserConfig.engine`
 is now a `BrowserEngine` (see below); the remaining fields are unchanged.
 
 ### Display backends (pluggable)
@@ -285,7 +286,7 @@ clearly.
 | Family    | id(s)                                                  | Backend        | Notes |
 |-----------|--------------------------------------------------------|----------------|-------|
 | process   | `browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system` | `ProcessDisplay` | External browser launch (default); engine chosen by the id, or by `BrowserConfig.engine` when id is `browser`. |
-| embedded  | `webview2`, `wkwebview`, `webkitgtk`, `android`        | `WebViewDisplay` | `webkitgtk` is implemented on Linux (WebKitGTK); others are **reserved** and return `native WebView FFI not implemented on this platform (<id>)` until their native FFI is added. |
+| embedded  | `webview2`, `wkwebview`, `webkitgtk`, `android`        | `WebViewDisplay` | `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView) and `webview2` (Windows/WebView2) are fully implemented as independent native WebView host processes; `android` is **reserved** and returns `native WebView FFI not implemented on this platform (android)`. |
 
 Per-backend configuration lives on the backend's own struct and is merged by the
 backend during `spawn` — the core only forwards generic `DisplaySessionConfig`
@@ -305,7 +306,8 @@ app.set_browser_config(vxui.BrowserConfig{ engine: .chrome, headless: true })
 app.set_webview_config(vxui.WebViewConfig{})
 
 // Tear down all live sessions (driven automatically on shutdown; required for
-// in-process backends such as WebView to release native windows/handles).
+// native WebView host backends so the host child process is signalled to close
+// and its pipe/handle is released).
 app.close_displays()
 ```
 
@@ -320,14 +322,19 @@ is a ready template: fill `WebViewConfig` and implement its `spawn`.
 > **Note:** `BrowserConfig`-specific options (incl. `remote_debug_port`,
 > `window_mode`, `devtools`) apply only to process-family backends. Dev-mode's
 > automatic `devtools` toggle is gated on the resolved backend's family being
-> `process`, so the embedded backends that are not yet implemented are never affected.
+> `process`, so the reserved `android` embedded backend (and any future
+> unimplemented id) is never affected.
 
 ### Config-file display switching
 
 A user can switch display backends by editing a JSON config file — no code
 change needed. The file is applied at `run()` startup via `apply_config_file`,
 which overlays the file onto `Config` (code-set values not present in the file
-are preserved; unknown fields are ignored). Resolution order (first exists wins):
+are preserved; unknown fields are ignored). Concretely, `close_timer_ms`,
+`multi_client`, and `evict_on_new` are read as optional fields (`?int` / `?bool`),
+so a config file that omits them will NOT reset a code-set value to `0`/`false` —
+this previously caused apps launched with a `vxui.json` (that lacked those keys)
+to exit immediately at startup. Resolution order (first exists wins):
 `--config <path>` / `--config=<path>` CLI flag, the `VXUI_CONFIG` environment
 variable, `./vxui.json` in the working directory, then `~/.vxui/config.json`.
 
@@ -341,7 +348,8 @@ Example `vxui.json`:
 }
 ```
 
-Change `"id"` to `"webview2"` to target the WebView backend (reserved on non-Linux). The
+Change `"id"` to `"webview2"` to target the WebView backend (implemented on
+Windows; `wkwebview` on macOS, `webkitgtk` on Linux). The
 recognised keys are `display.id`, `browser.*` (`engine`, `headless`, `devtools`,
 `no_sandbox`, `window_mode`, `profile_dir`, `user_data_dir`, `preferred_path`,
 `remote_debug_port`, `custom_args`), `window.*`, `dev.*` (`auto_devtools`), and
@@ -489,18 +497,22 @@ app.broadcast(broadcast_msg)!
 ### Pluggable Display Backend
 
 The UI presentation layer is behind a backend-agnostic `Display` interface, so
-the same app can run in an external browser or (in future) an in-process
-WebView/WebKit without changing routing, `run_js`, window management, or
-shutdown. Select the backend and configure it:
+the same app can run in an external browser or a native WebView host (each
+native backend runs the page in an independent lightweight child process via
+the `--vxui-host` control-pipe protocol) without changing routing, `run_js`,
+window management, or shutdown. Select the backend and configure it:
 
 ```v
 // Default: external system browser
 app.config.display.id = 'browser'
 app.set_browser_config(vxui.BrowserConfig{ engine: .chrome, headless: true })
 
-// Future: in-process WebView/WebKit
-// webkitgtk is implemented on Linux; webview2/wkwebview/android are reserved
-// and return a clear error until their native FFI is added.
+// Native WebView host backends (each runs in an independent lightweight child
+// process via the --vxui-host control-pipe protocol):
+//   webkitgtk  -> Linux   (WebKitGTK)      [implemented]
+//   wkwebview  -> macOS   (WKWebView)      [implemented]
+//   webview2   -> Windows (WebView2)       [implemented]
+//   android    -> reserved placeholder (returns "not implemented on this platform")
 app.config.display.id = 'webview2'
 app.set_webview_config(vxui.WebViewConfig{})
 ```
@@ -508,14 +520,17 @@ app.set_webview_config(vxui.WebViewConfig{})
 Construction is fully generic — `new_display(id, &Config)` extracts each
 backend's own sub-config (`Config.browser` / `Config.webview`). `close()` is
 driven on shutdown via `close_displays()`, which is a no-op for the detached
-browser but required for in-process backends to release native windows.
+browser but required for native WebView host backends so the host child process
+is released.
 
 The embedded backends (`webview2`, `wkwebview`, `webkitgtk`, `android`) use
-`WebViewDisplay`. On Linux, `webkitgtk` is fully implemented (WebKitGTK native
-window); the others are scaffolding whose `spawn` returns `native WebView FFI
-not implemented on this platform (<id>)` — they are the extension point for
-adding a real web-control backend. No edits to core wiring are needed; see the
-*Display backends (pluggable)* subsection above for the full interface contract.
+`WebViewDisplay`. `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView)
+and `webview2` (Windows/WebView2) are fully implemented as independent native
+WebView host processes; only `android` is scaffolding whose `spawn` returns
+`native WebView FFI not implemented on this platform (android)` — it is the
+extension point for adding a real web-control backend. No edits to core wiring
+are needed; see the *Display backends (pluggable)* subsection above for the full
+interface contract.
 
 You can also select the backend without touching code, via a config file:
 see *Config-file display switching* under the *Display backends (pluggable)*

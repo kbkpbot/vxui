@@ -1,6 +1,7 @@
 module vxui
 
 import os
+import x.json2
 
 $if linux {
 	fn C.malloc(size usize) voidptr
@@ -15,8 +16,13 @@ $if linux {
 	// their own variant (display_windows.v -> WebView2, future display_macos.v ->
 	// WKWebView, future display_android.v -> JNI android.webkit.WebView).
 	//
-	// It must provide the embedded-family hook contract shared with the other
-	// variants: embedded_native_id / embedded_spawn / embedded_session_*.
+	// KEY DESIGN: this backend does NOT render in-process. embedded_spawn launches a
+	// *child copy of the same vxui binary* in host mode (--vxui-host); that child
+	// owns one GTK window + the GLib main loop and renders the page the parent
+	// framework serves over WebSocket. Window ops (resize/title/position/close) are
+	// forwarded to the child over an inherited control pipe. This keeps every
+	// GTK/WebKit call on the child's own thread - no cross-thread hazards, process
+	// isolation, and the framework reuses the external-browser lifecycle verbatim.
 
 	// NOTE: pointer params/returns use `voidptr` (not `&C.GtkWidget`). When a `fn
 	// C.*` lives in an imported module, V can otherwise emit an implicit `int`
@@ -31,7 +37,6 @@ $if linux {
 	#include <gdk/gdkx.h>
 	#include <webkit2/webkit2.h>
 
-
 	fn C.gtk_init_check(argc voidptr, argv voidptr) bool
 	fn C.gtk_window_new(typ int) voidptr
 	fn C.gtk_window_set_default_size(w voidptr, width int, height int)
@@ -43,76 +48,24 @@ $if linux {
 	fn C.gtk_container_add(c voidptr, child voidptr)
 	fn C.gtk_widget_show_all(w voidptr)
 	fn C.gtk_widget_destroy(w voidptr)
+	fn C.gtk_main()
+	fn C.gtk_main_quit()
 	fn C.gtk_scrolled_window_new(hadj voidptr, vadj voidptr) voidptr
 	fn C.webkit_web_view_new() voidptr
 	fn C.webkit_web_view_load_uri(view voidptr, uri &char)
 	fn C.g_idle_add(cb voidptr, data voidptr) u32
 	fn C.g_signal_connect_data(instance voidptr, detailed_signal &char, c_handler voidptr, data voidptr, destroy_notify voidptr, connect_flags int) u64
-	// GLib main-loop primitives: we drive the loop ourselves with
-	// g_main_context_iteration (instead of gtk_main) so we can stop it via a
-	// flag and drain pending events on teardown — mirroring webview/webview.
-	fn C.g_main_context_iteration(context voidptr, may_block int) int
+	fn C.prctl(option int, arg int) int
 
-	// --- raw shared-state helpers -------------------------------------------------
-	// V's managed references (@[heap] structs, &bool literals) corrupt when they
-	// round-trip through voidptr into a C callback (they get collected/relocated
-	// by V's GC, and a &bool literal lowers to a NULL pointer). So the close flag
-	// is plain C-managed memory, mirroring webview/webview.
-	fn set_bool(p voidptr, v bool) {
-		unsafe { *(&bool(p)) = v }
-	}
-
-	fn get_bool(p voidptr) bool {
-		return unsafe { *(&bool(p)) }
-	}
-
-	// gtk_on_delete_event handles the window-close request (WM_DELETE_WINDOW).
-	// GTK's delete-event signal callback is (widget, event, user_data): the
-	// shared session pointer arrives as the 3rd argument, so the handler MUST
-	// declare all three parameters or user_data is dropped (a V FFI footgun that
-	// previously handed the handler a garbage pointer and crashed teardown).
-	// We set the raw quit flag and return FALSE so GTK runs its normal destroy
-	// chain (-> WebKit teardown), which is clean in V once the flag is raw memory.
-	fn gtk_on_delete_event(_window voidptr, _event voidptr, data voidptr) int {
-		mut s := unsafe { &WebViewSession(data) }
-		set_bool(s.quit, true)
-		return 0 // FALSE: allow the default destroy to proceed
-	}
-
-	// gtk_on_destroy runs at the end of the normal destroy chain, after GTK has
-	// torn the window down (so WebKit got a clean shutdown). The destroy signal
-	// callback is (widget, user_data) - 2 arguments - so user_data maps cleanly
-	// here. We record closure so the UI loop (wait_closed) and serve_forever
-	// (which breaks on is_closed) unwind; the main thread then joins its workers
-	// and returns normally - a clean exit with no forced C.exit.
-	fn gtk_on_destroy(_window voidptr, data voidptr) int {
-		mut s := unsafe { &WebViewSession(data) }
-		set_bool(s.quit, true)
-		s.window = unsafe { nil }
-		return 0
-	}
-
-	// close_idle asks the main-loop thread to destroy the window. Called from a
-	// g_idle_add marshaled out of another thread (e.g. the WebSocket worker).
-	fn close_idle(data voidptr) int {
-		mut s := unsafe { &WebViewSession(data) }
-		set_bool(s.quit, true)
-		if s.window != unsafe { nil } {
-			C.gtk_widget_destroy(s.window)
-		}
-		return 0
-	}
-
-	// embedded_native_id reports the native WebView backend carried by this build.
+	// --- native id ---------------------------------------------------------------
 	fn embedded_native_id() string {
 		return 'webkitgtk'
 	}
 
-	// embedded_spawn runs on the CALLER'S thread — which for native UI is the
-	// process MAIN thread (vxui.run hands it over). GTK/WebKit are initialized
-	// here and every later touch happens either here or via g_idle_add marshaling
-	// from other threads. wait_closed() then parks this same thread in gtk_main().
-	fn embedded_spawn(id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	// embedded_spawn launches a child copy of THIS binary in host mode and returns a
+	// HostSession handle. The child owns the GTK window + main loop; the parent keeps
+	// running the framework's WebSocket service loop, unchanged.
+	fn embedded_spawn(mut _b WebViewDisplay, id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
 		if id != 'webkitgtk' {
 			return error('native WebView FFI not implemented on this platform (${id})')
 		}
@@ -121,130 +74,187 @@ $if linux {
 			return error('HTML file not found: ${abs_path}')
 		}
 		url := launch_url(abs_path, cfg.port, cfg.token)
+		mut fds := [2]int{}
+		if C.pipe(&fds[0]) != 0 {
+			return error('failed to create host control pipe')
+		}
+		r := fds[0]
+		w := fds[1]
+		// Clear FD_CLOEXEC on the read end so it survives the child's exec.
+		C.fcntl(r, 2, voidptr(0))
+		mut self := os.executable()
+		if self == '' {
+			self = '/proc/self/exe'
+		}
+		pid := os.fork()
+		if pid < 0 {
+			return error('failed to fork host process')
+		}
+		if pid == 0 {
+			// child: if the parent dies (crash / Ctrl-C), exit too so the window
+			// doesn't outlive the framework as an orphan.
+			C.prctl(1, 15)
+			// child: hand the read end to host_run as an argv, then exec self in host mode
+			os.execvp(self, [self, '--vxui-host', '${r}']) or {
+				eprintln('vxui: failed to launch host: ${err}')
+				exit(1)
+			}
+		}
+		// parent: drop our copy of the read end, write the handshake, keep the write end
+		C.close(r)
+		write_host_handshake(w, HostHandshake{
+			url:    url
+			token:  cfg.token
+			width:  cfg.width
+			height: cfg.height
+			x:      cfg.x
+			y:      cfg.y
+			title:  cfg.title
+		})
+		return HostSession{pid: pid, ctl_write: w}
+	}
+
+	// host_run builds one WebKitGTK window, loads the page, and runs the GLib main
+	// loop until the window is destroyed. It is only ever called inside a host-mode
+	// child process (see run()'s is_host_mode guard).
+	fn host_run(ctl_fd int) {
+		hs := read_host_handshake(ctl_fd)
+		if hs.url == '' {
+			return
+		}
 		if !C.gtk_init_check(unsafe { nil }, unsafe { nil }) {
-			return error('webkitgtk: gtk_init_check failed (no display?)')
+			eprintln('vxui host: gtk_init_check failed (no display?)')
+			return
 		}
-		window := C.gtk_window_new(0) // GTK_WINDOW_TOPLEVEL
+		window := C.gtk_window_new(0)
 		if window == unsafe { nil } {
-			return error('webkitgtk: gtk_window_new returned null')
+			return
 		}
-		C.gtk_window_set_default_size(window, cfg.width, cfg.height)
-		if cfg.title != '' {
-			C.gtk_window_set_title(window, &char(cfg.title.str))
+		if hs.width > 0 && hs.height > 0 {
+			C.gtk_window_set_default_size(window, hs.width, hs.height)
 		}
-		C.gtk_window_set_position(window, 1) // GTK_WIN_POS_CENTER
+		if hs.title != '' {
+			C.gtk_window_set_title(window, &char(hs.title.str))
+		}
+		C.gtk_window_set_position(window, 1)
 		scrolled := C.gtk_scrolled_window_new(unsafe { nil }, unsafe { nil })
 		C.gtk_container_add(window, scrolled)
 		view := C.webkit_web_view_new()
 		C.gtk_container_add(scrolled, view)
-		quit := C.malloc(1)
-		set_bool(quit, false)
-		session := &WebViewSession{
-			window: window
-			view:   view
-			quit:   quit
-		}
-		// Window-close (WM_DELETE_WINDOW) and the normal destroy chain share the
-		// session pointer as user_data. Both set the raw quit flag; the destroy
-		// handler also nils the window so is_closed() reports closure.
-		C.g_signal_connect_data(window, &char(c'delete-event'), voidptr(gtk_on_delete_event),
-			voidptr(session), unsafe { nil }, 0)
-		C.g_signal_connect_data(window, &char(c'destroy'), voidptr(gtk_on_destroy),
-			voidptr(session), unsafe { nil }, 0)
-		C.webkit_web_view_load_uri(view, &char(url.str))
+		C.webkit_web_view_load_uri(view, &char(hs.url.str))
 		C.gtk_widget_show_all(window)
-		return session
+		eprintln('vxui host: window opened')
+		C.g_signal_connect_data(window, &char(c'delete-event'), voidptr(gtk_host_on_delete),
+			voidptr(0), unsafe { nil }, 0)
+		C.g_signal_connect_data(window, &char(c'destroy'), voidptr(gtk_host_on_destroy),
+			voidptr(0), unsafe { nil }, 0)
+		// Forward control commands to the GTK thread via g_idle_add.
+		spawn fn [ctl_fd, window] () {
+			host_read_control(ctl_fd, window)
+		}()
+		C.gtk_main()
 	}
 
-	// embedded_session_close asks the window to close through its own GTK chain
-	// (posted on the main-loop thread via g_idle_add). When the window is the
-	// user-closed one this is a no-op; otherwise it triggers the same clean
-	// destroy path. wait_closed() then returns normally so framework cleanup runs.
-	fn embedded_session_close(s &WebViewSession) {
-		if s.window == unsafe { nil } {
-			return
+	fn host_read_control(fd int, window voidptr) {
+		host_read_lines(fd, window)
+	}
+
+	fn host_read_lines(fd int, window voidptr) {
+		mut buf := ''
+		mut chunk := [4096]u8{}
+		for {
+			n := C.read(fd, voidptr(&chunk[0]), usize(4096))
+			if n <= 0 {
+				// Control pipe closed: the parent (framework) exited or closed
+				// it. Tear the window down so this host process exits cleanly
+				// instead of lingering with no framework to serve it. Mirrors
+				// the macOS host's EOF->terminate behavior.
+				eprintln('vxui host: control pipe closed, closing window')
+				apply_host_control_line('{"cmd":"close"}', window)
+				break
+			}
+			buf += chunk[..n].bytestr()
+			for {
+				mut nl := -1
+				for i in 0..buf.len {
+					if buf[i] == 10 { nl = i; break }
+				}
+				if nl < 0 { break }
+				line := buf[..nl].trim_space()
+				buf = buf[nl + 1..]
+				if line.len > 0 {
+					apply_host_control_line(line, window)
+				}
+			}
 		}
-		C.g_idle_add(voidptr(close_idle), voidptr(s))
 	}
 
-	// ---- idle-queue marshaling for window mutations ----
-	enum GtkJobKind {
-		resize
-		move_win
-		set_title
-	}
-
-	struct GtkJob {
+	struct HostCmdJob {
 	mut:
-		kind GtkJobKind
-		win  voidptr
-		a    int
-		b    int
-		cstr voidptr // NUL-terminated copy, freed after run (set_title only)
+		window voidptr
+		cmd   string
+		w     int
+		h     int
+		x     int
+		y     int
+		title string
 	}
 
-	fn heap_cstr(s string) voidptr {
-		p := C.malloc(usize(s.len + 1))
-		C.memcpy(p, voidptr(s.str), usize(s.len + 1))
-		return p
-	}
-
-	fn gtk_job_idle(data voidptr) int {
-		j := &GtkJob(data)
-		match j.kind {
-			.resize { C.gtk_window_resize(j.win, j.a, j.b) }
-			.move_win { C.gtk_window_move(j.win, j.a, j.b) }
-			.set_title { C.gtk_window_set_title(j.win, &char(j.cstr)) }
-		}
-		if j.cstr != unsafe { nil } {
-			C.free(j.cstr)
+	fn host_apply_idle(data voidptr) int {
+		mut j := unsafe { &HostCmdJob(data) }
+		if j.window != unsafe { nil } {
+			match j.cmd {
+				'resize' { C.gtk_window_resize(j.window, j.w, j.h) }
+				'move' { C.gtk_window_move(j.window, j.x, j.y) }
+				'title' { C.gtk_window_set_title(j.window, &char(j.title.str)) }
+				'close' { C.gtk_widget_destroy(j.window) }
+				else {}
+			}
 		}
 		C.free(data)
-		return 0 // remove the source after one run
+		return 0
 	}
 
-	fn post_gtk_job(kind GtkJobKind, win voidptr, a int, b int, s string) {
-		mut job := unsafe { &GtkJob(C.malloc(sizeof(GtkJob))) }
-		job.kind = kind
-		job.win = win
-		job.a = a
-		job.b = b
-		job.cstr = unsafe { nil }
-		if kind == .set_title {
-			job.cstr = heap_cstr(s)
+	fn apply_host_control_line(line string, window voidptr) {
+		mut j := unsafe { &HostCmdJob(C.malloc(sizeof(HostCmdJob))) }
+		ctrl := json2.decode[HostControl](line) or {
+			C.free(j)
+			return
 		}
-		C.g_idle_add(voidptr(gtk_job_idle), job)
+		j.window = window
+		j.cmd = ctrl.cmd
+		j.w = ctrl.w
+		j.h = ctrl.h
+		j.x = ctrl.x
+		j.y = ctrl.y
+		j.title = ctrl.title
+		C.g_idle_add(voidptr(host_apply_idle), voidptr(j))
 	}
 
-	fn embedded_session_set_size(s &WebViewSession, w int, h int) {
-		if s.window != unsafe { nil } {
-			post_gtk_job(.resize, s.window, w, h, '')
+	fn read_host_handshake(ctl_fd int) HostHandshake {
+		mut buf := ''
+		mut chunk := [4096]u8{}
+		for {
+			n := C.read(ctl_fd, voidptr(&chunk[0]), usize(4096))
+			if n <= 0 { break }
+			buf += chunk[..n].bytestr()
+			for i in 0..buf.len {
+				if buf[i] == 10 {
+					return json2.decode[HostHandshake](buf[..i].trim_space()) or {
+						HostHandshake{}
+					}
+				}
+			}
 		}
+		return HostHandshake{}
 	}
 
-	fn embedded_session_set_title(s &WebViewSession, t string) {
-		if s.window != unsafe { nil } {
-			post_gtk_job(.set_title, s.window, 0, 0, t)
-		}
+	fn gtk_host_on_delete(_window voidptr, _event voidptr, _data voidptr) int {
+		return 0 // FALSE: allow the default destroy chain
 	}
 
-	fn embedded_session_set_position(s &WebViewSession, x int, y int) {
-		if s.window != unsafe { nil } {
-			post_gtk_job(.move_win, s.window, x, y, '')
-		}
-	}
-
-	// embedded_session_wait_closed drives the GLib main loop on the caller's
-	// thread until the window is destroyed. The delete-event and destroy handlers
-	// (and programmatic close) set the raw quit flag, so we stop once it is seen
-	// and return. The destroy handler runs synchronously inside an iteration
-	// (after GTK has already torn the window and WebKit down), so by the time we
-	// observe quit the teardown is complete - no extra drain iteration needed.
-	// On return the caller joins its workers and the process exits normally.
-	fn embedded_session_wait_closed(mut _s WebViewSession) {
-		for !get_bool(_s.quit) {
-			C.g_main_context_iteration(unsafe { nil }, 1)
-		}
-		C.free(_s.quit)
+	fn gtk_host_on_destroy(_window voidptr, _data voidptr) int {
+		C.gtk_main_quit()
+		return 0
 	}
 }

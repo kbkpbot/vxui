@@ -77,9 +77,9 @@ fn apply_query(rows []Employee, p QueryParams) ([]Employee, int) {
 	return filtered[start..end], filtered.len
 }
 
-const departments = ['研发', '销售', '人事', '财务', '运营']
+const departments = ['研发', '销售', '人事', '财务', '运营']!
 
-const statuses = ['在职', '在职', '在职', '休假', '离职']
+const statuses = ['在职', '在职', '在职', '休假', '离职']!
 
 // gen_rows deterministically generates n employees
 fn gen_rows(n int) []Employee {

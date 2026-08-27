@@ -15,9 +15,9 @@ mut:
 	window         map[string]json2.Any
 	dev            map[string]json2.Any
 	token          string
-	multi_client   bool
-	evict_on_new   bool
-	close_timer_ms int
+	multi_client   ?bool
+	evict_on_new   ?bool
+	close_timer_ms ?int
 }
 
 // load_config_file reads and decodes a JSON config file into a FileConfig.
@@ -178,9 +178,15 @@ pub fn apply_config_file(mut cfg Config, path string) ! {
 	if fc.token != '' {
 		cfg.token = fc.token
 	}
-	cfg.multi_client = fc.multi_client
-	cfg.evict_on_new = fc.evict_on_new
-	cfg.close_timer_ms = fc.close_timer_ms
+	if mc := fc.multi_client {
+		cfg.multi_client = mc
+	}
+	if eon := fc.evict_on_new {
+		cfg.evict_on_new = eon
+	}
+	if ctm := fc.close_timer_ms {
+		cfg.close_timer_ms = ctm
+	}
 }
 
 fn browser_engine_from_str(s string) BrowserEngine {

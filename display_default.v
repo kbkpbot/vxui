@@ -1,11 +1,14 @@
 module vxui
 
 // Platform guard: active only where no dedicated display_<os>.v variant exists
-// (macOS / Android today). Belt-and-suspenders: V applies filename filtering in
-// directory builds but NOT when a module is imported from .vmodules, so the
-// compile-time conditions guarantee exactly one variant defines the symbols.
+// (Android today, plus any future platform). Belt-and-suspenders: V applies
+// filename filtering in directory builds but NOT when a module is imported from
+// .vmodules, so the compile-time conditions guarantee exactly one variant
+// defines the symbols.
 $if linux {
 } $else $if windows {
+} $else $if macos {
+} $else $if android {
 } $else {
 	// Fallback implementation of the embedded (native WebView) display family for
 	// platforms without a native variant.
@@ -14,13 +17,13 @@ $if linux {
 	// family compiles per platform:
 	//   display_windows.v -> WebView2          (Windows)
 	//   display_linux.v   -> WebKitGTK         (Linux)
-	//   display_default.v -> this stub         (everything else: macOS, Android, ...)
+	//   display_macos.v   -> WKWebView         (macOS)
+	//   display_default.v -> this stub         (everything else: Android, ...)
 	// so on those other platforms every embedded backend id reports a clear error
 	// instead of failing to link.
 	//
 	// Adding a new platform = dropping in a sibling file that provides the same
-	// hook contract (embedded_native_id / embedded_spawn / embedded_session_*):
-	//   - display_macos.v   : WKWebView via Objective-C runtime FFI
+	// hook contract (embedded_native_id / embedded_spawn / host_run):
 	//   - display_android.v : android.webkit.WebView via JNI
 	// No changes to display.v are required.
 
@@ -30,17 +33,14 @@ $if linux {
 		return ''
 	}
 
-	fn embedded_spawn(id string, _html_path string, _cfg DisplaySessionConfig) !DisplaySession {
+	fn embedded_spawn(mut _b WebViewDisplay, id string, _html_path string, _cfg DisplaySessionConfig) !DisplaySession {
 		return error('native WebView FFI not implemented on this platform (${id})')
 	}
 
-	fn embedded_session_close(_s &WebViewSession) {}
-
-	fn embedded_session_wait_closed(_s &WebViewSession) {}
-
-	fn embedded_session_set_size(_s &WebViewSession, _w int, _h int) {}
-
-	fn embedded_session_set_title(_s &WebViewSession, _t string) {}
-
-	fn embedded_session_set_position(_s &WebViewSession, _x int, _y int) {}
+	// host_run is the entry point for a native-browser child process (see
+	// vxui.v's host_main). On platforms without a native variant it is never
+	// reached - embedded_spawn above errors before forking a child.
+	fn host_run(_ctl_fd int) {
+		eprintln('vxui host: native WebView not supported on this platform')
+	}
 }

@@ -2,11 +2,19 @@ module vxui
 
 import os
 import rand
+import x.json2
+
+// Low-level libc helpers used by the self-hosted native backend. The host is a
+// child process driven over an inherited pipe, so we need raw pipe/fd/kill and
+// waitpid rather than the higher-level os.Process wrappers.
+fn C.pipe(fds &int) int
+fn C.kill(pid int, sig int) int
+fn C.waitpid(pid int, status &int, options int) int
 
 // DisplayFamily groups display backends by how they present the page.
 pub enum DisplayFamily {
 	process  // external child process (e.g. a system browser)
-	embedded // in-process native view (e.g. WebView2 / WKWebView / WebKitGTK)
+	embedded // hosted native view in an independent child process (e.g. WebView2 / WKWebView / WebKitGTK)
 }
 
 struct DisplayBackendInfo {
@@ -235,6 +243,8 @@ fn get_firefox_args(profile_path string, width int, height int, kiosk bool, url 
 	return args
 }
 
+// spawn opens `html_path` in an external system browser, returning a detached
+// ProcessSession. The browser is launched as a separate OS process.
 pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
 	mut abs_path := os.abs_path(html_path)
 	is_temp := abs_path.starts_with(os.temp_dir())
@@ -374,12 +384,17 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 
 struct ProcessSession {}
 
+// close is a no-op: an external browser runs as a detached OS process not
+// managed from inside this process.
 pub fn (mut s ProcessSession) close() ! {}
 
+// set_size is a no-op for the external browser backend (not yet supported).
 pub fn (mut s ProcessSession) set_size(w int, h int) {}
 
+// set_title is a no-op for the external browser backend (not yet supported).
 pub fn (mut s ProcessSession) set_title(t string) {}
 
+// set_position is a no-op for the external browser backend (not yet supported).
 pub fn (mut s ProcessSession) set_position(x int, y int) {}
 
 // wait_closed returns immediately: an external browser is a detached process,
@@ -392,59 +407,128 @@ pub fn (mut s ProcessSession) is_closed() bool {
 	return false
 }
 
-// WebViewConfig holds in-process WebView/WebKit backend options. @[heap] so a
+// WebViewConfig holds native WebView/WebKit backend options. @[heap] so a
 // reference can be taken.
 @[heap]
 pub struct WebViewConfig {}
 
-// WebViewDisplay is the in-process WebView/WebKit backend. The platform FFI
-// lives in per-platform files picked by V's platform-dependent file mechanism
-// (display_windows.v / display_linux.v / display_default.v); this shared code
-// only dispatches to their hook contract.
+// WebViewDisplay is the native WebView/WebKit backend. It does NOT render
+// in-process: it launches a *child* copy of the same vxui binary in "host"
+// mode (see host_run / --vxui-host) and talks to that host over a private
+// control pipe. The child owns its own OS window and main thread, so the
+// framework reuses the exact external-browser lifecycle - run() drives
+// serve_forever on the main thread, and a window close is observed as a WS
+// client disconnect. Keeping GTK/WebView2 entirely inside the child removes
+// every cross-thread hazard (the old second-window crash) and gives process
+// isolation: a WebView failure can never take down the host application.
 pub struct WebViewDisplay {
 	config &WebViewConfig
 	id     string
 }
 
+// spawn launches the native WebView host child process for this display and
+// returns a HostSession handle.
 pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
-	return embedded_spawn(b.id, html_path, cfg)
+	return embedded_spawn(mut b, b.id, html_path, cfg)
 }
 
-struct WebViewSession {
+// HostHandshake is the single message the parent writes to the control pipe
+// right after forking the host. It carries everything the host needs to put
+// the page on screen; the token never touches the command line.
+pub struct HostHandshake {
+	url   string
+	token string
+	width int
+	height int
+	x     int
+	y     int
+	title string
+}
+
+// HostControl is a line-delimited JSON command forwarded to a running host
+// (resize / move / title / close). HostSession writes these; host_run reads
+// and applies them on the host's own UI thread.
+pub struct HostControl {
+	cmd   string
+	w     int
+	h     int
+	x     int
+	y     int
+	title string
+}
+
+// HostSession is the framework-side handle to one hosted native window. It is
+// a detached child process: window ops are forwarded over the control pipe, and
+// "closed" is observed when the child exits (the framework learns this via the
+// WS client disconnect). There is no in-process window state to track.
+pub struct HostSession {
 mut:
-	window     voidptr // GtkWidget* (linux) / HWND (windows)
-	view       voidptr // WebKitWebView* (linux) / ICoreWebView2* (windows)
-	controller voidptr // WebKitWebView* unused / ICoreWebView2Controller* (windows)
-	quit       voidptr // raw malloc'd bool shared with GTK callbacks (NOT V-managed)
+	pid       int
+	ctl_write int
+	reaped    bool
 }
 
-pub fn (mut s WebViewSession) close() ! {
-	embedded_session_close(&s)
+// close asks the host child process to close its window and then closes the
+// control pipe.
+pub fn (mut s HostSession) close() ! {
+	if s.reaped {
+		return
+	}
+	write_host_cmd(s.ctl_write, HostControl{cmd: 'close'})
+	// Closing the write end lets the child's control-pipe reader see EOF and tear
+	// down its window if it is still alive.
+	C.close(s.ctl_write)
+	// Reap the host child so it does not linger as a zombie until process exit.
+	mut status := 0
+	C.waitpid(s.pid, &status, 0)
+	s.reaped = true
 }
 
-pub fn (mut s WebViewSession) set_size(w int, h int) {
-	embedded_session_set_size(&s, w, h)
+// set_size forwards a resize command to the host's own UI thread.
+pub fn (mut s HostSession) set_size(w int, h int) {
+	write_host_cmd(s.ctl_write, HostControl{cmd: 'resize', w: w, h: h})
 }
 
-pub fn (mut s WebViewSession) set_title(t string) {
-	embedded_session_set_title(&s, t)
+// set_title forwards a title change to the host child process.
+pub fn (mut s HostSession) set_title(t string) {
+	write_host_cmd(s.ctl_write, HostControl{cmd: 'title', title: t})
 }
 
-pub fn (mut s WebViewSession) set_position(x int, y int) {
-	embedded_session_set_position(&s, x, y)
+// set_position forwards a move command to the host child process.
+pub fn (mut s HostSession) set_position(x int, y int) {
+	write_host_cmd(s.ctl_write, HostControl{cmd: 'move', x: x, y: y})
 }
 
-// wait_closed parks the caller until the window is gone. On platforms whose
-// toolkit must own the main thread this blocks inside the native loop; the
-// per-platform body lives in display_<os>.v (embedded_session_wait_closed).
-pub fn (mut s WebViewSession) wait_closed() ! {
-	embedded_session_wait_closed(mut &s)
+// wait_closed blocks until the hosted child process exits.
+pub fn (mut s HostSession) wait_closed() ! {
+	mut status := 0
+	C.waitpid(s.pid, &status, 0)
 }
 
-// is_closed reports whether the native window has been destroyed. The service
-// worker polls this to break its loop as soon as the user closes the window.
-pub fn (mut s WebViewSession) is_closed() bool {
-	return s.window == unsafe { nil }
+// is_closed reports whether the hosted child process is still alive.
+pub fn (mut s HostSession) is_closed() bool {
+	if s.reaped {
+		return true
+	}
+	return C.kill(s.pid, 0) != 0
+}
+
+// write_host_cmd serializes one control command as a JSON line and writes it to
+// the host control pipe. Failures are ignored - the host is best-effort driven
+// and the framework's real source of truth is the WS connection.
+fn write_host_cmd(fd int, cmd HostControl) {
+	s := json2.encode(cmd)
+	buf := s.str
+	C.write(fd, voidptr(buf), usize(s.len))
+	C.write(fd, voidptr(c'\n'), 1)
+}
+
+// write_host_handshake serializes the initial handshake as a JSON line.
+fn write_host_handshake(fd int, hs HostHandshake) {
+	s := json2.encode(hs)
+	buf := s.str
+	C.write(fd, voidptr(buf), usize(s.len))
+	C.write(fd, voidptr(c'\n'), 1)
 }
 
 // NullDisplay is the default, no-op display backend. It satisfies the `Display`
@@ -452,6 +536,8 @@ pub fn (mut s WebViewSession) is_closed() bool {
 // interface field; run() replaces it with a real backend via new_display().
 struct NullDisplay {}
 
+// spawn always errors: NullDisplay is a placeholder used before a real backend
+// is selected by run(); it cannot open any window.
 pub fn (mut d NullDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
 	return error('no display backend configured; call vxui.run with a valid config.display.id')
 }

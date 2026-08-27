@@ -1,34 +1,36 @@
 module vxui
 
 import os
+import x.json2
 
 $if windows {
 	// Windows implementation of the embedded (native WebView) display family:
 	// Microsoft Edge WebView2 hosting the vxui HTML.
 	//
-	// Selected by V's platform-dependent file mechanism: this file compiles ONLY on
-	// Windows (`_windows` suffix). It must provide the embedded-family hook
-	// contract shared with the other variants: embedded_native_id / embedded_spawn
-	// / embedded_session_*.
+	// Like the Linux/WebKitGTK variant, each native window is a *separate* child
+	// copy of the same vxui binary, launched in `--vxui-host` mode (self-reexec).
+	// The parent and host talk over an inherited control pipe using the shared
+	// HostHandshake / HostControl protocol (see display.v). This keeps one uniform
+	// code path across platforms and isolates every window on its own main thread.
 	//
-	// Strategy: link WebView2Loader (C-linkage export
-	// CreateCoreWebView2EnvironmentWithOptions) and drive the asynchronous creation
-	// through completion-handler COM objects we allocate ourselves. Win32 APIs
-	// (HWND, message loop, window management) are used directly.
-	//
-	// The main thread owns the Win32 message loop (mirrors GTK's gtk_main):
-	// wait_closed() parks inside wv2_message_loop() until PostQuitMessage.
+	// The host process owns the Win32 message loop on its main thread (mirrors
+	// GTK's gtk_main). Control messages read from the pipe are marshalled onto
+	// that thread via PostMessage.
 
 	#flag windows -luser32
 	#flag windows -lole32
 	#flag windows -loleaut32
 	#flag windows -lWebView2Loader
+	#flag windows -ladvapi32
 
 	// ---- Win32 types ----
 	type HWND = voidptr
 	type HINSTANCE = voidptr
+	type HANDLE = voidptr
 	type ATOM = u16
 	type LRESULT = voidptr
+	type BOOL = int
+	type DWORD = u32
 
 	struct POINT {
 		x i32
@@ -42,6 +44,40 @@ $if windows {
 		lparam  voidptr
 		time    u32
 		pt      POINT
+	}
+
+	struct SECURITY_ATTRIBUTES {
+		n_length             u32
+		lp_security_descriptor voidptr
+		b_inherit_handle     BOOL
+	}
+
+	struct STARTUPINFOW {
+		cb              u32
+		lp_reserved     voidptr
+		lp_desktop      voidptr
+		lp_title        voidptr
+		dw_x            u32
+		dw_y            u32
+		dw_x_size       u32
+		dw_y_size       u32
+		dw_x_count_chars u32
+		dw_y_count_chars u32
+		dw_fill_attribute u32
+		dw_flags        u32
+		w_show_window   u16
+		cb_reserved2    u16
+		lp_reserved2    voidptr
+		h_std_input     voidptr
+		h_std_output    voidptr
+		h_std_error     voidptr
+	}
+
+	struct PROCESS_INFORMATION {
+		h_process    voidptr
+		h_thread     voidptr
+		dw_process_id u32
+		dw_thread_id u32
 	}
 
 	struct WNDCLASSEXW {
@@ -60,27 +96,21 @@ $if windows {
 	}
 
 	// ---- WebView2 vtable structs ----
-	// Every WebView2 interface starts with the 3 IUnknown methods, then its own.
 	struct ICoreWebView2EnvironmentVtbl {
-		query_interface                 fn (this voidptr, riid voidptr, ppv voidptr) int
-		add_ref                         fn (this voidptr) u32
-		release                         fn (this voidptr) u32
-		create_core_webview2_controller fn (this voidptr, hwnd voidptr, handler voidptr) int
+		query_interface                  fn (this voidptr, riid voidptr, ppv voidptr) int
+		add_ref                          fn (this voidptr) u32
+		release                          fn (this voidptr) u32
+		create_core_webview2_controller  fn (this voidptr, hwnd voidptr, handler voidptr) int
 	}
 
 	struct ICoreWebView2Environment {
 		vtbl &ICoreWebView2EnvironmentVtbl
 	}
 
-	// ICoreWebView2Controller vtable. The method order follows the WebView2 SDK
-	// (icorewebview2controller.h): IUnknown (3) + 24 controller methods.
-	// Only get_CoreWebView2 (index 27) is used; others are placeholder slots.
 	struct ICoreWebView2ControllerVtbl {
-		// IUnknown (indices 0-2)
 		query_interface fn (this voidptr, riid voidptr, ppv voidptr) int
 		add_ref         fn (this voidptr) u32
 		release         fn (this voidptr) u32
-		// ICoreWebView2Controller (indices 3-27)
 		get_is_visible                       fn (this voidptr, visible voidptr) int
 		put_is_visible                       fn (this voidptr, visible int) int
 		show                                 fn (this voidptr) int
@@ -104,7 +134,7 @@ $if windows {
 		add_accelerator_key_pressed          fn (this voidptr, handler voidptr, token voidptr) int
 		remove_accelerator_key_pressed       fn (this voidptr, token voidptr) int
 		add_zoom_factor_changed              fn (this voidptr, handler voidptr, token voidptr) int
-		remove_zoom_factor_changed           fn (this voidptr, token voidptr) int
+		remove_zoom_factor_changed          fn (this voidptr, token voidptr) int
 		get_core_webview2                    fn (this voidptr, core voidptr) int
 	}
 
@@ -112,9 +142,6 @@ $if windows {
 		vtbl &ICoreWebView2ControllerVtbl
 	}
 
-	// ICoreWebView2 vtable. NOTE: the method order below is reconstructed from the
-	// WebView2 SDK and MUST be regenerated from the installed icorewebview2.h if
-	// indices drift. Only `navigate` is used.
 	struct ICoreWebView2Vtbl {
 		query_interface fn (this voidptr, riid voidptr, ppv voidptr) int
 		add_ref         fn (this voidptr) u32
@@ -128,7 +155,6 @@ $if windows {
 		vtbl &ICoreWebView2Vtbl
 	}
 
-	// Completion-handler interfaces we implement.
 	struct IEnvCompletedVtbl {
 		query_interface fn (this voidptr, riid voidptr, ppv voidptr) int
 		add_ref         fn (this voidptr) u32
@@ -153,7 +179,7 @@ $if windows {
 		ctx  voidptr
 	}
 
-	// ---- shared context passed through the handlers ----
+	// ---- shared context passed through the WebView2 handlers ----
 	struct Wv2Ctx {
 		hwnd       voidptr
 		env        voidptr
@@ -161,7 +187,6 @@ $if windows {
 		core       voidptr
 		done_event voidptr
 		url        voidptr // wide string (malloc'd)
-		session    voidptr // &WebViewSession, nilled on WM_DESTROY so is_closed() works
 	}
 
 	// ---- FFI: Win32 + WebView2Loader ----
@@ -189,6 +214,11 @@ $if windows {
 	fn C.DefWindowProcW(hwnd HWND, msg u32, wparam voidptr, lparam voidptr) LRESULT
 	fn C.malloc(size usize) voidptr
 	fn C.free(ptr voidptr)
+	fn C.CreatePipe(read voidptr, write voidptr, sa voidptr, size u32) int
+	fn C.CreateProcessW(app_name voidptr, cmd_line voidptr, proc_attr voidptr, thread_attr voidptr, inherit BOOL, flags DWORD, env voidptr, cwd voidptr, si voidptr, pi voidptr) int
+	fn C.CloseHandle(h HANDLE) int
+	fn C._open_osfhandle(h HANDLE, flags int) int
+	fn C._close(fd int) int
 
 	// ---- UTF-8 -> UTF-16LE helper (caller frees with C.free) ----
 	fn to_wide(s string) voidptr {
@@ -224,7 +254,6 @@ $if windows {
 	}
 
 	// ---- COM completion handlers ----
-	// QueryInterface: return `this` for anything (simple-handler hack).
 	fn env_handler_qi(this voidptr, _riid voidptr, ppv voidptr) int {
 		unsafe {
 			*()&voidptr(ppv) = this
@@ -247,10 +276,9 @@ $if windows {
 		}
 		ctx := ()*Wv2Ctx(this)
 		ctx.env = env
-		// Create the controller against our host window.
 		p := ()*ICoreWebView2Environment(env)
 		f := p.vtbl.create_core_webview2_controller
-		f(env, ctx.hwnd, make_ctrl_completed_handler(ctx))
+		f(env, ctx.hwnd, make_ctrl_completed_handler(voidptr(ctx)))
 		return 0 // S_OK
 	}
 
@@ -278,7 +306,6 @@ $if windows {
 			return errcode
 		}
 		ctx.controller = controller
-		// ICoreWebView2Controller::get_CoreWebView2 (vtable index 3).
 		pc := ()*ICoreWebView2Controller(controller)
 		get_core := pc.vtbl.get_core_webview2
 		mut core := unsafe { nil }
@@ -287,7 +314,6 @@ $if windows {
 			return -1
 		}
 		ctx.core = core
-		// ICoreWebView2::Navigate.
 		p := ()*ICoreWebView2(core)
 		nav := p.vtbl.navigate
 		return nav(core, ctx.url)
@@ -318,25 +344,38 @@ $if windows {
 	}
 
 	// ---- Win32 window + message loop ----
-	// ---- Win32 constants ----
 	const wm_destroy = u32(0x0002)
 	const wm_close = u32(0x0010)
+	const wm_user_cmd = u32(0x0400 + 1) // WM_USER + 1: apply a HostControl command
+
+	// Control job marshalled from the pipe reader onto the UI thread.
+	struct Wv2CmdJob {
+		code  int // 0=resize, 1=move, 2=title, 3=close
+		w     int
+		h     int
+		x     int
+		y     int
+		title voidptr // wide string (malloc'd, freed by handler) or nil
+	}
 
 	fn wv2_wnd_proc(hwnd HWND, msg u32, wparam voidptr, lparam voidptr) LRESULT {
 		if msg == wm_destroy {
-			// Nil the session's window so the service worker's is_closed()
-			// poll breaks its loop and the process exits with the UI.
-			ud := C.GetWindowLongPtrW(hwnd, gwlp_userdata)
-			if ud != 0 {
-				unsafe {
-					ctx := &Wv2Ctx(voidptr(ud))
-					if ctx.session != unsafe { nil } {
-						sess := &WebViewSession(ctx.session)
-						sess.window = unsafe { nil }
-					}
-				}
-			}
 			C.PostQuitMessage(0)
+			return LRESULT(0)
+		}
+		if msg == wm_user_cmd {
+			job := &Wv2CmdJob(lparam)
+			match job.code {
+				0 { C.MoveWindow(hwnd, 0, 0, job.w, job.h, 1) }
+				1 { C.MoveWindow(hwnd, job.x, job.y, 0, 0, 1) }
+				2 { if job.title != unsafe { nil } { C.SetWindowTextW(hwnd, job.title) } }
+				3 { C.DestroyWindow(hwnd) }
+				else {}
+			}
+			if job.title != unsafe { nil } {
+				C.free(job.title)
+			}
+			C.free(voidptr(job))
 			return LRESULT(0)
 		}
 		return C.DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -375,103 +414,195 @@ $if windows {
 		}
 	}
 
-	// ---- embedded-family hook contract ----
+	// ---- embedded-family hook contract (self-reexec host) ----
 
-	// embedded_native_id reports the native WebView backend carried by this build.
 	fn embedded_native_id() string {
 		return 'webview2'
 	}
 
-	fn embedded_spawn(id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	// embedded_spawn forks a child copy of the same binary in --vxui-host mode,
+	// passing an inherited read end of a control pipe. The parent keeps the write
+	// end and feeds it the handshake + control commands.
+	fn embedded_spawn(mut _b WebViewDisplay, id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
 		if id != 'webview2' {
 			return error('native WebView FFI not implemented on this platform (${id})')
 		}
-		return wv2_spawn(html_path, cfg)
-	}
-
-	fn wv2_spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
 		abs_path := os.abs_path(html_path)
 		if !os.exists(abs_path) {
 			return error('HTML file not found: ${abs_path}')
 		}
 		url := launch_url(abs_path, cfg.port, cfg.token)
+
+		mut fds := [0, 0]int
+		mut sa := SECURITY_ATTRIBUTES{ n_length: u32(sizeof(SECURITY_ATTRIBUTES)), b_inherit_handle: 1 }
+		if C.CreatePipe(voidptr(&fds[0]), voidptr(&fds[1]), voidptr(&sa), 0) != 0 {
+			return error('failed to create host control pipe')
+		}
+		read_h := HANDLE(fds[0])
+		write_h := HANDLE(fds[1])
+		// Convert the write HANDLE to a CRT fd so the shared write_host_handshake /
+		// write_host_cmd (which call C.write) work on Windows too.
+		wfd := C._open_osfhandle(write_h, 1) // _O_WRONLY
+		if wfd < 0 {
+			return error('failed to wrap host control pipe write end')
+		}
+
+		self := os.executable()
+		if self == '' {
+			self = 'vxui'
+		}
+		arg := '${u64(read_h)}'
+		cmdline := to_wide('${self} --vxui-host ${arg}')
+		mut si := STARTUPINFOW{ cb: u32(sizeof(STARTUPINFOW)) }
+		mut pi := PROCESS_INFORMATION{}
+		ok := C.CreateProcessW(unsafe { nil }, cmdline, unsafe { nil }, unsafe { nil },
+			BOOL(1), DWORD(0), unsafe { nil }, unsafe { nil }, voidptr(&si), voidptr(&pi))
+		wide_free(cmdline)
+		if ok == 0 {
+			C._close(wfd)
+			return error('failed to launch host process')
+		}
+		// The read HANDLE was inherited by the child; close our copy.
+		C.CloseHandle(read_h)
+		C.CloseHandle(pi.h_thread)
+		C.CloseHandle(pi.h_process)
+
+		write_host_handshake(wfd, HostHandshake{
+			url:    url
+			token:  cfg.token
+			width:  cfg.width
+			height: cfg.height
+			x:      cfg.x
+			y:      cfg.y
+			title:  cfg.title
+		})
+		return HostSession{pid: int(pi.dw_process_id), ctl_write: wfd}
+	}
+
+	// host_run is executed inside the --vxui-host child: it reads the handshake,
+	// builds one WebView2 window, loads the page, and runs the message loop until
+	// the window is destroyed.
+	fn host_run(ctl_fd int) {
+		hs := read_host_handshake(ctl_fd)
+		if hs.url == '' {
+			return
+		}
+		url_w := to_wide(hs.url)
 		ctx := unsafe { &Wv2Ctx(C.malloc(sizeof(Wv2Ctx))) }
 		ctx.hwnd = unsafe { nil }
 		ctx.env = unsafe { nil }
 		ctx.controller = unsafe { nil }
 		ctx.core = unsafe { nil }
-		ctx.url = to_wide(url)
+		ctx.url = url_w
 
-		hwnd := wv2_create_host_window(cfg.title, cfg.width, cfg.height)
+		hwnd := wv2_create_host_window(hs.title, hs.width, hs.height)
 		ctx.hwnd = hwnd
+		eprintln('vxui host: window opened')
+		// Store ctl_fd on the window so the pipe reader can target this window.
+		C.SetWindowLongPtrW(hwnd, gwlp_userdata, isize(ctl_fd))
 		ctx.done_event = C.CreateEventW(unsafe { nil }, 1, 0, unsafe { nil })
 
 		env_handler := make_env_completed_handler(voidptr(ctx))
-		user_data := os.join_path(os.temp_dir(), 'vxui_webview2')
-		os.mkdir_all(user_data) or {}
-		udw := to_wide(user_data)
+		user_data := to_wide(os.join_path(os.temp_dir(), 'vxui_webview2'))
+		os.mkdir_all(os.temp_dir()) or {}
 
-		// Async environment creation; the completion handler chains into
-		// CreateCoreWebView2Controller and then Navigate.
-		hr := C.CreateCoreWebView2EnvironmentWithOptions(unsafe { nil }, udw, unsafe { nil },
+		hr := C.CreateCoreWebView2EnvironmentWithOptions(unsafe { nil }, user_data, unsafe { nil },
 			env_handler)
-		wide_free(udw)
+		wide_free(user_data)
 		if hr != 0 {
-			return error('webview2: CreateCoreWebView2EnvironmentWithOptions failed (${hr})')
+			C.free(url_w)
+			return
 		}
 
-		// Wait until the CoreWebView2 is created and has navigated.
 		res := C.WaitForSingleObject(ctx.done_event, 15000)
 		if res != 0 {
-			return error('webview2: timed out waiting for WebView creation')
+			C.free(url_w)
+			return
 		}
 		C.free(ctx.done_event)
-		return WebViewSession{
-			window:     hwnd
-			view:       ctx.core
-			controller: ctx.controller
-		}
-	}
 
-	fn embedded_session_close(s &WebViewSession) {
-		if s.window != unsafe { nil } {
-			// Call ICoreWebView2Controller::Close() to release WebView2
-			// resources before destroying the host window.
-			if s.controller != unsafe { nil } {
-				pc := unsafe { &ICoreWebView2Controller(s.controller) }
-				close_fn := pc.vtbl.close
-				close_fn(s.controller)
-			}
-			// Post WM_CLOSE to the message loop (thread-safe); the default
-			// handler calls DestroyWindow which emits WM_DESTROY → PostQuitMessage.
-			C.PostMessageW(HWND(s.window), wm_close, unsafe { nil }, unsafe { nil })
-		}
-	}
+		// Forward control commands onto the UI thread via PostMessage.
+		spawn fn [ctl_fd, hwnd] () {
+			host_read_control(ctl_fd, hwnd)
+		}()
 
-	// wait_closed parks the MAIN thread inside the Win32 message loop until
-	// the window is destroyed (PostQuitMessage). Mirrors the GTK approach:
-	// the toolkit owns the main thread.
-	fn embedded_session_wait_closed(_s &WebViewSession) {
 		wv2_message_loop()
+		C.free(url_w)
 	}
 
-	fn embedded_session_set_size(s &WebViewSession, w int, h int) {
-		if s.window != unsafe { nil } {
-			C.MoveWindow(HWND(s.window), 0, 0, w, h, 1)
+	// read_host_handshake reads the single JSON-line handshake the parent writes
+	// right after forking the host, carrying the page URL + window geometry.
+	fn read_host_handshake(ctl_fd int) HostHandshake {
+		mut buf := ''
+		mut chunk := [4096]u8{}
+		for {
+			n := C.read(ctl_fd, voidptr(&chunk[0]), usize(4096))
+			if n <= 0 { break }
+			buf += chunk[..n].bytestr()
+			for i in 0..buf.len {
+				if buf[i] == 10 {
+					return json2.decode[HostHandshake](buf[..i].trim_space()) or {
+						HostHandshake{}
+					}
+				}
+			}
+		}
+		return HostHandshake{}
+	}
+
+	fn host_read_control(fd int, hwnd HWND) {
+		host_read_lines(fd, hwnd)
+	}
+
+	fn host_read_lines(fd int, hwnd HWND) {
+		mut buf := ''
+		mut chunk := [4096]u8{}
+		for {
+			n := C.read(fd, voidptr(&chunk[0]), usize(4096))
+			if n <= 0 {
+				// Control pipe closed: the parent (framework) exited or closed
+				// it. Post a synthetic 'close' to the UI thread so the window is
+				// destroyed, the message loop unwinds, and this host process
+				// exits cleanly (consistent with the macOS/Linux hosts).
+				eprintln('vxui host: control pipe closed, closing window')
+				apply_host_control_line('{"cmd":"close"}', hwnd)
+				break
+			}
+			buf += chunk[..n].bytestr()
+			for {
+				mut nl := -1
+				for i in 0..buf.len {
+					if buf[i] == 10 { nl = i; break }
+				}
+				if nl < 0 { break }
+				line := buf[..nl].trim_space()
+				buf = buf[nl + 1..]
+				if line != '' {
+					apply_host_control_line(line, hwnd)
+				}
+			}
 		}
 	}
 
-	fn embedded_session_set_title(s &WebViewSession, t string) {
-		if s.window != unsafe { nil } {
-			wt := to_wide(t)
-			C.SetWindowTextW(HWND(s.window), wt)
-			wide_free(wt)
+	fn apply_host_control_line(line string, hwnd HWND) {
+		mut j := unsafe { &Wv2CmdJob(C.malloc(sizeof(Wv2CmdJob))) }
+		ctrl := json2.decode[HostControl](line) or {
+			C.free(j)
+			return
 		}
-	}
-
-	fn embedded_session_set_position(s &WebViewSession, x int, y int) {
-		if s.window != unsafe { nil } {
-			C.MoveWindow(HWND(s.window), x, y, 0, 0, 1)
+		j.w = ctrl.width
+		j.h = ctrl.height
+		j.x = ctrl.x
+		j.y = ctrl.y
+		j.title = unsafe { nil }
+		match ctrl.cmd {
+			'resize' { j.code = 0 }
+			'move' { j.code = 1 }
+			'title' { j.code = 2; j.title = to_wide(ctrl.title) }
+			'close' { j.code = 3 }
+			else { j.code = -1 }
 		}
+		// Marshal onto the UI thread; the wnd_proc frees j and j.title.
+		C.PostMessageW(hwnd, wm_user_cmd, voidptr(0), voidptr(j))
 	}
 }

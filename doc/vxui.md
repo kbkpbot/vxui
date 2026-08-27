@@ -368,7 +368,7 @@ mut:
 }
 ```
 
-DisplaySession is a live, presented window. It exposes only what a backend can meaningfully do after launch; all request/response traffic flows over WebSocket and never touches this interface. `wait_closed` blocks until the window is gone — for in-process backends (WebKitGTK) it parks inside the native toolkit loop; for detached backends (external browser) it returns immediately.
+DisplaySession is a live, presented window. It exposes only what a backend can meaningfully do after launch; all request/response traffic flows over WebSocket and never touches this interface. `wait_closed` blocks until the window is gone — for native WebView host backends it blocks until the hosted child process exits; for detached backends (external browser) it returns immediately.
 
 [[Return to contents]](#Contents)
 
@@ -415,7 +415,7 @@ fn (mut s ProcessSession) set_position(x int, y int)
 fn (mut s ProcessSession) wait_closed() !
 ```
 
-Returns immediately — an external browser is a detached process, there is no in-process window to await.
+Returns immediately — an external browser is a detached process, there is no host child process to await.
 
 [[Return to contents]](#Contents)
 
@@ -495,7 +495,7 @@ BrowserType represents different browser types
 ```v
 enum DisplayFamily {
 	process  // external child process (e.g. a system browser)
-	embedded // in-process native view (e.g. WebView2 / WKWebView / WebKitGTK)
+	embedded // hosted native view in an independent child process (e.g. WebView2 / WKWebView / WebKitGTK)
 }
 ```
 
@@ -662,7 +662,10 @@ pub mut:
 	// Browser settings
 	browser BrowserConfig
 
-	// WebView settings (in-process WebView/WebKit backend; implemented on Linux via webkitgtk)
+	// WebView settings: native WebView/WebKit host backends (WebKitGTK on Linux,
+	// WKWebView on macOS, WebView2 on Windows). Each is hosted in an independent
+	// lightweight child process via the --vxui-host control-pipe protocol; the
+	// `android` id is still a reserved placeholder.
 	webview WebViewConfig
 
 	// Display backend selection
@@ -734,7 +737,7 @@ close_client disconnects a specific client
 fn (mut ctx Context) close_displays()
 ```
 
-close_displays tears down all live display sessions. No-op for the detached external-browser backend; REQUIRED for in-process backends (WebView) so native windows/handles are released on shutdown.
+close_displays tears down all live display sessions. No-op for the detached external-browser backend; REQUIRED for native WebView host backends so the host child process is signalled to close and its pipe/handle is released on shutdown.
 
 [[Return to contents]](#Contents)
 
@@ -1288,7 +1291,7 @@ with_detail adds a detail to the error
 struct WebViewConfig {}
 ```
 
-WebViewConfig holds in-process WebView/WebKit backend options. Empty today; filled when a real WebView backend lands. @[heap] so a reference can be taken.
+WebViewConfig holds native WebView/WebKit host backend options. @[heap] so a reference can be taken.
 
 [[Return to contents]](#Contents)
 
@@ -1300,7 +1303,7 @@ struct WebViewDisplay {
 }
 ```
 
-WebViewDisplay is the in-process WebView/WebKit backend. On Linux it uses WebKitGTK to host the vxui HTML in a native window (via display_linux.v); other platforms return a clear `native WebView FFI not implemented` error until their native FFI is added.
+WebViewDisplay is the native WebView/WebKit host backend. It does NOT render in-process: it launches a *child* copy of the same vxui binary in "host" mode (see host_run / --vxui-host) and talks to that host over a private control pipe. The child owns its own OS window and main thread. `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView) and `webview2` (Windows/WebView2) are fully implemented; `android` returns a clear `native WebView FFI not implemented on this platform (android)` error until its native FFI is added.
 
 [[Return to contents]](#Contents)
 

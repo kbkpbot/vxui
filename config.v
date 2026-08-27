@@ -125,7 +125,10 @@ pub mut:
 	// Browser settings
 	browser BrowserConfig
 
-	// WebView settings (reserved: in-process WebView/WebKit backend, not yet implemented)
+	// WebView settings: native WebView/WebKit host backends (WebKitGTK on Linux,
+	// WKWebView on macOS, WebView2 on Windows). Each is hosted in an independent
+	// lightweight child process via the --vxui-host control-pipe protocol; the
+	// `android` id is still a reserved placeholder.
 	webview WebViewConfig
 
 	// Display backend selection
