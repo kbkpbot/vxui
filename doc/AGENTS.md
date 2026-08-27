@@ -25,7 +25,7 @@ vxui/
 ├── v.mod               # V module definition file
 ├── README.md           # Project documentation
 ├── LICENSE             # MIT License
-├── vxui.v              # Main framework: Context, run(), serve_forever, native_safe_exit
+├── vxui.v              # Main framework: Context, run(), serve_forever
 ├── config.v            # Config struct and defaults
 ├── configfile.v        # Config file (--config / vxui.json) parsing
 ├── display.v           # Display/DisplaySession interfaces, registry, ProcessDisplay

@@ -200,6 +200,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rpcID Collisions (JS)**: `generateRpcID()` now combines `Date.now()` with a counter so
   simultaneous htmx requests in the same millisecond no longer overwrite each other in
   `pendingRequests`
+- **Native WebView (WebKitGTK) window close no longer crashes or panics** — closing the
+  window (user X-click or programmatic `close()`) now tears the window down through the real
+  GTK/WebKit destroy chain and then exits **normally via `return` from `main`** instead of a
+  forced `exit(0)`. Two V FFI traps were fixed in the process: the GTK `delete-event` callback
+  is `(widget, event, user_data)` (the dropped 3rd arg had been handing the handler a garbage
+  pointer), and managed references (`@[heap]` structs, `&bool` literals) corrupt when they
+  round-trip through `voidptr` into a C callback — the close flag is now raw `C.malloc`'d
+  memory. The prior shutdown race between the main thread's cleanup and the WebSocket server's
+  disconnect worker touching `ctx.clients` (`map.hash_fn is nil`) is gone: the destroy handler
+  only records closure, `wait_closed` unwinds, `serve_forever` breaks on `is_closed()` and
+  signals `done`, the main thread joins the client-removal worker, fires `before_shutdown`,
+  logs `vxui shutdown complete`, and returns. `close_displays()` is intentionally skipped on
+  native close because the window is already torn down by then; `C.exit` declarations were
+  removed.
 
 ### Added
 
