@@ -174,12 +174,19 @@ pub fn run[T](mut app T, html_filename string) ! {
 		}
 		// serve_forever breaks on its own once the window is closed (it checks
 		// sess.is_closed()) and signals done, so by the time we get here its
-		// worker is finished. Join the client-removal worker so no thread is
-		// still touching ctx.clients, then return: the main thread unwinds and
-		// the process exits normally - no forced C.exit, no teardown race.
+		// worker is finished. Stop the WS server, join the client-removal worker
+		// (no thread left touching ctx.clients), fire the lifecycle events, then
+		// return: the main thread unwinds and the process exits normally - no
+		// forced C.exit, no teardown race. close_displays() is intentionally
+		// skipped here: the GTK/WebKit window is already destroyed by the time we
+		// reach this point, so re-freeing it would touch torn-down state.
 		_ := <-done
+		ctx.ws.free()
 		ctx.client_remove_chan.close()
 		rm_thread.wait()
+		ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
+			none)
+		ctx.logger.info('vxui shutdown complete')
 		return
 	}
 	ctx.serve_forever(html_filename, chan int{cap: 1})
