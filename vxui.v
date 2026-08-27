@@ -10,8 +10,6 @@ import log
 import sync
 import x.json2
 
-fn C.exit(code int)
-
 
 // verb_strings maps string to Verb enum
 // default_app_name is the fallback window/page title marker; a user-changed
@@ -174,21 +172,23 @@ pub fn run[T](mut app T, html_filename string) ! {
 		} else {
 			ctx.logger.warn('native UI mode without a live display session')
 		}
+		// serve_forever breaks on its own once the window is closed (it checks
+		// sess.is_closed()) and signals done, so by the time we get here its
+		// worker is finished. Join the client-removal worker so no thread is
+		// still touching ctx.clients, then return: the main thread unwinds and
+		// the process exits normally - no forced C.exit, no teardown race.
 		_ := <-done
-		// On toolkit-owned-main-thread platforms the window's destroy handler has
-		// already called exit(0) once GTK finished tearing the window down (so
-		// WebKit got a clean shutdown and every thread - including the WebSocket
-		// server's disconnect worker that touches ctx.clients - is killed
-		// atomically). Running framework cleanup here instead races with that
-		// worker and aborts in V (map.hash_fn is nil), so we do not reach here.
+		ctx.client_remove_chan.close()
+		rm_thread.wait()
 		return
 	}
 	ctx.serve_forever(html_filename, chan int{cap: 1})
 
-	// Browser / detached-backend shutdown: the WS worker has returned (all
-	// clients gone), so the framework cleanup below does not race. Still join
-	// the client-removal worker (its channel is otherwise never closed) so the
-	// process exits cleanly instead of hanging on a live thread.
+	// Browser / detached-backend shutdown: serve_forever has returned on the
+	// main thread (all clients gone / close timer), so the cleanup below runs
+	// single-threaded. Stop the WS server, close the client-removal channel and
+	// join its worker, fire before_shutdown, free displays, then return - the
+	// process exits normally rather than via a forced C.exit.
 	ctx.ws.free()
 	ctx.client_remove_chan.close()
 	rm_thread.wait()
@@ -196,7 +196,7 @@ pub fn run[T](mut app T, html_filename string) ! {
 		none)
 	ctx.close_displays()
 	ctx.logger.info('vxui shutdown complete')
-	C.exit(0)
+	return
 }
 
 // serve_forever runs the WebSocket service loop (client counting/grace window,

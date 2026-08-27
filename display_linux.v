@@ -52,7 +52,6 @@ $if linux {
 	// g_main_context_iteration (instead of gtk_main) so we can stop it via a
 	// flag and drain pending events on teardown — mirroring webview/webview.
 	fn C.g_main_context_iteration(context voidptr, may_block int) int
-	fn C.exit(code int)
 
 	// --- raw shared-state helpers -------------------------------------------------
 	// V's managed references (@[heap] structs, &bool literals) corrupt when they
@@ -83,16 +82,13 @@ $if linux {
 	// gtk_on_destroy runs at the end of the normal destroy chain, after GTK has
 	// torn the window down (so WebKit got a clean shutdown). The destroy signal
 	// callback is (widget, user_data) - 2 arguments - so user_data maps cleanly
-	// here. We record closure and terminate. We exit from HERE (not from the
-	// main thread's shutdown path) so all threads - notably the WebSocket
-	// server's disconnect-handling thread, which touches ctx.clients - are killed
-	// atomically by exit(0); running framework cleanup on the main thread instead
-	// races with that worker and aborts in V (map.hash_fn is nil).
+	// here. We record closure so the UI loop (wait_closed) and serve_forever
+	// (which breaks on is_closed) unwind; the main thread then joins its workers
+	// and returns normally - a clean exit with no forced C.exit.
 	fn gtk_on_destroy(_window voidptr, data voidptr) int {
 		mut s := unsafe { &WebViewSession(data) }
 		set_bool(s.quit, true)
 		s.window = unsafe { nil }
-		C.exit(0)
 		return 0
 	}
 
@@ -104,14 +100,6 @@ $if linux {
 		if s.window != unsafe { nil } {
 			C.gtk_widget_destroy(s.window)
 		}
-		return 0
-	}
-
-	// set_done_idle is the drain sentinel: once the loop has seen quit, we queue
-	// one more iteration so pending teardown events are fully processed before
-	// wait_closed returns.
-	fn set_done_idle(data voidptr) int {
-		set_bool(data, true)
 		return 0
 	}
 
@@ -248,21 +236,15 @@ $if linux {
 
 	// embedded_session_wait_closed drives the GLib main loop on the caller's
 	// thread until the window is destroyed. The delete-event and destroy handlers
-	// (and programmatic close) set the raw quit flag, so we stop once it is seen,
-	// then drain one more iteration to finish pending teardown (window destroy +
-	// WebKit shutdown). On return the caller runs framework cleanup and the
-	// process exits normally - no forced _exit/exit(0) in the close path.
+	// (and programmatic close) set the raw quit flag, so we stop once it is seen
+	// and return. The destroy handler runs synchronously inside an iteration
+	// (after GTK has already torn the window and WebKit down), so by the time we
+	// observe quit the teardown is complete - no extra drain iteration needed.
+	// On return the caller joins its workers and the process exits normally.
 	fn embedded_session_wait_closed(mut _s WebViewSession) {
 		for !get_bool(_s.quit) {
 			C.g_main_context_iteration(unsafe { nil }, 1)
 		}
-		done := C.malloc(1)
-		set_bool(done, false)
-		C.g_idle_add(voidptr(set_done_idle), done)
-		for !get_bool(done) {
-			C.g_main_context_iteration(unsafe { nil }, 1)
-		}
-		C.free(done)
 		C.free(_s.quit)
 	}
 }
