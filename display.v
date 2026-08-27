@@ -137,6 +137,13 @@ mut:
 	set_size(w int, h int)
 	set_title(t string)
 	set_position(x int, y int)
+	// wait_closed blocks until the window is gone. Backends that hand the
+	// caller's thread to a native toolkit loop (GTK/WebView2) park inside it;
+	// detached backends (external browser) return immediately.
+	wait_closed() !
+	// is_closed reports whether the window has already been destroyed (e.g. the
+	// user closed it). The service worker uses it to break its loop promptly.
+	is_closed() bool
 }
 
 // Display is the pluggable backend that turns an HTML file into one or more
@@ -375,129 +382,69 @@ pub fn (mut s ProcessSession) set_title(t string) {}
 
 pub fn (mut s ProcessSession) set_position(x int, y int) {}
 
+// wait_closed returns immediately: an external browser is a detached process,
+// there is no in-process window to await.
+pub fn (mut s ProcessSession) wait_closed() ! {}
+
+// is_closed is always false: an external browser is a detached process we do
+// not track from inside this process.
+pub fn (mut s ProcessSession) is_closed() bool {
+	return false
+}
+
 // WebViewConfig holds in-process WebView/WebKit backend options. @[heap] so a
 // reference can be taken.
 @[heap]
 pub struct WebViewConfig {}
 
-$if linux {
-	#pkgconfig webkit2gtk-4.1
-	#pkgconfig gtk+-3.0
-	// Pull in the real GTK/WebKit headers so the C compiler sees correct
-	// prototypes for the `fn C.*` calls below. V does not emit prototypes for
-	// `fn C.*` declarations, so without these the compiler assumes `int` returns
-	// and truncates 64-bit pointers (e.g. gtk_window_new) to 32 bits.
-	#include <gtk/gtk.h>
-	#include <webkit2/webkit2.h>
-
-	// C callback marshaled onto the GTK thread via g_idle_add to quit the loop.
-	fn gtk_quit_idle(data voidptr) int {
-		C.gtk_main_quit()
-		return 0
-	}
-
-	// NOTE: pointer params/returns use `voidptr` (not `&C.GtkWidget`). When a `fn
-	// C.*` lives in an imported module, V can otherwise emit an implicit `int`
-	// prototype and truncate 64-bit pointers to 32 bits.
-	fn C.gtk_init_check(argc voidptr, argv voidptr) bool
-	fn C.gtk_main()
-	fn C.gtk_main_quit()
-	fn C.gtk_window_new(typ int) voidptr
-	fn C.gtk_window_set_default_size(w voidptr, width int, height int)
-	fn C.gtk_window_set_title(w voidptr, title &char)
-	fn C.gtk_window_set_position(w voidptr, pos int)
-	fn C.gtk_window_close(w voidptr)
-	fn C.gtk_window_resize(w voidptr, width int, height int)
-	fn C.gtk_window_move(w voidptr, x int, y int)
-	fn C.gtk_container_add(c voidptr, child voidptr)
-	fn C.gtk_widget_show_all(w voidptr)
-	fn C.gtk_scrolled_window_new(hadj voidptr, vadj voidptr) voidptr
-	fn C.webkit_web_view_new() voidptr
-	fn C.webkit_web_view_load_uri(view voidptr, uri &char)
-	fn C.g_idle_add(cb voidptr, data voidptr) u32
-}
-
-// WebViewDisplay is the in-process WebView/WebKit backend. On Linux it uses
-// WebKitGTK to host the vxui HTML inside a native window; other platforms still
-// return the "not implemented" error until a native WebView lands there.
+// WebViewDisplay is the in-process WebView/WebKit backend. The platform FFI
+// lives in per-platform files picked by V's platform-dependent file mechanism
+// (display_windows.v / display_linux.v / display_default.v); this shared code
+// only dispatches to their hook contract.
 pub struct WebViewDisplay {
 	config &WebViewConfig
 	id     string
 }
 
 pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
-	$if linux {
-		abs_path := os.abs_path(html_path)
-		if !os.exists(abs_path) {
-			return error('HTML file not found: ${abs_path}')
-		}
-		url := launch_url(abs_path, cfg.port, cfg.token)
-		if !C.gtk_init_check(voidptr(0), voidptr(0)) {
-			return error('webkitgtk: gtk_init_check failed (no display?)')
-		}
-		window := C.gtk_window_new(0) // GTK_WINDOW_TOPLEVEL
-		if window == voidptr(0) {
-			return error('webkitgtk: gtk_window_new returned null')
-		}
-		C.gtk_window_set_default_size(window, cfg.width, cfg.height)
-		if cfg.title != '' {
-			C.gtk_window_set_title(window, &char(cfg.title.str))
-		}
-		C.gtk_window_set_position(window, 1) // GTK_WIN_POS_CENTER
-		scrolled := C.gtk_scrolled_window_new(voidptr(0), voidptr(0))
-		C.gtk_container_add(window, scrolled)
-		view := C.webkit_web_view_new()
-		C.gtk_container_add(scrolled, view)
-		C.webkit_web_view_load_uri(view, &char(url.str))
-		C.gtk_widget_show_all(window)
-		// Run the GTK main loop on its own OS thread so the vxui WebSocket
-		// event loop (on the caller's thread) keeps servicing clients.
-		spawn fn () {
-			C.gtk_main()
-		}()
-		return &WebViewSession{ window: voidptr(window), view: voidptr(view) }
-	} $else {
-		return error('native WebView FFI not implemented on this platform (${b.id})')
-	}
+	return embedded_spawn(b.id, html_path, cfg)
 }
 
 struct WebViewSession {
 mut:
-	window voidptr // GtkWidget*
-	view   voidptr // WebKitWebView*
+	window     voidptr // GtkWidget* (linux) / HWND (windows)
+	view       voidptr // WebKitWebView* (linux) / ICoreWebView2* (windows)
+	controller voidptr // WebKitWebView* unused / ICoreWebView2Controller* (windows)
+	quit       voidptr // raw malloc'd bool shared with GTK callbacks (NOT V-managed)
 }
 
 pub fn (mut s WebViewSession) close() ! {
-	$if linux {
-		if s.window != voidptr(0) {
-			// gtk_main_quit must run on the GTK thread; marshal via the idle queue.
-			C.g_idle_add(voidptr(gtk_quit_idle), voidptr(0))
-		}
-	}
+	embedded_session_close(&s)
 }
 
 pub fn (mut s WebViewSession) set_size(w int, h int) {
-	$if linux {
-		if s.window != voidptr(0) {
-			C.gtk_window_resize(s.window, w, h)
-		}
-	}
+	embedded_session_set_size(&s, w, h)
 }
 
 pub fn (mut s WebViewSession) set_title(t string) {
-	$if linux {
-		if s.window != voidptr(0) {
-			C.gtk_window_set_title(s.window, &char(t.str))
-		}
-	}
+	embedded_session_set_title(&s, t)
 }
 
 pub fn (mut s WebViewSession) set_position(x int, y int) {
-	$if linux {
-		if s.window != voidptr(0) {
-			C.gtk_window_move(s.window, x, y)
-		}
-	}
+	embedded_session_set_position(&s, x, y)
+}
+
+// wait_closed parks the caller until the window is gone. On platforms whose
+// toolkit must own the main thread this blocks inside the native loop; the
+// per-platform body lives in display_<os>.v (embedded_session_wait_closed).
+pub fn (mut s WebViewSession) wait_closed() ! {
+	embedded_session_wait_closed(mut &s)
+}
+
+// is_closed reports whether the native window has been destroyed. The service
+// worker polls this to break its loop as soon as the user closes the window.
+pub fn (mut s WebViewSession) is_closed() bool {
+	return s.window == unsafe { nil }
 }
 
 // NullDisplay is the default, no-op display backend. It satisfies the `Display`
@@ -509,6 +456,18 @@ pub fn (mut d NullDisplay) spawn(html_path string, cfg DisplaySessionConfig) !Di
 	return error('no display backend configured; call vxui.run with a valid config.display.id')
 }
 
+// resolve_backend_id returns the concrete backend id that will be used:
+// an empty/'auto' override_id (or the cfg's own 'auto'/empty id) is resolved
+// via resolve_auto(); anything else is passed through. Single resolution
+// point shared by new_display() and frontend logging.
+pub fn resolve_backend_id(cfg &Config, override_id string) string {
+	id := if override_id != '' { override_id } else { cfg.display.id }
+	if id == '' || id == 'auto' {
+		return resolve_auto(cfg)
+	}
+	return id
+}
+
 // new_display constructs the backend identified by `id`. An empty id or 'auto'
 // resolves at runtime via resolve_auto(). It receives the whole app Config so
 // each backend extracts its OWN sub-config — this keeps the construction wiring
@@ -516,18 +475,25 @@ pub fn (mut d NullDisplay) spawn(html_path string, cfg DisplaySessionConfig) !Di
 pub fn new_display(id string, app_cfg &Config) !Display {
 	mut r := DisplayRegistry{}
 	r.ensure()
-	resolved := if id == '' || id == 'auto' { resolve_auto(app_cfg) } else { id }
+	resolved := resolve_backend_id(app_cfg, id)
 	f := r.factories[resolved] or { return error('unknown display backend: ${resolved}') }
 	return f(app_cfg)
 }
 
-// resolve_auto picks the first available process-family browser backend.
-// It maps the found executable NAME to a registered backend id (e.g. the
-// `google-chrome` / `chromium` binaries both resolve to the `chrome` backend),
-// so the id handed to new_display is always one the registry knows.
-// Linux-first; extend per platform. Falls back to 'system'.
+// resolve_auto picks the backend used for display.id 'auto'/empty.
+// It PREFERS this platform's native embedded WebView when the build carries one
+// (embedded_native_id() from the per-platform display_<os>.v file), because a
+// native window needs no external browser install. Otherwise it falls back to
+// probing for browser executables, mapping each found NAME to its registered
+// backend id (e.g. `google-chrome` / `chromium` both resolve to `chrome`), so
+// the id handed to new_display is always one the registry knows.
 pub fn resolve_auto(cfg &Config) string {
-	// (executable name -> backend id) pairs, Linux-first.
+	// 1. Native WebView first (webkitgtk on Linux, webview2 on Windows, ...).
+	native_id := embedded_native_id()
+	if native_id != '' {
+		return native_id
+	}
+	// 2. Browser fallback: (executable name -> backend id) pairs, Linux-first.
 	candidates := [
 		['chrome', 'chrome'],
 		['google-chrome', 'chrome'],

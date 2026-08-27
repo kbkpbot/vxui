@@ -32,3 +32,6 @@ doc/vxui-improvements.md
 
 # Superpowers skill-generated docs (local only)
 docs/superpowers/
+
+# Reference webview C implementation (downloaded, not part of vxui)
+ref/

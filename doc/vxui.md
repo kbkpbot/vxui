@@ -364,10 +364,11 @@ mut:
 	set_size(w int, h int)
 	set_title(t string)
 	set_position(x int, y int)
+	wait_closed() !
 }
 ```
 
-DisplaySession is a live, presented window. It exposes only what a backend can meaningfully do after launch; all request/response traffic flows over WebSocket and never touches this interface.
+DisplaySession is a live, presented window. It exposes only what a backend can meaningfully do after launch; all request/response traffic flows over WebSocket and never touches this interface. `wait_closed` blocks until the window is gone — for in-process backends (WebKitGTK) it parks inside the native toolkit loop; for detached backends (external browser) it returns immediately.
 
 [[Return to contents]](#Contents)
 
@@ -409,6 +410,15 @@ fn (mut s ProcessSession) set_position(x int, y int)
 
 [[Return to contents]](#Contents)
 
+## wait_closed
+```v
+fn (mut s ProcessSession) wait_closed() !
+```
+
+Returns immediately — an external browser is a detached process, there is no in-process window to await.
+
+[[Return to contents]](#Contents)
+
 ## WebViewSession
 ## close
 ```v
@@ -435,6 +445,15 @@ fn (mut s WebViewSession) set_title(t string)
 ```v
 fn (mut s WebViewSession) set_position(x int, y int)
 ```
+
+[[Return to contents]](#Contents)
+
+## wait_closed
+```v
+fn (mut s WebViewSession) wait_closed() !
+```
+
+On Linux (WebKitGTK) this parks the caller inside the GTK main loop until the window is destroyed. On other platforms it returns immediately.
 
 [[Return to contents]](#Contents)
 
@@ -643,7 +662,7 @@ pub mut:
 	// Browser settings
 	browser BrowserConfig
 
-	// WebView settings (reserved: in-process WebView/WebKit backend, not yet implemented)
+	// WebView settings (in-process WebView/WebKit backend; implemented on Linux via webkitgtk)
 	webview WebViewConfig
 
 	// Display backend selection
@@ -1281,7 +1300,7 @@ struct WebViewDisplay {
 }
 ```
 
-WebViewDisplay is a reserved in-process WebView/WebKit backend. Its spawn is not yet implemented; it exists to prove the wiring is backend-agnostic — a real backend only needs to implement spawn() (and fill WebViewConfig).
+WebViewDisplay is the in-process WebView/WebKit backend. On Linux it uses WebKitGTK to host the vxui HTML in a native window (via display_linux.v); other platforms return a clear `native WebView FFI not implemented` error until their native FFI is added.
 
 [[Return to contents]](#Contents)
 

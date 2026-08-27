@@ -124,7 +124,10 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		// Send removal request to channel (serialized processing)
 		client_id_to_remove := ctx.find_client_id_by_connection(ws)
 		if client_id_to_remove != '' {
-			ctx.client_remove_chan <- ClientRemoveMsg{client_id_to_remove, 'on_close'}
+			// try_push (not <-) so a shutdown that has closed the channel does
+			// not panic; the removal worker drains and exits on close.
+			_ := ctx.client_remove_chan.try_push(ClientRemoveMsg{client_id_to_remove,
+				'on_close'})
 		}
 	}, unsafe { voidptr(ctx) })
 
@@ -237,7 +240,8 @@ fn (mut ctx Context) handle_get_clients(mut _conn &websocket.Client, _message ma
 // removal channel (token-gated by the caller).
 fn (mut ctx Context) handle_client_close(mut _conn &websocket.Client, message map[string]json2.Any) {
 	client_id := message['client_id'] or { json2.Any('') }.str()
-	ctx.client_remove_chan <- ClientRemoveMsg{client_id, 'client_close'}
+	// try_push (not <-): safe if the channel was already closed during shutdown.
+	_ := ctx.client_remove_chan.try_push(ClientRemoveMsg{client_id, 'client_close'})
 }
 
 // dispatch_rpc routes an rpcID-bearing message to its tagged route handler

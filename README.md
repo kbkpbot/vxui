@@ -503,11 +503,11 @@ vxui auto-detects and supports:
 ## 📖 Documentation
 
 - [API Reference](doc/vxui.md) — Auto-generated from source
-- [Architecture Guide](AGENTS.md) — Internal design documentation
+- [Architecture Guide](doc/AGENTS.md) — Internal design documentation
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](doc/CONTRIBUTING.md) for guidelines.
 
 ### Development
 

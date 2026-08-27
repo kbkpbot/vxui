@@ -10,6 +10,9 @@ import log
 import sync
 import x.json2
 
+fn C.exit(code int)
+
+
 // verb_strings maps string to Verb enum
 // default_app_name is the fallback window/page title marker; a user-changed
 // app_name (or an explicit window.title) is pushed to connected clients
@@ -119,13 +122,14 @@ pub fn run[T](mut app T, html_filename string) ! {
 	ctx.routes = generate_routes(app)!
 
 	// Start client removal handler goroutine (serializes removal to prevent races)
-	spawn fn [mut ctx] () {
+	rm_thread := spawn fn [mut ctx] () {
 		ctx.process_client_removals()
 	}()
 
 	// Apply dev mode settings
+	resolved_backend := resolve_backend_id(&ctx.config, ctx.config.display.id)
 	if ctx.config.dev.enabled {
-		if backend_family(ctx.config.display.id) == .process {
+		if backend_family(resolved_backend) == .process {
 			ctx.config.browser.devtools = ctx.config.dev.auto_devtools
 		}
 		ctx.logger.info('Development mode enabled')
@@ -147,11 +151,56 @@ pub fn run[T](mut app T, html_filename string) ! {
 		return err
 	}
 
-	ctx.logger.info('Browser started, waiting for connections on port ${ctx.ws_port}...')
+	frontend_kind := if backend_family(resolved_backend) == .embedded {
+		'native WebView [${resolved_backend}]'
+	} else {
+		'browser [${resolved_backend}]'
+	}
+	ctx.logger.info('Frontend: ${frontend_kind}, waiting for connections on port ${ctx.ws_port}...')
 	ctx.logger.debug('Auth token generated (hidden from logs)')
 
 	ctx.trigger_event(EventType.after_start, '', 'Application started', {}, none, none, none)
 
+	is_native_ui := backend_family(resolved_backend) == .embedded
+	ui_on_main := is_native_ui && native_ui_owns_main_thread()
+
+	if ui_on_main {
+		done := chan int{cap: 1}
+		spawn fn [mut ctx, html_filename, done] () {
+			ctx.serve_forever(html_filename, done)
+		}()
+		if mut sess := ctx.display_session {
+			sess.wait_closed() or { ctx.logger.warn('ui loop: ${err}') }
+		} else {
+			ctx.logger.warn('native UI mode without a live display session')
+		}
+		_ := <-done
+	} else {
+		ctx.serve_forever(html_filename, chan int{cap: 1})
+	}
+
+	// Shared graceful shutdown. The client-removal worker reads from a channel
+	// that is otherwise never closed, so it would outlive the process and race
+	// with the cleanup below on ctx.clients (a pre-existing bug that aborted in
+	// V). Stop the WS server first (no more on_close sends), close the channel,
+	// then join the worker so shutdown runs single-threaded and panic-free.
+	ctx.ws.free()
+	ctx.client_remove_chan.close()
+	rm_thread.wait()
+	ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
+		none)
+	ctx.close_displays()
+	ctx.logger.info('vxui shutdown complete')
+	// All cleanup done; terminate with a normal exit code. On toolkit-owned-main-
+	// thread platforms returning into libc/V atexit teardown races static
+	// destructors and aborts, so a clean exit(0) is the correct end state.
+	C.exit(0)
+}
+
+// serve_forever runs the WebSocket service loop (client counting/grace window,
+// heartbeat, hot reload). Non-generic: V 0.5.2 closures calling generic
+// methods require explicit type params, so the unused `app` param was dropped.
+fn (mut ctx Context) serve_forever(html_filename string, done chan int) {
 	// Hot reload: track file modification times
 	mut file_mtimes := map[string]time.Time{}
 	mut watch_dirs := ctx.config.dev.watch_dirs.clone()
@@ -198,10 +247,15 @@ pub fn run[T](mut app T, html_filename string) ! {
 		break_now, had_clients, empty_since, last_client_time = ctx.should_shutdown(had_clients,
 			empty_since, last_client_time, client_count)
 		if break_now {
+			// Ask the native window to close through its own GTK/Win32 chain
+			// so the UI loop unwinds and the process exits cleanly.
+			if mut sess := ctx.display_session {
+				sess.close() or {}
+			}
 			break
 		}
 
-		app.check_client_timeouts()
+		ctx.check_client_timeouts()
 
 		// Heartbeat: send ping to all clients periodically
 		last_ping_time = ctx.maybe_heartbeat(last_ping_time, client_count)
@@ -210,17 +264,34 @@ pub fn run[T](mut app T, html_filename string) ! {
 		last_hot_reload_check = ctx.maybe_hot_reload(watch_dirs, mut file_mtimes,
 			last_hot_reload_check, client_count)
 
+		// If the UI window was closed (destroy handler nilled the native
+		// window), break immediately so the worker exits with the UI.
+		if mut sess := ctx.display_session {
+			if sess.is_closed() {
+				break
+			}
+		}
+
 		time.sleep(10 * time.millisecond)
 	}
 
-	ctx.trigger_event(EventType.before_shutdown, '', 'Application shutting down', {}, none, none,
-		none)
-
-	ctx.close_displays()
-
-	ctx.ws.free()
-	ctx.logger.info('vxui shutdown complete')
+	// When the UI owns the main thread, this worker finishing means shutdown
+	// was requested from here (timer / all-clients-gone): ask the window to
+	// close so the UI loop unwinds and the main thread resumes.
+	done <- 1
 }
+
+// native_ui_owns_main_thread reports whether this platform's native WebView
+// toolkit requires the process main thread (Linux/WebKitGLib).
+fn native_ui_owns_main_thread() bool {
+	$if linux {
+		return true
+	}
+	return false
+}
+
+// native_ui_owns_main_thread reports whether this platform's native WebView
+// toolkit requires the process main thread (Linux/WebKitGLib).
 
 // should_shutdown encapsulates the close-timer / all-clients-disconnected
 // grace logic of the run loop. It returns whether the loop should break

@@ -141,12 +141,19 @@ docs: update README with Windows instructions
 
 ```
 vxui/
-├── display.v      # Pluggable display backend (BrowserDisplay + Display/DisplaySession interfaces)
-├── router.v       # Routing logic
-├── utils.v        # Utility functions
-├── vxui.v         # Core WebSocket server
-├── vxui_test.v    # Test suite
-└── examples/      # Example applications
+├── vxui.v           # Core framework: Context, run(), serve_forever
+├── config.v         # Config struct and defaults
+├── display.v        # Display/DisplaySession interfaces, registry
+├── display_linux.v  # WebKitGTK backend (Linux)
+├── ws.v             # WebSocket server, framing, dispatch
+├── clients.v        # Client tracking, auth, heartbeat
+├── routing.v        # Route generation from @['/path'] attributes
+├── jsexec.v         # run_js() — execute JavaScript in clients
+├── events.v         # Lifecycle events
+├── utils.v          # Token generation, port allocation
+├── doc/             # Documentation
+├── js/              # Frontend JavaScript (htmx.js, vxui-ws.js)
+└── examples/        # Example applications
 ```
 
 ## 🔒 Security
