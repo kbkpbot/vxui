@@ -129,7 +129,7 @@ pub mut:
 	// WKWebView on macOS, WebView2 on Windows). Each is hosted in an independent
 	// lightweight child process via the --vxui-host control-pipe protocol; the
 	// `android` id is still a reserved placeholder.
-	webview WebViewConfig
+	webview WebViewConfig // reserved placeholder; not yet applied by host backends (see WebViewConfig)
 
 	// Display backend selection
 	display DisplayConfig

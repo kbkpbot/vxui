@@ -22,11 +22,14 @@ jobs:
       - name: Check formatting
         if: runner.os == 'Linux'
         run: |
-          v fmt -diff vxui.v display.v embed.v utils.v vxui_test.v > /dev/null || {
-            echo "Formatting issues found. Run: v fmt -w *.v"
-            v fmt -diff vxui.v display.v embed.v utils.v vxui_test.v
+          v fmt -diff vxui.v display.v display_linux.v display_macos.v display_windows.v display_default.v displaymgr.v config.v configfile.v routing.v ws.v clients.v jsexec.v utils.v embed.v vxui_test_helpers.v > /dev/null || {
+            echo "Formatting issues found. Run: v fmt -w vxui.v display.v display_linux.v display_macos.v display_windows.v display_default.v displaymgr.v config.v configfile.v routing.v ws.v clients.v jsexec.v utils.v embed.v vxui_test_helpers.v"
+            v fmt -diff vxui.v display.v display_linux.v display_macos.v display_windows.v display_default.v displaymgr.v config.v configfile.v routing.v ws.v clients.v jsexec.v utils.v embed.v vxui_test_helpers.v
             exit 1
           }
+
+      - name: Vet
+        run: v vet .
 
       - name: Run tests
         run: v test .

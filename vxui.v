@@ -31,7 +31,7 @@ const verb_strings = {
 // by run() via dup2; if that reservation failed the handler is never installed,
 // so Ctrl-C falls back to the default termination (the host child still exits via
 // PR_SET_PDEATHSIG, so no orphan webview remains).
-fn vxui_signal_handler(sig os.Signal) {
+fn vxui_signal_handler(_sig os.Signal) {
 	mut b := u8(1)
 	C.write(23, voidptr(&b), 1)
 }

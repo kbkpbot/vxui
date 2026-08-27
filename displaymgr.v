@@ -49,8 +49,11 @@ pub fn (mut ctx Context) set_browser_config(config BrowserConfig) {
 	ctx.config.browser = config
 }
 
-// set_webview_config configures WebView/WebKit backend options (used when
-// display.kind == .webview).
+// set_webview_config stores WebView/WebKit backend options on the context.
+//
+// NOTE: WebViewConfig is currently a reserved placeholder (see display.v);
+// setting it has no effect on the host backends yet. Wire the fields through
+// embedded_spawn before this becomes functional.
 pub fn (mut ctx Context) set_webview_config(config WebViewConfig) {
 	ctx.config.webview = config
 }

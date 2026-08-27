@@ -1,464 +1,57 @@
-# module vxui
+module vxui
 
-
-## Contents
-- [apply_config_file](#apply_config_file)
-- [backend_family](#backend_family)
-- [detect_browser_type](#detect_browser_type)
-- [escape_js](#escape_js)
-- [fire_call](#fire_call)
-- [generate_routes](#generate_routes)
-- [get_free_port](#get_free_port)
-- [is_app_mode_supported](#is_app_mode_supported)
-- [load_config_file](#load_config_file)
-- [new_display](#new_display)
-- [new_error_detail](#new_error_detail)
-- [new_error_detail_with_cause](#new_error_detail_with_cause)
-- [new_error_detail_with_details](#new_error_detail_with_details)
-- [new_packed_app](#new_packed_app)
-- [parse_attrs](#parse_attrs)
-- [resolve_auto](#resolve_auto)
-- [run](#run)
-- [run_packed](#run_packed)
-- [sanitize_path](#sanitize_path)
-- [sanitize_utf8](#sanitize_utf8)
-- [BrowserEngine.from](#BrowserEngine.from)
-- [BrowserType.from](#BrowserType.from)
-- [DisplayFamily.from](#DisplayFamily.from)
-- [EventType.from](#EventType.from)
-- [Verb.from](#Verb.from)
-- [VxuiError.from](#VxuiError.from)
-- [WindowMode.from](#WindowMode.from)
-- [Display](#Display)
-- [DisplaySession](#DisplaySession)
-- [EventHandler](#EventHandler)
-- [ProcessSession](#ProcessSession)
-  - [close](#close)
-  - [set_size](#set_size)
-  - [set_title](#set_title)
-  - [set_position](#set_position)
-- [WebViewSession](#WebViewSession)
-  - [close](#close)
-  - [set_size](#set_size)
-  - [set_title](#set_title)
-  - [set_position](#set_position)
-- [BrowserEngine](#BrowserEngine)
-- [BrowserType](#BrowserType)
-- [DisplayFamily](#DisplayFamily)
-- [EventType](#EventType)
-- [Verb](#Verb)
-- [VxuiError](#VxuiError)
-- [WindowMode](#WindowMode)
-- [BrowserConfig](#BrowserConfig)
-- [Client](#Client)
-- [Config](#Config)
-- [Context](#Context)
-  - [broadcast](#broadcast)
-  - [broadcast_except](#broadcast_except)
-  - [close_client](#close_client)
-  - [close_displays](#close_displays)
-  - [get_client](#get_client)
-  - [get_client_count](#get_client_count)
-  - [get_clients](#get_clients)
-  - [get_config](#get_config)
-  - [get_port](#get_port)
-  - [get_token](#get_token)
-  - [on_event](#on_event)
-  - [open_window](#open_window)
-  - [open_window_with](#open_window_with)
-  - [ping_all_clients](#ping_all_clients)
-  - [ping_client](#ping_client)
-  - [post_js](#post_js)
-  - [post_js_client](#post_js_client)
-  - [process_client_removals](#process_client_removals)
-  - [run_js](#run_js)
-  - [run_js_client](#run_js_client)
-  - [send_to_client](#send_to_client)
-  - [set_browser_config](#set_browser_config)
-  - [set_js_sandbox](#set_js_sandbox)
-  - [set_webview_config](#set_webview_config)
-  - [trigger_hot_reload](#trigger_hot_reload)
-- [DevConfig](#DevConfig)
-- [DisplayConfig](#DisplayConfig)
-- [DisplaySessionConfig](#DisplaySessionConfig)
-- [EmbeddedFile](#EmbeddedFile)
-- [EventData](#EventData)
-- [FileConfig](#FileConfig)
-- [JsSandboxConfig](#JsSandboxConfig)
-- [LogConfig](#LogConfig)
-- [PackedApp](#PackedApp)
-  - [add_file](#add_file)
-  - [add_file_string](#add_file_string)
-  - [extract_to](#extract_to)
-  - [extract_to_temp](#extract_to_temp)
-  - [get_file](#get_file)
-  - [get_file_content](#get_file_content)
-  - [has_file](#has_file)
-  - [list_files](#list_files)
-  - [total_size](#total_size)
-  - [cleanup](#cleanup)
-- [ProcessDisplay](#ProcessDisplay)
-  - [spawn](#spawn)
-- [Request](#Request)
-- [Response](#Response)
-- [Route](#Route)
-- [VxuiErrorDetail](#VxuiErrorDetail)
-  - [msg](#msg)
-  - [code](#code)
-  - [str](#str)
-  - [with_cause](#with_cause)
-  - [with_detail](#with_detail)
-- [WebViewConfig](#WebViewConfig)
-- [WebViewDisplay](#WebViewDisplay)
-  - [spawn](#spawn)
-- [WindowConfig](#WindowConfig)
-
-## apply_config_file
-```v
 fn apply_config_file(mut cfg Config, path string) !
-```
-
-apply_config_file overlays a config file onto an existing Config. It is meant to be called BEFORE init()/new_display() so that the chosen backend and other settings take effect during startup. Code-set values not present in the file are preserved.
-
-[[Return to contents]](#Contents)
-
-## backend_family
-```v
 fn backend_family(id string) DisplayFamily
-```
-
-backend_family returns the family a backend id belongs to (defaults to .process).
-
-[[Return to contents]](#Contents)
-
-## detect_browser_type
-```v
-fn detect_browser_type(browser_path string) BrowserType
-```
-
-detect_browser_type determines the browser type from path
-
-[[Return to contents]](#Contents)
-
-## escape_js
-```v
 fn escape_js(input string) string
-```
-
-escape_js escapes JavaScript special characters Use this when outputting data in JavaScript contexts
-
-[[Return to contents]](#Contents)
-
-## fire_call
-```v
 fn fire_call[T](mut app T, method_name string, message map[string]json2.Any) !string
-```
-
-fire_call calls the method Only methods carrying route attributes (@['/path'] and/or a verb) are dispatchable; untagged helper methods are invisible to routing.
-
-NOTE on V comptime limits (tested on V 0.5.2 / 9142d68): the dispatch call below is instantiated ONCE FOR EVERY string-returning method of T, regardless of attributes — runtime `if` guards do not gate comptime instantiation, `$for attr in method.attributes` nesting parses but does not gate it either, and `continue` is illegal inside `$for`. Helpers on the app struct must therefore return void/non-string types (or take no parameters): a string-returning helper with custom parameters will not compile. generate_routes fails fast when a TAGGED method has the wrong return type, which keeps this constraint discoverable at startup.
-
-[[Return to contents]](#Contents)
-
-## generate_routes
-```v
 fn generate_routes[T](app &T) !map[string]Route
-```
-
-generate_routes generates route structs for an app
-
-[[Return to contents]](#Contents)
-
-## get_free_port
-```v
 fn get_free_port() !u16
-```
-
-get_free_port try to get a free port to websocket listen to
-
-[[Return to contents]](#Contents)
-
-## is_app_mode_supported
-```v
-fn is_app_mode_supported(browser_type BrowserType) bool
-```
-
-is_app_mode_supported returns true if browser supports app mode
-
-[[Return to contents]](#Contents)
-
-## load_config_file
-```v
 fn load_config_file(path string) !FileConfig
-```
-
-load_config_file reads and decodes a JSON config file into a FileConfig. Unknown fields are ignored; missing sections simply yield empty maps.
-
-[[Return to contents]](#Contents)
-
-## new_display
-```v
 fn new_display(id string, app_cfg &Config) !Display
-```
-
-new_display constructs the backend identified by `id`. An empty id or 'auto' resolves at runtime via resolve_auto(). It receives the whole app Config so each backend extracts its OWN sub-config — this keeps the construction wiring backend-agnostic (no hardcoded BrowserConfig).
-
-[[Return to contents]](#Contents)
-
-## new_error_detail
-```v
 fn new_error_detail(code VxuiError, message string) VxuiErrorDetail
-```
-
-new_error_detail creates a new VxuiErrorDetail
-
-[[Return to contents]](#Contents)
-
-## new_error_detail_with_cause
-```v
 fn new_error_detail_with_cause(code VxuiError, message string, cause IError) VxuiErrorDetail
-```
-
-new_error_detail_with_cause creates a new VxuiErrorDetail with an underlying cause
-
-[[Return to contents]](#Contents)
-
-## new_error_detail_with_details
-```v
 fn new_error_detail_with_details(code VxuiError, message string, details map[string]string) VxuiErrorDetail
-```
-
-new_error_detail_with_details creates a new VxuiErrorDetail with details
-
-[[Return to contents]](#Contents)
-
-## new_packed_app
-```v
 fn new_packed_app() PackedApp
-```
-
-new_packed_app creates a new PackedApp instance
-
-[[Return to contents]](#Contents)
-
-## parse_attrs
-```v
 fn parse_attrs(name string, attrs []string) !([]Verb, string)
-```
-
-parse_attrs parses function attributes for verbs and path
-
-[[Return to contents]](#Contents)
-
-## resolve_auto
-```v
 fn resolve_auto(cfg &Config) string
-```
-
-resolve_auto picks the first available process-family browser backend. Linux-first; extend per platform. Falls back to 'system'.
-
-[[Return to contents]](#Contents)
-
-## run
-```v
+fn resolve_backend_id(cfg &Config, override_id string) string
 fn run[T](mut app T, html_filename string) !
-```
-
-run opens the `html_filename` in browser and starts the event loop
-
-[[Return to contents]](#Contents)
-
-## run_packed
-```v
 fn run_packed[T](mut app T, mut packed PackedApp, entry_file string) !
-```
-
-run_packed runs the app with packed (embedded) resources
-
-[[Return to contents]](#Contents)
-
-## sanitize_path
-```v
 fn sanitize_path(path string) !string
-```
-
-sanitize_path validates and sanitizes the file path Handles both plain and URL-encoded path traversal attempts
-
-[[Return to contents]](#Contents)
-
-## sanitize_utf8
-```v
 fn sanitize_utf8(s string) string
-```
-
-sanitize_utf8 returns `s` with every invalid UTF-8 byte replaced by the Unicode replacement character (U+FFFD). The websocket layer REJECTS text frames that are not valid UTF-8, so any payload built from byte-wise slicing of multibyte strings must be passed through this helper before being returned from a route handler.
-
-[[Return to contents]](#Contents)
-
-## BrowserEngine.from
-```v
 fn BrowserEngine.from[W](input W) !BrowserEngine
-```
-
-[[Return to contents]](#Contents)
-
-## BrowserType.from
-```v
 fn BrowserType.from[W](input W) !BrowserType
-```
-
-[[Return to contents]](#Contents)
-
-## DisplayFamily.from
-```v
 fn DisplayFamily.from[W](input W) !DisplayFamily
-```
-
-[[Return to contents]](#Contents)
-
-## EventType.from
-```v
 fn EventType.from[W](input W) !EventType
-```
-
-[[Return to contents]](#Contents)
-
-## Verb.from
-```v
 fn Verb.from[W](input W) !Verb
-```
-
-[[Return to contents]](#Contents)
-
-## VxuiError.from
-```v
 fn VxuiError.from[W](input W) !VxuiError
-```
-
-[[Return to contents]](#Contents)
-
-## WindowMode.from
-```v
 fn WindowMode.from[W](input W) !WindowMode
-```
-
-[[Return to contents]](#Contents)
-
-## Display
-```v
 interface Display {
 mut:
 	spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
 }
-```
-
-Display is the pluggable backend that turns an HTML file into one or more presented windows. The core talks to the page exclusively via WebSocket; the Display only has to get the page on screen.
-
-[[Return to contents]](#Contents)
-
-## DisplaySession
-```v
 interface DisplaySession {
 mut:
 	close() !
 	set_size(w int, h int)
 	set_title(t string)
 	set_position(x int, y int)
+	// wait_closed blocks until the window is gone. Backends that hand the
+	// caller's thread to a native toolkit loop (GTK/WebView2) park inside it;
+	// detached backends (external browser) return immediately.
 	wait_closed() !
+	// is_closed reports whether the window has already been destroyed (e.g. the
+	// user closed it). The service worker uses it to break its loop promptly.
+	is_closed() bool
 }
-```
-
-DisplaySession is a live, presented window. It exposes only what a backend can meaningfully do after launch; all request/response traffic flows over WebSocket and never touches this interface. `wait_closed` blocks until the window is gone — for native WebView host backends it blocks until the hosted child process exits; for detached backends (external browser) it returns immediately.
-
-[[Return to contents]](#Contents)
-
-## EventHandler
-```v
 type EventHandler = fn (EventData)
-```
-
-EventHandler is a callback function type for events
-
-[[Return to contents]](#Contents)
-
-## ProcessSession
-## close
-```v
+fn (mut d NullDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
 fn (mut s ProcessSession) close() !
-```
-
-[[Return to contents]](#Contents)
-
-## set_size
-```v
 fn (mut s ProcessSession) set_size(w int, h int)
-```
-
-[[Return to contents]](#Contents)
-
-## set_title
-```v
 fn (mut s ProcessSession) set_title(t string)
-```
-
-[[Return to contents]](#Contents)
-
-## set_position
-```v
 fn (mut s ProcessSession) set_position(x int, y int)
-```
-
-[[Return to contents]](#Contents)
-
-## wait_closed
-```v
 fn (mut s ProcessSession) wait_closed() !
-```
-
-Returns immediately — an external browser is a detached process, there is no host child process to await.
-
-[[Return to contents]](#Contents)
-
-## WebViewSession
-## close
-```v
-fn (mut s WebViewSession) close() !
-```
-
-[[Return to contents]](#Contents)
-
-## set_size
-```v
-fn (mut s WebViewSession) set_size(w int, h int)
-```
-
-[[Return to contents]](#Contents)
-
-## set_title
-```v
-fn (mut s WebViewSession) set_title(t string)
-```
-
-[[Return to contents]](#Contents)
-
-## set_position
-```v
-fn (mut s WebViewSession) set_position(x int, y int)
-```
-
-[[Return to contents]](#Contents)
-
-## wait_closed
-```v
-fn (mut s WebViewSession) wait_closed() !
-```
-
-On Linux (WebKitGTK) this parks the caller inside the GTK main loop until the window is destroyed. On other platforms it returns immediately.
-
-[[Return to contents]](#Contents)
-
-## BrowserEngine
-```v
+fn (mut s ProcessSession) is_closed() bool
 enum BrowserEngine {
 	auto   // probe system (default)
 	chrome // Chromium-family (google-chrome / chromium)
@@ -468,14 +61,6 @@ enum BrowserEngine {
 	safari // macOS Safari
 	system // platform default launcher
 }
-```
-
-BrowserEngine selects which browser executable + launch flags the process family uses. `.auto` (the default) probes the system and resolves to the first usable engine at spawn time.
-
-[[Return to contents]](#Contents)
-
-## BrowserType
-```v
 enum BrowserType {
 	chrome
 	firefox
@@ -485,26 +70,10 @@ enum BrowserType {
 	chromium
 	unknown
 }
-```
-
-BrowserType represents different browser types
-
-[[Return to contents]](#Contents)
-
-## DisplayFamily
-```v
 enum DisplayFamily {
 	process  // external child process (e.g. a system browser)
 	embedded // hosted native view in an independent child process (e.g. WebView2 / WKWebView / WebKitGTK)
 }
-```
-
-DisplayFamily groups display backends by how they present the page.
-
-[[Return to contents]](#Contents)
-
-## EventType
-```v
 enum EventType {
 	before_start
 	after_start
@@ -517,14 +86,6 @@ enum EventType {
 	before_request
 	after_request
 }
-```
-
-EventType represents different lifecycle events
-
-[[Return to contents]](#Contents)
-
-## Verb
-```v
 enum Verb {
 	any_verb
 	get
@@ -533,14 +94,6 @@ enum Verb {
 	delete
 	patch
 }
-```
-
-Verb represents HTTP methods
-
-[[Return to contents]](#Contents)
-
-## VxuiError
-```v
 enum VxuiError {
 	unknown
 	client_not_found
@@ -565,27 +118,11 @@ enum VxuiError {
 	invalid_method
 	attribute_parse_error
 }
-```
-
-VxuiError represents error codes
-
-[[Return to contents]](#Contents)
-
-## WindowMode
-```v
 enum WindowMode {
 	app    // standalone window WITHOUT address bar/tab strip (default)
 	kiosk  // borderless fullscreen
 	normal // an ordinary browser tab
 }
-```
-
-WindowMode selects how the page window is presented. Only meaningful for Chromium-family browsers; Firefox/Safari open a normal tab regardless.
-
-[[Return to contents]](#Contents)
-
-## BrowserConfig
-```v
 struct BrowserConfig {
 pub mut:
 	custom_args       []string // Additional custom arguments
@@ -599,14 +136,6 @@ pub mut:
 	remote_debug_port int    // Chrome remote debugging port (0 = disabled)
 	engine            BrowserEngine = .auto // Which engine/executable to launch
 }
-```
-
-BrowserConfig holds browser startup configuration
-
-[[Return to contents]](#Contents)
-
-## Client
-```v
 struct Client {
 pub:
 	id    string
@@ -615,14 +144,6 @@ pub mut:
 	connection ?&websocket.Client
 	last_ping  time.Time
 }
-```
-
-Client represents a connected browser client
-
-[[Return to contents]](#Contents)
-
-## Config
-```v
 struct Config {
 pub mut:
 	// Application settings
@@ -666,7 +187,7 @@ pub mut:
 	// WKWebView on macOS, WebView2 on Windows). Each is hosted in an independent
 	// lightweight child process via the --vxui-host control-pipe protocol; the
 	// `android` id is still a reserved placeholder.
-	webview WebViewConfig
+	webview WebViewConfig // reserved placeholder; not yet applied by host backends (see WebViewConfig)
 
 	// Display backend selection
 	display DisplayConfig
@@ -674,19 +195,13 @@ pub mut:
 	// Logging settings
 	log LogConfig
 }
-```
-
-Config is the unified configuration for vxui
-
-[[Return to contents]](#Contents)
-
-## Context
-```v
 struct Context {
 mut:
 	ws_port            u16
 	ws                 websocket.Server
-	display            Display
+	shutdown_read_fd   int
+	shutdown_write_fd  int
+	display            Display = NullDisplay{}
 	display_session    ?DisplaySession
 	display_sessions   []DisplaySession
 	routes             map[string]Route
@@ -695,243 +210,43 @@ mut:
 	js_callbacks       map[string]chan string
 	event_handlers     map[EventType][]EventHandler
 	client_remove_chan chan ClientRemoveMsg // channel for serialized client removal
+	// app_ptr is an erased pointer to the concrete user App struct (set at
+	// startup). It lets the non-generic WebSocket callbacks reach the user's
+	// route methods via `dispatch` without making the callbacks generic.
+	app_ptr voidptr
+	// dispatch is a type-erased trampoline (monomorphized per App type) that
+	// runs the registered route handler for a message. Initialized to nil;
+	// startup_ws_server sets it before the server accepts any frame.
+	dispatch fn (mut ctx Context, _method_name string, message map[string]json2.Any) !Response = unsafe { nil }
 pub mut:
 	config Config
 	logger &log.Log = &log.Log{}
 }
-```
-
-Context is the main struct of vxui
-
-[[Return to contents]](#Contents)
-
-## broadcast
-```v
 fn (mut ctx Context) broadcast(message string) !
-```
-
-broadcast sends a message to all connected clients. A write failure on one client (e.g. a stale connection) is skipped so the remaining clients still receive the message.
-
-[[Return to contents]](#Contents)
-
-## broadcast_except
-```v
 fn (mut ctx Context) broadcast_except(message string, except_client_id string) !
-```
-
-broadcast_except sends a message to all clients except one. Per-client write failures are skipped, see broadcast().
-
-[[Return to contents]](#Contents)
-
-## close_client
-```v
 fn (mut ctx Context) close_client(client_id string) !
-```
-
-close_client disconnects a specific client
-
-[[Return to contents]](#Contents)
-
-## close_displays
-```v
 fn (mut ctx Context) close_displays()
-```
-
-close_displays tears down all live display sessions. No-op for the detached external-browser backend; REQUIRED for native WebView host backends so the host child process is signalled to close and its pipe/handle is released on shutdown.
-
-[[Return to contents]](#Contents)
-
-## get_client
-```v
 fn (mut ctx Context) get_client(client_id string) ?Client
-```
-
-get_client returns client info by ID
-
-[[Return to contents]](#Contents)
-
-## get_client_count
-```v
 fn (mut ctx Context) get_client_count() int
-```
-
-get_client_count returns the number of connected clients
-
-[[Return to contents]](#Contents)
-
-## get_clients
-```v
 fn (mut ctx Context) get_clients() []string
-```
-
-get_clients returns list of connected client IDs
-
-[[Return to contents]](#Contents)
-
-## get_config
-```v
 fn (ctx Context) get_config() Config
-```
-
-get_config returns the current configuration
-
-[[Return to contents]](#Contents)
-
-## get_port
-```v
 fn (ctx Context) get_port() u16
-```
-
-get_port returns the WebSocket port
-
-[[Return to contents]](#Contents)
-
-## get_token
-```v
 fn (ctx Context) get_token() string
-```
-
-get_token returns the security token
-
-[[Return to contents]](#Contents)
-
-## on_event
-```v
 fn (mut ctx Context) on_event(event_type EventType, handler EventHandler)
-```
-
-on_event registers an event handler
-
-[[Return to contents]](#Contents)
-
-## open_window
-```v
 fn (mut ctx Context) open_window(html_filename string) !
-```
-
-open_window opens an additional display window using the current window configuration and security token.
-
-[[Return to contents]](#Contents)
-
-## open_window_with
-```v
 fn (mut ctx Context) open_window_with(html_filename string, window WindowConfig) !
-```
-
-open_window_with opens an additional display window with an explicit window configuration. Backend-specific options come from ctx.config.browser.
-
-[[Return to contents]](#Contents)
-
-## ping_all_clients
-```v
 fn (mut ctx Context) ping_all_clients()
-```
-
-ping_all_clients sends a ping to all connected clients
-
-[[Return to contents]](#Contents)
-
-## ping_client
-```v
 fn (mut ctx Context) ping_client(client_id string) !
-```
-
-ping_client sends a ping to a specific client
-
-[[Return to contents]](#Contents)
-
-## post_js
-```v
 fn (mut ctx Context) post_js(js_code string) !
-```
-
-post_js executes JavaScript in the frontend fire-and-forget: the result (or error) is discarded and the pending callback is unregistered immediately. Safe to call from INSIDE route handlers, unlike run_js(timeout_ms > 0), which deadlocks there: a handler runs on the connection read loop, the very goroutine that would deliver js_result.
-
-[[Return to contents]](#Contents)
-
-## post_js_client
-```v
 fn (mut ctx Context) post_js_client(client_id string, js_code string) !
-```
-
-post_js_client is post_js targeting one specific client.
-
-[[Return to contents]](#Contents)
-
-## process_client_removals
-```v
 fn (mut ctx Context) process_client_removals()
-```
-
-process_client_removals handles client removal requests from the channel This should be run in a separate goroutine to serialize removal operations
-
-[[Return to contents]](#Contents)
-
-## run_js
-```v
 fn (mut ctx Context) run_js(js_code string, timeout_ms int) !string
-```
-
-run_js executes JavaScript in the frontend and returns the result
-
-[[Return to contents]](#Contents)
-
-## run_js_client
-```v
 fn (mut ctx Context) run_js_client(client_id string, js_code string, timeout_ms int) !string
-```
-
-run_js_client executes JavaScript on a specific client
-
-[[Return to contents]](#Contents)
-
-## send_to_client
-```v
 fn (mut ctx Context) send_to_client(client_id string, message string) !
-```
-
-send_to_client sends a message to a specific client
-
-[[Return to contents]](#Contents)
-
-## set_browser_config
-```v
 fn (mut ctx Context) set_browser_config(config BrowserConfig)
-```
-
-set_browser_config configures browser startup options
-
-[[Return to contents]](#Contents)
-
-## set_js_sandbox
-```v
 fn (mut ctx Context) set_js_sandbox(config JsSandboxConfig)
-```
-
-set_js_sandbox configures JavaScript execution security
-
-[[Return to contents]](#Contents)
-
-## set_webview_config
-```v
 fn (mut ctx Context) set_webview_config(config WebViewConfig)
-```
-
-set_webview_config configures WebView/WebKit backend options (used when display.kind == .webview).
-
-[[Return to contents]](#Contents)
-
-## trigger_hot_reload
-```v
 fn (mut ctx Context) trigger_hot_reload() !
-```
-
-trigger_hot_reload sends a reload command to all connected clients. Per-client write failures are skipped, see broadcast().
-
-[[Return to contents]](#Contents)
-
-## DevConfig
-```v
 struct DevConfig {
 pub mut:
 	enabled       bool // Enable development mode
@@ -941,26 +256,19 @@ pub mut:
 	auto_devtools bool = true // Auto-open DevTools in dev mode
 	show_errors   bool = true // Show error overlay in browser
 }
-```
-
-DevConfig holds development mode settings
-
-[[Return to contents]](#Contents)
-
-## DisplayConfig
-```v
+struct DisplayBackend {
+pub mut:
+	family  DisplayFamily
+	id      string
+	engine  BrowserEngine  // .process family
+	browser &BrowserConfig // .process family
+	webview &WebViewConfig // .embedded family
+}
+fn (mut b DisplayBackend) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
 struct DisplayConfig {
 pub mut:
 	id string = 'auto'
 }
-```
-
-DisplayConfig selects and scopes the display backend by string id. id 'auto' (or empty) resolves at runtime via resolve_auto().
-
-[[Return to contents]](#Contents)
-
-## DisplaySessionConfig
-```v
 struct DisplaySessionConfig {
 	port   u16
 	token  string
@@ -970,27 +278,11 @@ struct DisplaySessionConfig {
 	y      int
 	title  string
 }
-```
-
-DisplaySessionConfig carries the generic, backend-agnostic parameters needed to present one UI window. Backend-specific options (e.g. Chromium window mode, WebView runtime flags) live on the backend's own config and are merged by the backend during spawn — the core never hardcodes them.
-
-[[Return to contents]](#Contents)
-
-## EmbeddedFile
-```v
 struct EmbeddedFile {
 pub:
 	data []u8
 	size int
 }
-```
-
-EmbeddedFile represents an embedded file
-
-[[Return to contents]](#Contents)
-
-## EventData
-```v
 struct EventData {
 pub:
 	event_type EventType
@@ -1001,14 +293,6 @@ pub:
 	response   ?Response
 	err        ?VxuiErrorDetail
 }
-```
-
-EventData contains event information
-
-[[Return to contents]](#Contents)
-
-## FileConfig
-```v
 struct FileConfig {
 mut:
 	display        map[string]json2.Any
@@ -1017,18 +301,39 @@ mut:
 	window         map[string]json2.Any
 	dev            map[string]json2.Any
 	token          string
-	multi_client   bool
-	evict_on_new   bool
-	close_timer_ms int
+	multi_client   ?bool
+	evict_on_new   ?bool
+	close_timer_ms ?int
 }
-```
-
-FileConfig is the serializable subset of Config that may be set from a JSON config file. Nested sections are kept as `map[string]json2.Any` so the file can carry extra/unknown fields without breaking the decoder. Only the fields recognised by apply_config_file are read; everything else is ignored.
-
-[[Return to contents]](#Contents)
-
-## JsSandboxConfig
-```v
+struct HostControl {
+	cmd   string
+	w     int
+	h     int
+	x     int
+	y     int
+	title string
+}
+struct HostHandshake {
+	url    string
+	token  string
+	width  int
+	height int
+	x      int
+	y      int
+	title  string
+}
+struct HostSession {
+mut:
+	pid       int
+	ctl_write int
+	reaped    bool
+}
+fn (mut s HostSession) close() !
+fn (mut s HostSession) set_size(w int, h int)
+fn (mut s HostSession) set_title(t string)
+fn (mut s HostSession) set_position(x int, y int)
+fn (mut s HostSession) wait_closed() !
+fn (mut s HostSession) is_closed() bool
 struct JsSandboxConfig {
 pub mut:
 	enabled            bool = true        // Enable sandbox restrictions
@@ -1046,148 +351,25 @@ pub mut:
 		'import(',
 	]
 }
-```
-
-JsSandboxConfig controls JavaScript execution security
-
-[[Return to contents]](#Contents)
-
-## LogConfig
-```v
 struct LogConfig {
 pub mut:
 	level  log.Level = .info
 	output string    = 'stderr'
 }
-```
-
-LogConfig holds logging settings. `output` accepts 'stderr' (default), 'stdout', or a file path. The previous max_file_size/rotate_files/show_* fields never had any effect and were removed (see CHANGELOG).
-
-[[Return to contents]](#Contents)
-
-## PackedApp
-```v
 struct PackedApp {
 pub mut:
 	files map[string]EmbeddedFile
 }
-```
-
-PackedApp holds embedded frontend resources
-
-[[Return to contents]](#Contents)
-
-## add_file
-```v
 fn (mut p PackedApp) add_file(path string, data []u8)
-```
-
-add_file adds an embedded file to the packed app Accepts both []u8 and EmbedFileData (from $embed_file)
-
-[[Return to contents]](#Contents)
-
-## add_file_string
-```v
 fn (mut p PackedApp) add_file_string(path string, content string)
-```
-
-add_file_string adds an embedded file from string
-
-[[Return to contents]](#Contents)
-
-## extract_to
-```v
 fn (p PackedApp) extract_to(dir string) !
-```
-
-extract_to extracts all files to a directory
-
-[[Return to contents]](#Contents)
-
-## extract_to_temp
-```v
 fn (p PackedApp) extract_to_temp() !string
-```
-
-extract_to_temp extracts all files to a temp directory and returns the path
-
-[[Return to contents]](#Contents)
-
-## get_file
-```v
 fn (p PackedApp) get_file(path string) !EmbeddedFile
-```
-
-get_file retrieves a file by path
-
-[[Return to contents]](#Contents)
-
-## get_file_content
-```v
 fn (p PackedApp) get_file_content(path string) !string
-```
-
-get_file_content retrieves file content as string
-
-[[Return to contents]](#Contents)
-
-## has_file
-```v
 fn (p PackedApp) has_file(path string) bool
-```
-
-has_file checks if a file exists
-
-[[Return to contents]](#Contents)
-
-## list_files
-```v
 fn (p PackedApp) list_files() []string
-```
-
-list_files returns all file paths
-
-[[Return to contents]](#Contents)
-
-## total_size
-```v
 fn (p PackedApp) total_size() int
-```
-
-total_size returns total size of all embedded files
-
-[[Return to contents]](#Contents)
-
-## cleanup
-```v
 fn (p PackedApp) cleanup(dir string)
-```
-
-cleanup removes extracted files
-
-[[Return to contents]](#Contents)
-
-## ProcessDisplay
-```v
-struct ProcessDisplay {
-	engine BrowserEngine
-	config &BrowserConfig
-}
-```
-
-ProcessDisplay launches an external browser process. It is parameterized by a BrowserEngine so each id selects the right executable + flags; the Chromium-family and Firefox/Safari behaviors are chosen per engine at spawn.
-
-[[Return to contents]](#Contents)
-
-## spawn
-```v
-fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
-```
-
-[[Return to contents]](#Contents)
-
-## Request
-```v
 struct Request {
 pub:
 	verb        Verb
@@ -1195,39 +377,15 @@ pub:
 	client_id   string
 	raw_message map[string]json2.Any // Original message for compatibility
 }
-```
-
-Request represents a type-safe request
-
-[[Return to contents]](#Contents)
-
-## Response
-```v
 struct Response {
 pub mut:
 	status int = 200
 	body   string
 }
-```
-
-Response represents a type-safe response
-
-[[Return to contents]](#Contents)
-
-## Route
-```v
 struct Route {
 	verb []Verb
 	path string
 }
-```
-
-Route represents a registered route
-
-[[Return to contents]](#Contents)
-
-## VxuiErrorDetail
-```v
 struct VxuiErrorDetail {
 pub:
 	code    VxuiError
@@ -1235,87 +393,12 @@ pub:
 	details map[string]string
 	cause   ?IError // Underlying error that caused this error
 }
-```
-
-VxuiErrorDetail represents a structured error with code and details
-
-[[Return to contents]](#Contents)
-
-## msg
-```v
 fn (e VxuiErrorDetail) msg() string
-```
-
-msg returns the error message (implements IError interface)
-
-[[Return to contents]](#Contents)
-
-## code
-```v
 fn (e VxuiErrorDetail) code() int
-```
-
-code returns the error code (implements IError interface)
-
-[[Return to contents]](#Contents)
-
-## str
-```v
 fn (e VxuiErrorDetail) str() string
-```
-
-str returns the error message
-
-[[Return to contents]](#Contents)
-
-## with_cause
-```v
 fn (e VxuiErrorDetail) with_cause(cause IError) VxuiErrorDetail
-```
-
-with_cause creates a new error with an underlying cause
-
-[[Return to contents]](#Contents)
-
-## with_detail
-```v
 fn (e VxuiErrorDetail) with_detail(key string, value string) VxuiErrorDetail
-```
-
-with_detail adds a detail to the error
-
-[[Return to contents]](#Contents)
-
-## WebViewConfig
-```v
 struct WebViewConfig {}
-```
-
-WebViewConfig holds native WebView/WebKit host backend options. @[heap] so a reference can be taken.
-
-[[Return to contents]](#Contents)
-
-## WebViewDisplay
-```v
-struct WebViewDisplay {
-	config &WebViewConfig
-	id     string
-}
-```
-
-WebViewDisplay is the native WebView/WebKit host backend. It does NOT render in-process: it launches a *child* copy of the same vxui binary in "host" mode (see host_run / --vxui-host) and talks to that host over a private control pipe. The child owns its own OS window and main thread. `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView) and `webview2` (Windows/WebView2) are fully implemented; `android` returns a clear `native WebView FFI not implemented on this platform (android)` error until its native FFI is added.
-
-[[Return to contents]](#Contents)
-
-## spawn
-```v
-fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
-```
-
-[[Return to contents]](#Contents)
-
-## WindowConfig
-```v
 struct WindowConfig {
 pub mut:
 	width  int = 800
@@ -1324,12 +407,3 @@ pub mut:
 	y      int = -1 // -1 means center
 	title  string // window/page title; falls back to config.app_name when set
 }
-```
-
-WindowConfig holds window configuration.
-
-Note: only size/position/title are actually enforced by the browser launch; the previous resizable/min-size/frameless fields never had any effect and were removed (see CHANGELOG).
-
-[[Return to contents]](#Contents)
-
-#### Powered by vdoc. Generated on: 26 Aug 2026 13:43:58

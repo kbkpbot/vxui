@@ -28,7 +28,7 @@ vxui/
 ├── vxui.v              # Main framework: Context, run(), serve_forever
 ├── config.v            # Config struct and defaults
 ├── configfile.v        # Config file (--config / vxui.json) parsing
-├── display.v           # Display/DisplaySession interfaces, registry, ProcessDisplay
+├── display.v           # Display/DisplaySession interfaces, registry, DisplayBackend
 ├── display_linux.v     # WebKitGTK backend (Linux, compiles only on Linux)
 ├── display_windows.v   # WebView2 backend (Windows, compiles only on Windows)
 ├── display_default.v   # Stub for platforms without native WebView
@@ -222,7 +222,7 @@ pub mut:
 
 `BrowserConfig` is the configuration for the **process-family** backends
 (`browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system`) — all of
-which use `ProcessDisplay`. The embedded-family backends
+which use `DisplayBackend`. The embedded-family backends
 (`webview2`, `wkwebview`, `webkitgtk`, `android`) keep their options on
 `WebViewConfig` and ignore `BrowserConfig`. `webkitgtk` (Linux), `wkwebview`
 (macOS) and `webview2` (Windows) are fully implemented as native WebView host
@@ -285,8 +285,8 @@ clearly.
 
 | Family    | id(s)                                                  | Backend        | Notes |
 |-----------|--------------------------------------------------------|----------------|-------|
-| process   | `browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system` | `ProcessDisplay` | External browser launch (default); engine chosen by the id, or by `BrowserConfig.engine` when id is `browser`. |
-| embedded  | `webview2`, `wkwebview`, `webkitgtk`, `android`        | `WebViewDisplay` | `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView) and `webview2` (Windows/WebView2) are fully implemented as independent native WebView host processes; `android` is **reserved** and returns `native WebView FFI not implemented on this platform (android)`. |
+| process   | `browser`, `chrome`, `firefox`, `edge`, `brave`, `safari`, `system` | `DisplayBackend` | External browser launch (default); engine chosen by the id, or by `BrowserConfig.engine` when id is `browser`. |
+| embedded  | `webview2`, `wkwebview`, `webkitgtk`, `android`        | `DisplayBackend` | `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView) and `webview2` (Windows/WebView2) are fully implemented as independent native WebView host processes; `android` is **reserved** and returns `native WebView FFI not implemented on this platform (android)`. |
 
 Per-backend configuration lives on the backend's own struct and is merged by the
 backend during `spawn` — the core only forwards generic `DisplaySessionConfig`
@@ -316,8 +316,9 @@ app.close_displays()
 to core wiring (`init`/`run`/`open_window*`/`set_window_*`/dev-mode are
 untouched). `new_display(id, &Config)` extracts each backend's own sub-config
 from the whole `Config`, and `open_window`/`close_displays` already operate
-through the `Display`/`DisplaySession` interfaces. The `WebViewDisplay`
-is a ready template: fill `WebViewConfig` and implement its `spawn`.
+through the `Display`/`DisplaySession` interfaces. The native-WebView path is
+served by `DisplayBackend.spawn` (its `embedded` branch delegates to
+`embedded_spawn`); `WebViewConfig` is a reserved placeholder for native options.
 
 > **Note:** `BrowserConfig`-specific options (incl. `remote_debug_port`,
 > `window_mode`, `devtools`) apply only to process-family backends. Dev-mode's
@@ -524,7 +525,7 @@ browser but required for native WebView host backends so the host child process
 is released.
 
 The embedded backends (`webview2`, `wkwebview`, `webkitgtk`, `android`) use
-`WebViewDisplay`. `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView)
+`DisplayBackend`. `webkitgtk` (Linux/WebKitGTK), `wkwebview` (macOS/WKWebView)
 and `webview2` (Windows/WebView2) are fully implemented as independent native
 WebView host processes; only `android` is scaffolding whose `spawn` returns
 `native WebView FFI not implemented on this platform (android)` — it is the

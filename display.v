@@ -400,6 +400,11 @@ pub fn (mut s ProcessSession) is_closed() bool {
 
 // WebViewConfig holds native WebView/WebKit backend options. @[heap] so a
 // reference can be taken.
+//
+// RESERVED / not yet wired: no native options are currently applied by the
+// host backends, so this struct is an empty placeholder. set_webview_config
+// stores it but has no effect yet. Populate these fields and thread them
+// through embedded_spawn before relying on this API.
 @[heap]
 pub struct WebViewConfig {}
 
