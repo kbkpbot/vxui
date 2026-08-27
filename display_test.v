@@ -113,8 +113,7 @@ fn test_embedded_spawn_unsupported_id_errors() {
 	// An embedded id this platform does not implement must error clearly,
 	// never attempt to open a window.
 	cfg := DisplaySessionConfig{}
-	mut b := WebViewDisplay{ config: &WebViewConfig{} }
-	embedded_spawn(mut b, 'definitely-not-a-backend', '/nonexistent.html', cfg) or { return }
+	embedded_spawn('definitely-not-a-backend', '/nonexistent.html', cfg) or { return }
 	assert false, 'expected embedded_spawn to fail for an unsupported id'
 }
 

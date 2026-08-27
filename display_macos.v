@@ -86,7 +86,7 @@ $if macos {
 	// HostSession handle. The child owns the NSWindow + WKWebView and runs the
 	// NSApplication run loop; the parent keeps running the framework's WebSocket
 	// service loop, unchanged.
-	fn embedded_spawn(mut _b WebViewDisplay, id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	fn embedded_spawn(id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
 		if id != 'wkwebview' {
 			return error('native WebView FFI not implemented on this platform (${id})')
 		}
@@ -118,7 +118,7 @@ $if macos {
 			}
 		}
 		C.close(r)
-		write_host_handshake(w, HostHandshake{
+		return finish_embedded_spawn(pid, w, HostHandshake{
 			url:    url
 			token:  cfg.token
 			width:  cfg.width
@@ -127,10 +127,13 @@ $if macos {
 			y:      cfg.y
 			title:  cfg.title
 		})
-		return HostSession{
-			pid:       pid
-			ctl_write: w
-		}
+	}
+
+	// MacHostCtx carries the window + app handles through the shared
+	// host_read_lines loop (which only knows a voidptr context).
+	struct MacHostCtx {
+		win   voidptr
+		nsapp voidptr
 	}
 
 	// HostCmdJob is a malloc'd command marshalled from the pipe reader onto the
@@ -190,41 +193,13 @@ $if macos {
 		C.dispatch_async_f(C.dispatch_get_main_queue(), voidptr(j), voidptr(apply_host_job))
 	}
 
-	// host_read_lines reads the control pipe until EOF, marshalling every parsed
-	// HostControl command onto the main thread. EOF (parent gone) dispatches a
-	// synthetic 'close' so the app terminates cleanly.
-	fn host_read_lines(fd int, win voidptr, nsapp voidptr) {
-		mut buf := ''
-		mut chunk := [4096]u8{}
-		for {
-			n := C.read(fd, voidptr(&chunk[0]), usize(4096))
-			if n <= 0 {
-				eprintln('vxui host: control pipe closed, closing window')
-				dispatch_job(3, HostControl{ cmd: 'close' }, win, nsapp)
-				break
-			}
-			buf += chunk[..n].bytestr()
-			for {
-				mut nl := -1
-				for i in 0 .. buf.len {
-					if buf[i] == 10 {
-						nl = i
-						break
-					}
-				}
-				if nl < 0 {
-					break
-				}
-				line := buf[..nl].trim_space()
-				buf = buf[nl + 1..]
-				if line.len > 0 {
-					apply_host_control_line(line, win, nsapp)
-				}
-			}
-		}
+	fn host_read_control(fd int, win voidptr, nsapp voidptr) {
+		ctx := &MacHostCtx{ win: win, nsapp: nsapp }
+		host_read_lines(fd, voidptr(ctx), apply_host_control_line)
 	}
 
-	fn apply_host_control_line(line string, win voidptr, nsapp voidptr) {
+	fn apply_host_control_line(line string, ctx voidptr) {
+		mc := unsafe { &MacHostCtx(ctx) }
 		ctrl := json2.decode[HostControl](line) or { return }
 		code := match ctrl.cmd {
 			'resize' { 0 }
@@ -233,28 +208,8 @@ $if macos {
 			'close' { 3 }
 			else { -1 }
 		}
-		if code < 0 {
-			return
-		}
-		dispatch_job(code, ctrl, win, nsapp)
-	}
-
-	fn read_host_handshake(ctl_fd int) HostHandshake {
-		mut buf := ''
-		mut chunk := [4096]u8{}
-		for {
-			n := C.read(ctl_fd, voidptr(&chunk[0]), usize(4096))
-			if n <= 0 {
-				break
-			}
-			buf += chunk[..n].bytestr()
-			for i in 0 .. buf.len {
-				if buf[i] == 10 {
-					return json2.decode[HostHandshake](buf[..i].trim_space()) or { HostHandshake{} }
-				}
-			}
-		}
-		return HostHandshake{}
+		if code < 0 { return }
+		dispatch_job(code, ctrl, mc.win, mc.nsapp)
 	}
 
 	// host_run builds one NSWindow + WKWebView, loads the page, and runs the
@@ -299,7 +254,7 @@ $if macos {
 		eprintln('vxui host: window opened')
 
 		spawn fn [ctl_fd, win, nsapp] () {
-			host_read_lines(ctl_fd, win, nsapp)
+			host_read_control(ctl_fd, win, nsapp)
 		}()
 
 		rl := C.objc_msgSend(C.objc_getClass(c'NSRunLoop'), sel('currentRunLoop'))

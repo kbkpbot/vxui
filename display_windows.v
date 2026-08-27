@@ -423,7 +423,7 @@ $if windows {
 	// embedded_spawn forks a child copy of the same binary in --vxui-host mode,
 	// passing an inherited read end of a control pipe. The parent keeps the write
 	// end and feeds it the handshake + control commands.
-	fn embedded_spawn(mut _b WebViewDisplay, id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	fn embedded_spawn(id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
 		if id != 'webview2' {
 			return error('native WebView FFI not implemented on this platform (${id})')
 		}
@@ -467,7 +467,7 @@ $if windows {
 		C.CloseHandle(pi.h_thread)
 		C.CloseHandle(pi.h_process)
 
-		write_host_handshake(wfd, HostHandshake{
+		return finish_embedded_spawn(int(pi.dw_process_id), wfd, HostHandshake{
 			url:    url
 			token:  cfg.token
 			width:  cfg.width
@@ -476,7 +476,6 @@ $if windows {
 			y:      cfg.y
 			title:  cfg.title
 		})
-		return HostSession{pid: int(pi.dw_process_id), ctl_write: wfd}
 	}
 
 	// host_run is executed inside the --vxui-host child: it reads the handshake,
@@ -530,61 +529,12 @@ $if windows {
 		C.free(url_w)
 	}
 
-	// read_host_handshake reads the single JSON-line handshake the parent writes
-	// right after forking the host, carrying the page URL + window geometry.
-	fn read_host_handshake(ctl_fd int) HostHandshake {
-		mut buf := ''
-		mut chunk := [4096]u8{}
-		for {
-			n := C.read(ctl_fd, voidptr(&chunk[0]), usize(4096))
-			if n <= 0 { break }
-			buf += chunk[..n].bytestr()
-			for i in 0..buf.len {
-				if buf[i] == 10 {
-					return json2.decode[HostHandshake](buf[..i].trim_space()) or {
-						HostHandshake{}
-					}
-				}
-			}
-		}
-		return HostHandshake{}
-	}
-
 	fn host_read_control(fd int, hwnd HWND) {
-		host_read_lines(fd, hwnd)
+		host_read_lines(fd, voidptr(hwnd), apply_host_control_line)
 	}
 
-	fn host_read_lines(fd int, hwnd HWND) {
-		mut buf := ''
-		mut chunk := [4096]u8{}
-		for {
-			n := C.read(fd, voidptr(&chunk[0]), usize(4096))
-			if n <= 0 {
-				// Control pipe closed: the parent (framework) exited or closed
-				// it. Post a synthetic 'close' to the UI thread so the window is
-				// destroyed, the message loop unwinds, and this host process
-				// exits cleanly (consistent with the macOS/Linux hosts).
-				eprintln('vxui host: control pipe closed, closing window')
-				apply_host_control_line('{"cmd":"close"}', hwnd)
-				break
-			}
-			buf += chunk[..n].bytestr()
-			for {
-				mut nl := -1
-				for i in 0..buf.len {
-					if buf[i] == 10 { nl = i; break }
-				}
-				if nl < 0 { break }
-				line := buf[..nl].trim_space()
-				buf = buf[nl + 1..]
-				if line != '' {
-					apply_host_control_line(line, hwnd)
-				}
-			}
-		}
-	}
-
-	fn apply_host_control_line(line string, hwnd HWND) {
+	fn apply_host_control_line(line string, ctx voidptr) {
+		hwnd := HWND(ctx)
 		mut j := unsafe { &Wv2CmdJob(C.malloc(sizeof(Wv2CmdJob))) }
 		ctrl := json2.decode[HostControl](line) or {
 			C.free(j)
@@ -602,7 +552,6 @@ $if windows {
 			'close' { j.code = 3 }
 			else { j.code = -1 }
 		}
-		// Marshal onto the UI thread; the wnd_proc frees j and j.title.
 		C.PostMessageW(hwnd, wm_user_cmd, voidptr(0), voidptr(j))
 	}
 }

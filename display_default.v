@@ -33,7 +33,7 @@ $if linux {
 		return ''
 	}
 
-	fn embedded_spawn(mut _b WebViewDisplay, id string, _html_path string, _cfg DisplaySessionConfig) !DisplaySession {
+	fn embedded_spawn(id string, _html_path string, _cfg DisplaySessionConfig) !DisplaySession {
 		return error('native WebView FFI not implemented on this platform (${id})')
 	}
 

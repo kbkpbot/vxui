@@ -65,7 +65,7 @@ $if linux {
 	// embedded_spawn launches a child copy of THIS binary in host mode and returns a
 	// HostSession handle. The child owns the GTK window + main loop; the parent keeps
 	// running the framework's WebSocket service loop, unchanged.
-	fn embedded_spawn(mut _b WebViewDisplay, id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	fn embedded_spawn(id string, html_path string, cfg DisplaySessionConfig) !DisplaySession {
 		if id != 'webkitgtk' {
 			return error('native WebView FFI not implemented on this platform (${id})')
 		}
@@ -80,7 +80,6 @@ $if linux {
 		}
 		r := fds[0]
 		w := fds[1]
-		// Clear FD_CLOEXEC on the read end so it survives the child's exec.
 		C.fcntl(r, 2, voidptr(0))
 		mut self := os.executable()
 		if self == '' {
@@ -91,27 +90,17 @@ $if linux {
 			return error('failed to fork host process')
 		}
 		if pid == 0 {
-			// child: if the parent dies (crash / Ctrl-C), exit too so the window
-			// doesn't outlive the framework as an orphan.
 			C.prctl(1, 15)
-			// child: hand the read end to host_run as an argv, then exec self in host mode
 			os.execvp(self, [self, '--vxui-host', '${r}']) or {
 				eprintln('vxui: failed to launch host: ${err}')
 				exit(1)
 			}
 		}
-		// parent: drop our copy of the read end, write the handshake, keep the write end
 		C.close(r)
-		write_host_handshake(w, HostHandshake{
-			url:    url
-			token:  cfg.token
-			width:  cfg.width
-			height: cfg.height
-			x:      cfg.x
-			y:      cfg.y
-			title:  cfg.title
+		return finish_embedded_spawn(pid, w, HostHandshake{
+			url: url, token: cfg.token, width: cfg.width, height: cfg.height,
+			x: cfg.x, y: cfg.y, title: cfg.title,
 		})
-		return HostSession{pid: pid, ctl_write: w}
 	}
 
 	// host_run builds one WebKitGTK window, loads the page, and runs the GLib main
@@ -156,37 +145,7 @@ $if linux {
 	}
 
 	fn host_read_control(fd int, window voidptr) {
-		host_read_lines(fd, window)
-	}
-
-	fn host_read_lines(fd int, window voidptr) {
-		mut buf := ''
-		mut chunk := [4096]u8{}
-		for {
-			n := C.read(fd, voidptr(&chunk[0]), usize(4096))
-			if n <= 0 {
-				// Control pipe closed: the parent (framework) exited or closed
-				// it. Tear the window down so this host process exits cleanly
-				// instead of lingering with no framework to serve it. Mirrors
-				// the macOS host's EOF->terminate behavior.
-				eprintln('vxui host: control pipe closed, closing window')
-				apply_host_control_line('{"cmd":"close"}', window)
-				break
-			}
-			buf += chunk[..n].bytestr()
-			for {
-				mut nl := -1
-				for i in 0..buf.len {
-					if buf[i] == 10 { nl = i; break }
-				}
-				if nl < 0 { break }
-				line := buf[..nl].trim_space()
-				buf = buf[nl + 1..]
-				if line.len > 0 {
-					apply_host_control_line(line, window)
-				}
-			}
-		}
+		host_read_lines(fd, window, apply_host_control_line)
 	}
 
 	struct HostCmdJob {
@@ -215,12 +174,13 @@ $if linux {
 		return 0
 	}
 
-	fn apply_host_control_line(line string, window voidptr) {
+	fn apply_host_control_line(line string, ctx voidptr) {
 		mut j := unsafe { &HostCmdJob(C.malloc(sizeof(HostCmdJob))) }
 		ctrl := json2.decode[HostControl](line) or {
 			C.free(j)
 			return
 		}
+		window := ctx
 		j.window = window
 		j.cmd = ctrl.cmd
 		j.w = ctrl.w
@@ -229,24 +189,6 @@ $if linux {
 		j.y = ctrl.y
 		j.title = ctrl.title
 		C.g_idle_add(voidptr(host_apply_idle), voidptr(j))
-	}
-
-	fn read_host_handshake(ctl_fd int) HostHandshake {
-		mut buf := ''
-		mut chunk := [4096]u8{}
-		for {
-			n := C.read(ctl_fd, voidptr(&chunk[0]), usize(4096))
-			if n <= 0 { break }
-			buf += chunk[..n].bytestr()
-			for i in 0..buf.len {
-				if buf[i] == 10 {
-					return json2.decode[HostHandshake](buf[..i].trim_space()) or {
-						HostHandshake{}
-					}
-				}
-			}
-		}
-		return HostHandshake{}
 	}
 
 	fn gtk_host_on_delete(_window voidptr, _event voidptr, _data voidptr) int {

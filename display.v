@@ -10,6 +10,7 @@ import x.json2
 fn C.pipe(fds &int) int
 fn C.kill(pid int, sig int) int
 fn C.waitpid(pid int, status &int, options int) int
+fn C.read(fd int, buf voidptr, count usize) int
 
 // DisplayFamily groups display backends by how they present the page.
 pub enum DisplayFamily {
@@ -429,7 +430,7 @@ pub struct WebViewDisplay {
 // spawn launches the native WebView host child process for this display and
 // returns a HostSession handle.
 pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
-	return embedded_spawn(mut b, b.id, html_path, cfg)
+	return embedded_spawn(b.id, html_path, cfg)
 }
 
 // HostHandshake is the single message the parent writes to the control pipe
@@ -529,6 +530,67 @@ fn write_host_handshake(fd int, hs HostHandshake) {
 	buf := s.str
 	C.write(fd, voidptr(buf), usize(s.len))
 	C.write(fd, voidptr(c'\n'), 1)
+}
+
+// HostControlHandler marshals one parsed control line onto the host's UI thread.
+type HostControlHandler = fn (string, voidptr)
+
+// read_host_handshake reads the single JSON-line handshake the parent writes
+// right after forking the host. Shared by every platform's host_run.
+fn read_host_handshake(ctl_fd int) HostHandshake {
+	mut buf := ''
+	mut chunk := [4096]u8{}
+	for {
+		n := C.read(ctl_fd, voidptr(&chunk[0]), usize(4096))
+		if n <= 0 { break }
+		buf += chunk[..n].bytestr()
+		for i in 0..buf.len {
+			if buf[i] == 10 {
+				return json2.decode[HostHandshake](buf[..i].trim_space()) or {
+					HostHandshake{}
+				}
+			}
+		}
+	}
+	return HostHandshake{}
+}
+
+// host_read_lines reads the control pipe until EOF, dispatching every parsed
+// HostControl line to `apply` (which marshals it onto the host UI thread). On
+// EOF (the parent exited) it sends a synthetic 'close' so the window tears down
+// cleanly. Shared by all platforms; only `apply` is platform-specific.
+fn host_read_lines(fd int, ctx voidptr, apply HostControlHandler) {
+	mut buf := ''
+	mut chunk := [4096]u8{}
+	for {
+		n := C.read(fd, voidptr(&chunk[0]), usize(4096))
+		if n <= 0 {
+			eprintln('vxui host: control pipe closed, closing window')
+			apply('{"cmd":"close"}', ctx)
+			break
+		}
+		buf += chunk[..n].bytestr()
+		for {
+			mut nl := -1
+			for i in 0..buf.len {
+				if buf[i] == 10 { nl = i; break }
+			}
+			if nl < 0 { break }
+			line := buf[..nl].trim_space()
+			buf = buf[nl + 1..]
+			if line.len > 0 {
+				apply(line, ctx)
+			}
+		}
+	}
+}
+
+// finish_embedded_spawn writes the handshake on the control pipe and returns the
+// parent-side HostSession. Shared by every platform's embedded_spawn after the
+// platform-specific fork/pipe setup.
+fn finish_embedded_spawn(pid int, w int, hs HostHandshake) !DisplaySession {
+	write_host_handshake(w, hs)
+	return HostSession{ pid: pid, ctl_write: w }
 }
 
 // NullDisplay is the default, no-op display backend. It satisfies the `Display`
