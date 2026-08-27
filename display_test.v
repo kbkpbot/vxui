@@ -61,20 +61,18 @@ fn test_open_window_multi_session_bookkeeping() {
 }
 
 fn test_new_display_browser_returns_backend() {
-	d := new_display('browser', &Config{
-		browser: BrowserConfig{}
-	}) or { panic(err.msg()) }
+	d := new_display('browser', &Config{ browser: BrowserConfig{} }) or { panic(err.msg()) }
 	match d {
-		ProcessDisplay { assert true }
-		else { assert false, 'expected ProcessDisplay' }
+		DisplayBackend { assert d.family == .process; assert d.id == 'browser' }
+		else { assert false, 'expected DisplayBackend' }
 	}
 }
 
 fn test_new_display_webview_constructs() {
 	d := new_display('webview2', &Config{}) or { panic(err.msg()) }
 	match d {
-		WebViewDisplay { assert true }
-		else { assert false, 'expected WebViewDisplay' }
+		DisplayBackend { assert d.family == .embedded; assert d.id == 'webview2' }
+		else { assert false, 'expected DisplayBackend' }
 	}
 }
 

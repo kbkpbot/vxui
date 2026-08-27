@@ -48,70 +48,37 @@ fn (mut r DisplayRegistry) ensure() {
 	r.backends['webkitgtk'] = DisplayBackendInfo{'webkitgtk', .embedded}
 	r.backends['android'] = DisplayBackendInfo{'android', .embedded}
 	r.factories['browser'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .auto
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'browser', engine: .auto, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['chrome'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .chrome
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'chrome', engine: .chrome, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['firefox'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .firefox
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'firefox', engine: .firefox, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['edge'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .edge
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'edge', engine: .edge, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['brave'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .brave
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'brave', engine: .brave, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['safari'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .safari
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'safari', engine: .safari, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['system'] = fn (cfg &Config) !Display {
-		return ProcessDisplay{
-			engine: .system
-			config: &cfg.browser
-		}
+		return DisplayBackend{ family: .process, id: 'system', engine: .system, browser: &cfg.browser, webview: &WebViewConfig{} }
 	}
 	r.factories['webview2'] = fn (cfg &Config) !Display {
-		return WebViewDisplay{
-			config: &cfg.webview
-			id:     'webview2'
-		}
+		return DisplayBackend{ family: .embedded, id: 'webview2', browser: &BrowserConfig{}, webview: &cfg.webview }
 	}
 	r.factories['wkwebview'] = fn (cfg &Config) !Display {
-		return WebViewDisplay{
-			config: &cfg.webview
-			id:     'wkwebview'
-		}
+		return DisplayBackend{ family: .embedded, id: 'wkwebview', browser: &BrowserConfig{}, webview: &cfg.webview }
 	}
 	r.factories['webkitgtk'] = fn (cfg &Config) !Display {
-		return WebViewDisplay{
-			config: &cfg.webview
-			id:     'webkitgtk'
-		}
+		return DisplayBackend{ family: .embedded, id: 'webkitgtk', browser: &BrowserConfig{}, webview: &cfg.webview }
 	}
 	r.factories['android'] = fn (cfg &Config) !Display {
-		return WebViewDisplay{
-			config: &cfg.webview
-			id:     'android'
-		}
+		return DisplayBackend{ family: .embedded, id: 'android', browser: &BrowserConfig{}, webview: &cfg.webview }
 	}
 	r.registered = true
 }
@@ -163,12 +130,30 @@ mut:
 	spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession
 }
 
-// ProcessDisplay launches an external browser process. It is parameterized by
-// a BrowserEngine so each id selects the right executable + flags; the
-// Chromium-family and Firefox/Safari behaviors are chosen per engine at spawn.
-pub struct ProcessDisplay {
-	engine BrowserEngine
-	config &BrowserConfig
+// DisplayBackend is the single pluggable display implementation. It wraps either
+// the external-browser family (engine + BrowserConfig) or the native-WebView
+// family (self-hosted child, WebViewConfig). vxui.run builds one from the
+// configured backend id; callers only ever touch the Display/DisplaySession
+// interfaces. The native path does NOT render in-process: spawn launches a child
+// copy of this binary in host mode and talks to it over a control pipe, so a
+// WebView failure can never take down the host app (process isolation).
+//
+// The native WebView/WebKit backend does NOT render in-process: it launches a
+// *child* copy of the same vxui binary in "host" mode (see host_run /
+// --vxui-host) and talks to that host over a private control pipe. The child
+// owns its own OS window and main thread, so the framework reuses the exact
+// external-browser lifecycle - run() drives serve_forever on the main thread,
+// and a window close is observed as a WS client disconnect. Keeping
+// GTK/WebView2 entirely inside the child removes every cross-thread hazard (the
+// old second-window crash) and gives process isolation: a WebView failure can
+// never take down the host application.
+pub struct DisplayBackend {
+pub mut:
+	family DisplayFamily
+	id      string
+	engine  BrowserEngine   // .process family
+	browser &BrowserConfig  // .process family
+	webview &WebViewConfig  // .embedded family
 }
 
 // launch_url builds the file:// URL the frontend loads, carrying the WebSocket
@@ -244,9 +229,14 @@ fn get_firefox_args(profile_path string, width int, height int, kiosk bool, url 
 	return args
 }
 
-// spawn opens `html_path` in an external system browser, returning a detached
-// ProcessSession. The browser is launched as a separate OS process.
-pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
+// spawn opens `html_path` in this backend. For the embedded (native-WebView)
+// family it delegates to a self-hosted child over a control pipe; for the
+// process (external-browser) family it launches a detached OS browser process
+// and returns a ProcessSession.
+pub fn (mut b DisplayBackend) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
+	if b.family == .embedded {
+		return embedded_spawn(b.id, html_path, cfg)
+	}
 	mut abs_path := os.abs_path(html_path)
 	is_temp := abs_path.starts_with(os.temp_dir())
 	if !is_temp {
@@ -261,15 +251,15 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 	mut eff_engine := b.engine
 	mut browser_path := ''
 	if eff_engine == .auto || eff_engine == .system {
-		browser_path = find_browser_path_with_preferred(b.config.preferred_path)
+		browser_path = find_browser_path_with_preferred(b.browser.preferred_path)
 		if browser_path == '' {
 			return new_error_detail(VxuiError.browser_not_found, 'No supported browser found')
 		}
 		eff_engine = engine_from_path(browser_path)
 	} else {
-		browser_path = find_engine_path(eff_engine, b.config.preferred_path)
+		browser_path = find_engine_path(eff_engine, b.browser.preferred_path)
 		if browser_path == '' {
-			browser_path = find_browser_path_with_preferred(b.config.preferred_path)
+			browser_path = find_browser_path_with_preferred(b.browser.preferred_path)
 		}
 		if browser_path == '' {
 			return new_error_detail(VxuiError.browser_not_found,
@@ -294,10 +284,10 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 		}
 		return new_error_detail(VxuiError.browser_not_found, 'Safari is only supported on macOS')
 	}
-	profile_path := if b.config.user_data_dir != '' {
-		b.config.user_data_dir
-	} else if b.config.profile_dir != '' {
-		b.config.profile_dir
+	profile_path := if b.browser.user_data_dir != '' {
+		b.browser.user_data_dir
+	} else if b.browser.profile_dir != '' {
+		b.browser.profile_dir
 	} else {
 		os.join_path(os.temp_dir(), 'vxui_profile_${rand.u64()}')
 	}
@@ -312,8 +302,8 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 	}
 	if is_chromium_engine(eff_engine) {
 		mut cmd_args := get_browser_args(browser_name)
-		if b.config.custom_args.len > 0 {
-			cmd_args << b.config.custom_args
+		if b.browser.custom_args.len > 0 {
+			cmd_args << b.browser.custom_args
 		}
 		cmd_args << '--user-data-dir=${profile_path}'
 		if cfg.width > 0 && cfg.height > 0 {
@@ -325,17 +315,17 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 			pos_x, pos_y = calculate_center_position(cfg.width, cfg.height)
 		}
 		cmd_args << '--window-position=${pos_x},${pos_y}'
-		if b.config.headless {
+		if b.browser.headless {
 			cmd_args << '--headless=new'
 		}
-		if b.config.devtools {
+		if b.browser.devtools {
 			cmd_args << '--auto-open-devtools-for-tabs'
 		}
-		if b.config.remote_debug_port > 0 {
-			cmd_args << '--remote-debugging-port=${b.config.remote_debug_port}'
+		if b.browser.remote_debug_port > 0 {
+			cmd_args << '--remote-debugging-port=${b.browser.remote_debug_port}'
 			cmd_args << '--remote-allow-origins=*'
 		}
-		if b.config.no_sandbox {
+		if b.browser.no_sandbox {
 			cmd_args << '--no-sandbox'
 			cmd_args << '--disable-setuid-sandbox'
 		}
@@ -343,7 +333,7 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 		cmd_args << '--allow-file-access-from-files'
 		cmd_args << '--enable-file-access-from-files'
 		cmd_args << '--enable-features=FileAccessAPI,NativeFileSystemAPI'
-		cmd_args << window_mode_args(b.config.window_mode, url)
+		cmd_args << window_mode_args(b.browser.window_mode, url)
 		$if windows {
 			mut p := os.new_process(browser_path)
 			p.set_args(cmd_args)
@@ -361,9 +351,9 @@ pub fn (mut b ProcessDisplay) spawn(html_path string, cfg DisplaySessionConfig) 
 		}
 	} else {
 		// Firefox (and any non-Chromium engine)
-		mut cmd_args := b.config.custom_args.clone()
+		mut cmd_args := b.browser.custom_args.clone()
 		cmd_args << get_firefox_args(profile_path, cfg.width, cfg.height,
-			b.config.window_mode == .kiosk, url)
+			b.browser.window_mode == .kiosk, url)
 		$if windows {
 			mut p := os.new_process(browser_path)
 			p.set_args(cmd_args)
@@ -412,26 +402,6 @@ pub fn (mut s ProcessSession) is_closed() bool {
 // reference can be taken.
 @[heap]
 pub struct WebViewConfig {}
-
-// WebViewDisplay is the native WebView/WebKit backend. It does NOT render
-// in-process: it launches a *child* copy of the same vxui binary in "host"
-// mode (see host_run / --vxui-host) and talks to that host over a private
-// control pipe. The child owns its own OS window and main thread, so the
-// framework reuses the exact external-browser lifecycle - run() drives
-// serve_forever on the main thread, and a window close is observed as a WS
-// client disconnect. Keeping GTK/WebView2 entirely inside the child removes
-// every cross-thread hazard (the old second-window crash) and gives process
-// isolation: a WebView failure can never take down the host application.
-pub struct WebViewDisplay {
-	config &WebViewConfig
-	id     string
-}
-
-// spawn launches the native WebView host child process for this display and
-// returns a HostSession handle.
-pub fn (mut b WebViewDisplay) spawn(html_path string, cfg DisplaySessionConfig) !DisplaySession {
-	return embedded_spawn(b.id, html_path, cfg)
-}
 
 // HostHandshake is the single message the parent writes to the control pipe
 // right after forking the host. It carries everything the host needs to put
