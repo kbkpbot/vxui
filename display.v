@@ -671,9 +671,7 @@ pub fn backend_family(id string) DisplayFamily {
 	return info.family
 }
 
-// =============================================================================
-// Browser-launch helpers (moved verbatim from browser.v in Task 2)
-// =============================================================================
+// Browser-launch helpers
 
 // ScreenSize holds screen dimensions
 struct ScreenSize {
@@ -790,7 +788,7 @@ fn calculate_center_position(window_width int, window_height int) (int, int) {
 }
 
 // get_browser_args returns browser-specific arguments
-fn get_browser_args(browser_name string) []string {
+fn get_browser_args(_browser_name string) []string {
 	base_args := [
 		'--no-first-run',
 		'--disable-breakpad',
@@ -826,14 +824,6 @@ fn get_browser_args(browser_name string) []string {
 		'--disable-gpu-compositing',
 		'--disable-vaapi',
 	]
-
-	// Firefox doesn't support --app-mode, so use different args
-	if browser_name.to_lower().contains('firefox') {
-		return [
-			'--new-instance',
-			'--no-remote',
-		]
-	}
 
 	return base_args
 }
@@ -928,7 +918,7 @@ fn find_browser_path_windows() string {
 }
 
 // detect_browser_type determines the browser type from path
-pub fn detect_browser_type(browser_path string) BrowserType {
+fn detect_browser_type(browser_path string) BrowserType {
 	name := os.base(browser_path).to_lower()
 	if name.contains('safari') {
 		return .safari
@@ -949,9 +939,4 @@ pub fn detect_browser_type(browser_path string) BrowserType {
 		return .chrome
 	}
 	return .unknown
-}
-
-// is_app_mode_supported returns true if browser supports app mode
-pub fn is_app_mode_supported(browser_type BrowserType) bool {
-	return browser_type in [.chrome, .edge, .brave, .chromium]
 }
