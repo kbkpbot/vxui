@@ -1,7 +1,7 @@
 module vxui
 
 import net
-import net.websocket
+import net.websocket { Message }
 import time
 import x.json2
 import rand
@@ -55,7 +55,7 @@ fn startup_ws_server[T](mut app T, family net.AddrFamily, listen_port int) !&web
 		return true
 	})!
 
-	s.on_message_ref(fn (mut ws websocket.Client, msg &websocket.Message, v voidptr) ! {
+	s.on_message_ref(fn (mut ws websocket.Client, msg &Message, v voidptr) ! {
 		mut ctx := unsafe { &Context(v) }
 		if msg.opcode == .pong {
 			// protocol-level pong: the websocket library answers control

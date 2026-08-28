@@ -36,6 +36,7 @@ $if linux {
 	#include <gtk/gtk.h>
 	#include <gdk/gdkx.h>
 	#include <webkit2/webkit2.h>
+	#include <sys/prctl.h>
 
 	fn C.gtk_init_check(argc voidptr, argv voidptr) bool
 	fn C.gtk_window_new(typ int) voidptr
